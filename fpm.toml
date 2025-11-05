@@ -1,0 +1,19 @@
+name = "hompack"
+version = "0.1.0"
+license = "license"
+author = "HugoMVale"
+maintainer = "57530119+HugoMVale@users.noreply.github.com"
+copyright = "Copyright 2025, HugoMVale"
+
+[build]
+auto-tests = true
+auto-examples = true
+module-naming = false
+
+[install]
+library = false
+
+[fortran]
+implicit-typing = true
+implicit-external = true
+source-form = "default"
