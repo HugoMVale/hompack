@@ -1,0 +1,61 @@
+name: Test with Flang
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+
+  # Quick test in Ubuntu with fpm
+  test_quick:
+    runs-on: ubuntu-latest
+    steps:
+    
+      - name: Set up Fortran
+        uses: gha3mi/setup-fortran-conda@latest
+        with:
+          compiler: flang
+          platform: ubuntu-latest
+          extra-packages: "openblas pkg-config"
+      
+      - name: Test debug
+        run: |
+          fpm test --profile debug --compiler flang-new
+        
+  # Matrix test with meson
+  test_matrix:
+    name: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.compiler-version }}
+    runs-on: ${{ matrix.os }}
+    needs: test_quick
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        compiler: [flang]
+        compiler-version: ["22"]
+                
+    steps:
+      - name: Set up Fortran
+        uses: gha3mi/setup-fortran-conda@latest
+        with:
+          compiler: ${{ matrix.compiler }}
+          compiler-version: ${{ matrix.compiler-version }}
+          platform: ${{ matrix.os }}
+          extra-packages: "openblas pkg-config"
+
+      - name: Test Debug
+        run: |
+          meson setup --wipe build_debug --buildtype=debug --backend=ninja -Dbuild_tests=true -Dbuild_examples=true
+          meson compile -C build_debug
+          meson test -C build_debug
+
+      - name: Test Release
+        run: |
+          meson setup --wipe build_release --buildtype=release --backend=ninja -Dbuild_tests=true -Dbuild_examples=true
+          meson compile -C build_release
+          meson test -C build_release
+
+      # - name: Run Examples (Release)
+      #   run: |
+      #     ./build_release/example/example5
+   
+# fpm+windows+flang: fails  
+# flang-new: error: unsupported option '-fPIC' for target 'x86_64-pc-windows-msvc'
