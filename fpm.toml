@@ -1,14 +1,16 @@
 name = "hompack"
 version = "0.1.0"
-license = "license"
+license = "MIT"
 author = "HugoMVale"
 maintainer = "57530119+HugoMVale@users.noreply.github.com"
 copyright = "Copyright 2025, HugoMVale"
 
 [build]
+auto-executables = false
 auto-tests = true
 auto-examples = true
 module-naming = false
+# link = ["openblas"]
 
 [install]
 library = false
