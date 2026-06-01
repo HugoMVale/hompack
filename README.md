@@ -23,7 +23,7 @@ The first version of the library, named HOMPACK, was originally released in 1987
 * [ ] Addition of explicit interfaces to BLAS routines.
 * [ ] Implementation of a C API.
 * [ ] Automatic code documentation with FORD.
-* [ ] Python bindings, available in the companion repo [odrpack-python](https://github.com/HugoMVale/odrpack-python).
+* [ ] Python bindings, available in the companion repo [hompack-python](https://github.com/HugoMVale/hompack-python).
 
 |    Version    | Year |   Standard   |
 |:-------------:|:----:|:------------:|
