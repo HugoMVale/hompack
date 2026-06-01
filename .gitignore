@@ -1,0 +1,11 @@
+*.mod
+*.vscode
+*.venv
+_site
+notes.md
+test/test*.txt
+example/example*.txt
+build
+_build
+builddir
+
