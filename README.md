@@ -38,7 +38,7 @@ The first version of the library, named HOMPACK, was originally released in 1987
 
 `hompack` depends on a number of functions from BLAS and LAPACK.
 
-The build configuration files provided with the code (see further below) assume a suitable BLAS+LAPACK library is locally installed. Alternatively, the subset of required functions is available in [./external](./external).
+The build configuration files provided with the code (see further below) assume a suitable BLAS/LAPACK library is locally installed. Alternatively, the subset of required functions is available in [./external](./external).
 
 
 ### With fpm
