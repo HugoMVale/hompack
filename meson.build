@@ -94,7 +94,7 @@ elif blas_option == 'auto'
   endif
   
   if not blas_dep.found()
-    foreach lib : ['blas', 'openblas']
+    foreach lib : ['openblas']
       blas_dep = dependency(lib, required: false)
       if not blas_dep.found()
         blas_dep = fc.find_library(lib, required: false)
