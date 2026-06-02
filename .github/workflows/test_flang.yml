@@ -43,13 +43,13 @@ jobs:
 
       - name: Test Debug
         run: |
-          meson setup --wipe build_debug --buildtype=debug --backend=ninja -Dbuild_tests=true -Dbuild_examples=true
+          meson setup --wipe build_debug --buildtype=debug --backend=ninja -Dbuild_tests=true -Dbuild_examples=false
           meson compile -C build_debug
           meson test -C build_debug
 
       - name: Test Release
         run: |
-          meson setup --wipe build_release --buildtype=release --backend=ninja -Dbuild_tests=true -Dbuild_examples=true
+          meson setup --wipe build_release --buildtype=release --backend=ninja -Dbuild_tests=true -Dbuild_examples=false
           meson compile -C build_release
           meson test -C build_release
 

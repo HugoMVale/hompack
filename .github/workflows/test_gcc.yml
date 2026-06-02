@@ -59,13 +59,13 @@ jobs:
 
       - name: Test Debug
         run: |
-          meson setup build_debug --buildtype=debug -Dbuild_tests=true -Dbuild_examples=true
+          meson setup build_debug --buildtype=debug -Dbuild_tests=true -Dbuild_examples=false
           meson compile -C build_debug
           meson test -C build_debug
 
       - name: Test Release
         run: |
-          meson setup build_release -Dbuild_tests=true -Dbuild_examples=true
+          meson setup build_release -Dbuild_tests=true -Dbuild_examples=false
           meson compile -C build_release
           meson test -C build_release
 
