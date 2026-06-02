@@ -43,7 +43,6 @@ ref_blas_lapack_sources = files(
   'external/blas/dtrsv.f',
   'external/blas/idamax.f',
   'external/blas/lsame.f',
-  'external/blas/xerbla.f',
   'external/lapack/dgeqpf.f',
   'external/lapack/dgeqr2.f',
   'external/lapack/dgeqrf.f',
@@ -67,6 +66,7 @@ ref_blas_lapack_sources = files(
   'external/lapack/iladlr.f',
   'external/lapack/ilaenv.f',
   'external/lapack/iparmq.f',
+  'external/lapack/xerbla.f',
 )
 
 if blas_option == 'refblas'
@@ -118,6 +118,9 @@ endif
 # Sources
 hompack_source = files(
   'src/HOMPACK90.f',
+  'src/blas_interfaces.f90',
+  'src/lapack_interfaces.f90',
+  'src/hompack_kinds.f90',
 )
 
 all_sources = hompack_source + blas_source
