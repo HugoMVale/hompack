@@ -1,5 +1,5 @@
 module lapack_interfaces
-  !! Double precision interfaces for the LAPACK procedures used by hompack.
+  !! Double precision interfaces for the LAPACK procedures used by `hompack`.
 
    use hompack_kinds, only: dp
    implicit none
