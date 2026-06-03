@@ -1,191 +1,3 @@
-      MODULE REAL_PRECISION
-! This is for 64-bit arithmetic.
-      INTEGER, PARAMETER:: R8=SELECTED_REAL_KIND(13)
-      END MODULE REAL_PRECISION
-
-
-!  This module provides global allocatable arrays used for the sparse
-!  matrix data structures, and by the polynomial system solver.  The
-!  MODULE HOMOTOPY uses this module.
-!
-      MODULE HOMPACK90_GLOBAL
-      USE REAL_PRECISION
-      INTEGER, DIMENSION(:), ALLOCATABLE:: COLPOS, IPAR, ROWPOS
-      REAL (KIND=R8), DIMENSION(:), ALLOCATABLE:: PAR, PP, QRSPARSE
-      END MODULE HOMPACK90_GLOBAL
-
-
-      MODULE HOMOTOPY       ! Interfaces for user written subroutines.
-      USE REAL_PRECISION, ONLY : R8
-      USE HOMPACK90_GLOBAL
-!
-C Interface for subroutine that evaluates F(X) and returns it in the vector V.
-      INTERFACE
-         SUBROUTINE F(X,V)
-         USE REAL_PRECISION
-         REAL (KIND=R8), DIMENSION(:), INTENT(IN):: X
-         REAL (KIND=R8), DIMENSION(:), INTENT(OUT):: V
-         END SUBROUTINE F
-      END INTERFACE
-!
-C Interface for subroutine that returns in V the K-th column of the Jacobian 
-C matrix of F(X) evaluated at X. 
-      INTERFACE
-         SUBROUTINE FJAC(X,V,K)
-         USE REAL_PRECISION
-         REAL (KIND=R8), DIMENSION(:), INTENT(IN):: X
-         REAL (KIND=R8), DIMENSION(:), INTENT(OUT):: V
-         INTEGER, INTENT(IN):: K
-         END SUBROUTINE FJAC
-      END INTERFACE
-!
-C Interface for subroutine that evaluates RHO(A,LAMBDA,X) and returns it 
-C in the vector V.
-      INTERFACE
-         SUBROUTINE RHO(A,LAMBDA,X,V)
-         USE REAL_PRECISION
-         REAL (KIND=R8), INTENT(IN):: A(:),X(:)
-         REAL (KIND=R8), INTENT(IN OUT):: LAMBDA
-         REAL (KIND=R8), INTENT(OUT):: V(:)
-         END SUBROUTINE RHO
-      END INTERFACE
-C The following code is specifically for the polynomial system driver
-C POLSYS1H, and should be used verbatim with POLSYS1H in the external 
-C subroutine RHO.  
-!     USE HOMPACK90_GLOBAL, ONLY: IPAR, PAR  ! FOR POLSYS1H ONLY.
-!     INTERFACE
-!       SUBROUTINE HFUNP(N,A,LAMBDA,X)
-!       USE REAL_PRECISION
-!       INTEGER, INTENT(IN):: N
-!       REAL (KIND=R8), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
-!       END SUBROUTINE HFUNP
-!     END INTERFACE
-!     INTEGER:: J,NPOL
-C FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
-!     IF (LAMBDA .LT. 0.0) LAMBDA=0.0
-!     NPOL=IPAR(1)
-!     CALL HFUNP(NPOL,A,LAMBDA,X)
-!     DO J=1,2*NPOL
-!       V(J)=PAR(IPAR(3 + (4-1)) + (J-1))
-!     END DO
-!     RETURN
-C If calling FIXP?? or STEP?? directly, supply appropriate replacement
-C code in the external subroutine RHO.
-!
-C Interface for subroutine that calculates and returns in A the vector
-C Z such that RHO(Z,LAMBDA,X) = 0 .
-      INTERFACE
-         SUBROUTINE RHOA(A,LAMBDA,X)
-         USE REAL_PRECISION
-         REAL (KIND=R8), DIMENSION(:), INTENT(OUT):: A
-         REAL (KIND=R8), INTENT(IN):: LAMBDA,X(:)
-         END SUBROUTINE RHOA
-      END INTERFACE
-!
-C Interface for subroutine that returns in the vector V the Kth column
-C of the Jacobian matrix [D RHO/D LAMBDA, D RHO/DX] evaluated at the
-C point (A, LAMBDA, X).
-      INTERFACE
-         SUBROUTINE RHOJAC(A,LAMBDA,X,V,K)
-         USE REAL_PRECISION
-         REAL (KIND=R8), INTENT(IN):: A(:),X(:)
-         REAL (KIND=R8), INTENT(IN OUT):: LAMBDA
-         REAL (KIND=R8), INTENT(OUT):: V(:)
-         INTEGER, INTENT(IN):: K
-         END SUBROUTINE RHOJAC
-      END INTERFACE
-C The following code is specifically for the polynomial system driver
-C POLSYS1H, and should be used verbatim with POLSYS1H in the external 
-C subroutine RHOJAC.  
-!     USE HOMPACK90_GLOBAL, ONLY: IPAR, PAR  ! FOR POLSYS1H ONLY.
-!     INTERFACE
-!       SUBROUTINE HFUNP(N,A,LAMBDA,X)
-!       USE REAL_PRECISION
-!       INTEGER, INTENT(IN):: N
-!       REAL (KIND=R8), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
-!       END SUBROUTINE HFUNP
-!     END INTERFACE
-!     INTEGER:: J,NPOL,N2
-!     NPOL=IPAR(1)
-!     N2=2*NPOL
-!     IF (K .EQ. 1) THEN
-C FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
-!       IF (LAMBDA .LT. 0.0) LAMBDA=0.0
-!       CALL HFUNP(NPOL,A,LAMBDA,X)
-!       DO J=1,N2
-!         V(J)=PAR(IPAR(3 + (6-1)) + (J-1))
-!       END DO
-!       RETURN
-!     ELSE
-!       DO J=1,N2
-!         V(J)=PAR(IPAR(3 + (5-1)) + (J-1) + N2*(K-2))
-!       END DO
-!     ENDIF
-C
-!     RETURN
-C If calling FIXP?? or STEP?? directly, supply appropriate replacement
-C code in the external subroutine RHOJAC.
-!
-!
-C Interface for subroutine that evaluates a sparse Jacobian matrix of
-C F(X) at X, and operates as follows:
-C
-C If MODE = 1,
-C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
-C the result in packed skyline storage format in QRSPARSE.  LENQR is the
-C length of QRSPARSE, and ROWPOS contains the indices of the diagonal
-C elements of the Jacobian matrix within QRSPARSE.  ROWPOS(N+1) and
-C ROWPOS(N+2) are set by subroutine FODEDS.  The allocatable array COLPOS
-C is not used by this storage format.
-C
-C If MODE = 2,
-C evaluate the N x N Jacobian matrix of F(X) at X, and return the result
-C in sparse row storage format in QRSPARSE.  LENQR is the length of
-C QRSPARSE, ROWPOS contains the indices of where each row begins within
-C QRSPARSE, and COLPOS (of length LENQR) contains the column indices of
-C the corresponding elements in QRSPARSE.  Even if zero, the diagonal
-C elements of the Jacobian matrix must be stored in QRSPARSE.
-      INTERFACE
-         SUBROUTINE FJACS(X)
-         USE REAL_PRECISION
-         USE HOMPACK90_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
-         REAL (KIND=R8), DIMENSION(:), INTENT(IN):: X
-         END SUBROUTINE FJACS
-      END INTERFACE
-!
-!
-C Interface for subroutine that evaluates a sparse Jacobian matrix of
-C RHO(A,X,LAMBDA) at (A,X,LAMBDA), and operates as follows:
-C
-C If MODE = 1,
-C evaluate the N X N symmetric Jacobian matrix [D RHO/DX] at
-C (A,X,LAMBDA), and return the result in packed skyline storage format in
-C QRSPARSE.  LENQR is the length of QRSPARSE, and ROWPOS contains the
-C indices of the diagonal elements of [D RHO/DX] within QRSPARSE.  PP
-C contains -[D RHO/D LAMBDA] evaluated at (A,X,LAMBDA).  Note the minus
-C sign in the definition of PP.  The allocatable array COLPOS is not used
-C in this storage format.
-C
-C If MODE = 2,
-C evaluate the N X (N+1) Jacobian matrix [D RHO/DX, D RHO/DLAMBDA] at
-C (A,X,LAMBDA), and return the result in sparse row storage format in
-C QRSPARSE.  LENQR is the length of QRSPARSE, ROWPOS contains the indices
-C of where each row begins within QRSPARSE, and COLPOS (of length LENQR)
-C contains the column indices of the corresponding elements in QRSPARSE.
-C Even if zero, the diagonal elements of the Jacobian matrix must be
-C stored in QRSPARSE.  The allocatable array PP is not used in this
-C storage format.
-C
-      INTERFACE
-         SUBROUTINE RHOJS(A,LAMBDA,X)
-         USE REAL_PRECISION
-         USE HOMPACK90_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
-         REAL (KIND=R8), INTENT(IN):: A(:),LAMBDA,X(:)
-         END SUBROUTINE RHOJS
-      END INTERFACE
-      END MODULE HOMOTOPY
-
-
       MODULE HOMPACK90
 !
 !  This MODULE is an encapsulation of the HOMPACK90 drivers, and uses
@@ -198,7 +10,7 @@ C
 !  statement like, for example,
 !     USE HOMPACK90, ONLY : FIXPNF
 !
-      USE REAL_PRECISION, ONLY : R8    ! Kind for all reals.
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL             ! Allocated data structures.
       CONTAINS
 !
@@ -398,17 +210,17 @@ C WT(1:N+1), PHI(1:N+1,1:16), and P(1:N+1) are all work arrays
 C    used by the ODE subroutine  STEPS  .
 C
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
       INTEGER, INTENT(IN)::N,NDIMA,TRACE
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+      REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
       INTEGER, INTENT(IN OUT)::IFLAG
-      REAL (KIND=R8), INTENT(IN OUT)::ARCTOL,EPS
+      REAL (dp), INTENT(IN OUT)::ARCTOL,EPS
       INTEGER, INTENT(OUT)::NFE
-      REAL (KIND=R8), INTENT(OUT)::ARCLEN
+      REAL (dp), INTENT(OUT)::ARCLEN
 C
 C LOCAL VARIABLES.
-      REAL (KIND=R8), SAVE:: CURSW,CURTOL,EPSSTP,EPST,H,HOLD,
+      REAL (dp), SAVE:: CURSW,CURTOL,EPSSTP,EPST,H,HOLD,
      &  S,S99,SA,SB,SOUT,SQNP1,XOLD,Y1SOUT
       INTEGER, SAVE:: IFLAGC,ITER,IVC,JW,K,KGI,KOLD,
      &  KSTEPS,LCODE,LIMIT,NFEC,NP1
@@ -417,13 +229,13 @@ C
 C *****  ARRAY DECLARATIONS.  *****
 C
 C ARRAYS NEEDED BY THE ODE SUBROUTINE  STEPS .
-      REAL (KIND=R8), ALLOCATABLE, SAVE:: P(:),PHI(:,:),WT(:),YP(:)
-      REAL (KIND=R8), SAVE:: ALPHAS(12),G(13),GI(11),W(12)
+      REAL (dp), ALLOCATABLE, SAVE:: P(:),PHI(:,:),WT(:),YP(:)
+      REAL (dp), SAVE:: ALPHAS(12),G(13),GI(11),W(12)
       INTEGER, SAVE:: IV(10)
 C
 C ARRAYS NEEDED BY  FIXPDF , FODE , AND LAPACK ROUTINES.
-      REAL (KIND=R8), DIMENSION(:), ALLOCATABLE, SAVE:: YPOLD
-      REAL (KIND=R8):: ALPHA(3*N+3),AOLD(NDIMA),QR(N,N+1),TZ(N+1)
+      REAL (dp), DIMENSION(:), ALLOCATABLE, SAVE:: YPOLD
+      REAL (dp):: ALPHA(3*N+3),AOLD(NDIMA),QR(N,N+1),TZ(N+1)
       INTEGER:: PIVOT(N+1)
 C
 C *****  END OF DIMENSIONAL INFORMATION.  *****
@@ -434,19 +246,19 @@ C CHANGED BY CHANGING THE FOLLOWING PARAMETER STATEMENT:
 C
       INTERFACE
         SUBROUTINE FODE(S,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,NFE,N,IFLAG)
-        USE REAL_PRECISION
-        REAL (KIND=R8):: S
+        use hompack_kinds, only: dp
+        REAL (dp):: S
         INTEGER:: IFLAG,N,NFE
-        REAL (KIND=R8):: A(:),Y(:),YP(N+1),YPOLD(N+1)
-        REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+1),TZ(N+1)
+        REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
+        REAL (dp):: ALPHA(3*N+3),QR(N,N+1),TZ(N+1)
         INTEGER, DIMENSION(N+1):: PIVOT
         END SUBROUTINE FODE
         SUBROUTINE STEPS(F,NEQN,Y,X,H,EPS,WT,START,HOLD,K,KOLD,CRASH,
      &  PHI,P,YP,ALPHA,W,G,KSTEPS,XOLD,IVC,IV,KGI,GI,  FPWA1,FPWA2,
      &  FPWA3,FPWA4,FPWA5,IFPWA1,IFPC1,IFPC2)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         EXTERNAL F
-        REAL (KIND=R8):: ALPHA,EPS,FPWA1,FPWA2,FPWA3,FPWA4,FPWA5,
+        REAL (dp):: ALPHA,EPS,FPWA1,FPWA2,FPWA3,FPWA4,FPWA5,
      &  G,GI,H,HOLD,P,PHI,W,WT,X,XOLD,Y,YP
         INTEGER:: IFPC1,IFPC2,IFPWA1,IV,IVC,K,KGI,KOLD,KSTEPS,NEQN
         LOGICAL:: CRASH,START
@@ -884,38 +696,38 @@ C WT(1:N+1), PHI(1:N+1,1:16), and P(1:N+1) are all work arrays
 C    used by the ODE subroutine  STEPDS  .
 C
       USE HOMOTOPY, QR => QRSPARSE
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN)::LENQR,MODE,N,NDIMA,TRACE
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+      REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
       INTEGER, INTENT(IN OUT)::IFLAG
-      REAL (KIND=R8), INTENT(IN OUT)::ARCTOL,EPS
+      REAL (dp), INTENT(IN OUT)::ARCTOL,EPS
       INTEGER, INTENT(OUT)::NFE
-      REAL (KIND=R8), INTENT(OUT)::ARCLEN
+      REAL (dp), INTENT(OUT)::ARCLEN
 C
 C *****  LOCAL VARIABLES.  *****
 C
-      REAL (KIND=R8), SAVE:: CURSW,CURTOL,EPSSTP,EPST,
+      REAL (dp), SAVE:: CURSW,CURTOL,EPSSTP,EPST,
      &  H,HOLD,S,S99,SA,SB,SOUT,SQNP1,XOLD,Y1SOUT
       INTEGER, SAVE:: IFLAGC,ITER,IVC,JW,K,KGI,KOLD,
      &  KSTEPS,LCODE,LIMIT,NFEC,NP1
       LOGICAL, SAVE:: CRASH,START,ST99
 C
 C ARRAYS NEEDED BY THE ODE SUBROUTINE  STEPDS .
-      REAL (KIND=R8), SAVE:: ALPHAS(12),G(13),GI(11),W(12)
-      REAL (KIND=R8), ALLOCATABLE, SAVE:: P(:),PHI(:,:),WT(:),YP(:)
+      REAL (dp), SAVE:: ALPHAS(12),G(13),GI(11),W(12)
+      REAL (dp), ALLOCATABLE, SAVE:: P(:),PHI(:,:),WT(:),YP(:)
       INTEGER, SAVE:: IV(10)
 C
 C ARRAYS NEEDED BY  FIXPDS , FODEDS , AND  PCGDS .
-      REAL (KIND=R8), ALLOCATABLE, DIMENSION(:), SAVE:: AOLD,YPOLD
+      REAL (dp), ALLOCATABLE, DIMENSION(:), SAVE:: AOLD,YPOLD
 C
 C *****  END OF DIMENSIONAL INFORMATION.  *****
 C
       INTERFACE
         SUBROUTINE FODEDS(S,Y,YP,N,IFLAG,YPOLD,A,NDIMA,LENQR,MODE,NFE)
         USE HOMOTOPY, QR => QRSPARSE
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: IFLAG,LENQR,MODE,N,NDIMA,NFE
-        REAL (KIND=R8):: A(NDIMA),S,Y(N+1),YP(N+1),YPOLD(N+1)
+        REAL (dp):: A(NDIMA),S,Y(N+1),YP(N+1),YPOLD(N+1)
         END SUBROUTINE FODEDS
       END INTERFACE
 C
@@ -945,7 +757,7 @@ C
       NFEC=0
       IFLAGC=IFLAG
       NP1=N+1
-      SQNP1=SQRT(REAL(NP1,KIND=R8))
+      SQNP1=SQRT(REAL(NP1,kind=dp))
 C
 C SWITCH FROM THE TOLERANCE  ARCTOL  TO THE (FINER) TOLERANCE  EPS  IF
 C THE CURVATURE OF ANY COMPONENT OF  Y  EXCEEDS  CURSW.
@@ -1352,31 +1164,31 @@ C    WP(1:N+1), Z0(1:N+1), Z1(1:N+1)  are all work arrays used by
 C    STEPNF  to calculate the tangent vectors and Newton steps.
 C
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN)::N,TRACE
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+      REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
       INTEGER, INTENT(IN OUT)::IFLAG
-      REAL (KIND=R8), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
+      REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
      &    SSPAR(8)
       INTEGER, INTENT(OUT)::NFE
-      REAL (KIND=R8), INTENT(OUT)::ARCLEN
+      REAL (dp), INTENT(OUT)::ARCLEN
       LOGICAL, INTENT(IN), OPTIONAL::POLY_SWITCH
 C
 C LOCAL VARIABLES.
-      REAL (KIND=R8), SAVE:: ABSERR,CURTOL,H,HOLD,RELERR,S
+      REAL (dp), SAVE:: ABSERR,CURTOL,H,HOLD,RELERR,S
       INTEGER, SAVE:: IFLAGC,ITER,JW,LIMIT,NC,NFEC,NP1
       LOGICAL, SAVE:: CRASH,POLSYS,START
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
 C ALLOCATABLE AND AUTOMATIC ARRAYS.
-      REAL (KIND=R8), DIMENSION(:), ALLOCATABLE, SAVE:: YOLD,YP,YPOLD
-      REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1),
+      REAL (dp), DIMENSION(:), ALLOCATABLE, SAVE:: YOLD,YP,YPOLD
+      REAL (dp):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1),
      &  W(N+1),WP(N+1),Z0(N+1),Z1(N+1)
       INTEGER:: PIVOT(N+1)
 C
@@ -1388,27 +1200,27 @@ C CHANGED BY CHANGING THE FOLLOWING PARAMETER STATEMENT:
 C
 C SWITCH FROM THE TOLERANCE  ARC?E  TO THE (FINER) TOLERANCE  ANS?E  IF
 C THE CURVATURE OF ANY COMPONENT OF  Y  EXCEEDS  CURSW.
-      REAL (KIND=R8), PARAMETER:: CURSW=10.0
+      REAL (dp), PARAMETER:: CURSW=10.0
 C
       INTERFACE
         SUBROUTINE STEPNF(N,NFE,IFLAG,START,CRASH,HOLD,H,RELERR,
      &    ABSERR,S,Y,YP,YOLD,YPOLD,A,QR,ALPHA,TZ,PIVOT,W,WP,
      &    Z0,Z1,SSPAR)
-        USE REAL_PRECISION
-        REAL (KIND=R8):: ABSERR,H,HOLD,RELERR,S
+        use hompack_kinds, only: dp
+        REAL (dp):: ABSERR,H,HOLD,RELERR,S
         INTEGER:: IFLAG,N,NFE
         LOGICAL:: CRASH,START
-        REAL (KIND=R8):: A(:),ALPHA(3*N+3),QR(N,N+2),SSPAR(8),TZ(N+1),
+        REAL (dp):: A(:),ALPHA(3*N+3),QR(N,N+2),SSPAR(8),TZ(N+1),
      &    W(N+1),WP(N+1),Y(:),YOLD(N+1),YP(N+1),YPOLD(N+1),
      &    Z0(N+1),Z1(N+1)
         INTEGER:: PIVOT(N+1)
         END SUBROUTINE STEPNF
         SUBROUTINE ROOTNF(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,
      &    YPOLD,A,QR,ALPHA,TZ,PIVOT,W,WP)
-        USE REAL_PRECISION
-        REAL (KIND=R8):: ABSERR,RELERR
+        use hompack_kinds, only: dp
+        REAL (dp):: ABSERR,RELERR
         INTEGER:: IFLAG,N,NFE
-        REAL (KIND=R8):: A(:),ALPHA(3*N+3),QR(N,N+2),TZ(N+1),W(N+1),
+        REAL (dp):: A(:),ALPHA(3*N+3),QR(N,N+2),TZ(N+1),W(N+1),
      &    WP(N+1),Y(:),YOLD(N+1),YP(N+1),YPOLD(N+1)
         INTEGER:: PIVOT(N+1)
         END SUBROUTINE ROOTNF
@@ -1472,11 +1284,11 @@ C IDEAL RESIDUAL FACTOR:  ||RHO(A, Z[1])|| / ||RHO(A, Z[0])||
 C IDEAL DISTANCE FACTOR:  ||Z[1] - Y|| / ||Z[0] - Y||
       IF (SSPAR(3) .LE. 0.0) SSPAR(3)= .5
 C MINIMUM STEP SIZE  HMIN .
-      IF (SSPAR(4) .LE. 0.0) SSPAR(4)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_R8)
+      IF (SSPAR(4) .LE. 0.0) SSPAR(4)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_dp)
 C MAXIMUM STEP SIZE  HMAX .
       IF (SSPAR(5) .LE. 0.0) SSPAR(5)= 1.0
 C MINIMUM STEP SIZE REDUCTION FACTOR  BMIN .
-      IF (SSPAR(6) .LE. 0.0) SSPAR(6)= .1_R8
+      IF (SSPAR(6) .LE. 0.0) SSPAR(6)= .1_dp
 C MAXIMUM STEP SIZE EXPANSION FACTOR  BMAX .
       IF (SSPAR(7) .LE. 0.0) SSPAR(7)= 3.0
 C ASSUMED OPERATING ORDER  P .
@@ -1809,29 +1621,29 @@ C
 C
 C
       USE HOMOTOPY, QR => QRSPARSE
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN)::LENQR,MODE,N,TRACE
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+      REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
       INTEGER, INTENT(IN OUT)::IFLAG
-      REAL (KIND=R8), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,SSPAR(8)
+      REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,SSPAR(8)
       INTEGER, INTENT(OUT)::NFE
-      REAL (KIND=R8), INTENT(OUT)::ARCLEN
+      REAL (dp), INTENT(OUT)::ARCLEN
 C
 C *****  LOCAL VARIABLES.  *****
 C
-      REAL (KIND=R8), SAVE:: ABSERR,CURTOL,H,HOLD,RELERR,S
+      REAL (dp), SAVE:: ABSERR,CURTOL,H,HOLD,RELERR,S
       INTEGER, SAVE:: IFLAGC,ITER,JW,LIMIT,NC,NFEC,NP1
       LOGICAL, SAVE:: CRASH,START
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C ***** WORK ARRAYS. *****
-      REAL (KIND=R8), ALLOCATABLE, DIMENSION(:), SAVE:: YP,YOLD,YPOLD
-      REAL (KIND=R8):: TZ(N+1),W(N+1),WP(N+1),Z0(N+1),Z1(N+1)
+      REAL (dp), ALLOCATABLE, DIMENSION(:), SAVE:: YP,YOLD,YPOLD
+      REAL (dp):: TZ(N+1),W(N+1),WP(N+1),Z0(N+1),Z1(N+1)
 C
 C LIMITD  IS AN UPPER BOUND ON THE NUMBER OF STEPS.  IT MAY BE
 C CHANGED BY CHANGING THE FOLLOWING PARAMETER STATEMENT:
@@ -1839,31 +1651,31 @@ C CHANGED BY CHANGING THE FOLLOWING PARAMETER STATEMENT:
 C
 C SWITCH FROM THE TOLERANCE  ARC?E  TO THE (FINER) TOLERANCE  ANS?E  IF
 C THE CURVATURE OF ANY COMPONENT OF  Y  EXCEEDS  CURSW.
-      REAL (KIND=R8), PARAMETER:: CURSW=10.0
+      REAL (dp), PARAMETER:: CURSW=10.0
 C
       INTERFACE
         SUBROUTINE ROOTNS(NC,NFEC,IFLAGC,ANSRE,ANSAE,Y,YP,YOLD,YPOLD,
      &     A,MODE,LENQR)
         USE HOMOTOPY, QR => QRSPARSE
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: LENQR,MODE,NC
         INTEGER, INTENT(IN OUT):: IFLAGC,NFEC
-        REAL (KIND=R8), INTENT(IN):: A(:)
-        REAL (KIND=R8), INTENT(IN):: ANSAE,ANSRE
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
+        REAL (dp), INTENT(IN):: A(:)
+        REAL (dp), INTENT(IN):: ANSAE,ANSRE
+        REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
         END SUBROUTINE ROOTNS
 C
         SUBROUTINE STEPNS(NC,NFEC,IFLAGC,START,CRASH,HOLD,H,RELERR,
      &     ABSERR,S,Y,YP,YOLD,YPOLD,A,MODE,LENQR,SSPAR,TZ,W,WP,Z0,Z1)
         USE HOMOTOPY, QR => QRSPARSE
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: LENQR,MODE,NC
         INTEGER, INTENT(IN OUT):: IFLAGC,NFEC
         LOGICAL, INTENT(IN OUT):: CRASH,START
-        REAL (KIND=R8), INTENT(IN):: A(:),SSPAR(8)
-        REAL (KIND=R8), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,
+        REAL (dp), INTENT(IN):: A(:),SSPAR(8)
+        REAL (dp), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,
      &    Y(:),YOLD(:),YP(:),YPOLD(:)
-        REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: TZ,W,WP,Z0,Z1
+        REAL (dp), INTENT(OUT), DIMENSION(:):: TZ,W,WP,Z0,Z1
         END SUBROUTINE STEPNS
       END INTERFACE
 C
@@ -1911,17 +1723,17 @@ C SET OPTIMAL STEP SIZE ESTIMATION PARAMETERS.
 C LET Z[K] DENOTE THE NEWTON ITERATES ALONG THE FLOW NORMAL TO THE
 C DAVIDENKO FLOW AND Y THEIR LIMIT.
 C IDEAL CONTRACTION FACTOR:  ||Z[2] - Z[1]|| / ||Z[1] - Z[0]||
-      IF (SSPAR(1) .LE. 0.0) SSPAR(1)= .5_R8
+      IF (SSPAR(1) .LE. 0.0) SSPAR(1)= .5_dp
 C IDEAL RESIDUAL FACTOR:  ||RHO(A, Z[1])|| / ||RHO(A, Z[0])||
-      IF (SSPAR(2) .LE. 0.0) SSPAR(2)= .01_R8
+      IF (SSPAR(2) .LE. 0.0) SSPAR(2)= .01_dp
 C IDEAL DISTANCE FACTOR:  ||Z[1] - Y|| / ||Z[0] - Y||
-      IF (SSPAR(3) .LE. 0.0) SSPAR(3)= .5_R8
+      IF (SSPAR(3) .LE. 0.0) SSPAR(3)= .5_dp
 C MINIMUM STEP SIZE  HMIN .
-      IF (SSPAR(4) .LE. 0.0) SSPAR(4)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_R8)
+      IF (SSPAR(4) .LE. 0.0) SSPAR(4)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_dp)
 C MAXIMUM STEP SIZE  HMAX .
       IF (SSPAR(5) .LE. 0.0) SSPAR(5)= 1.0
 C MINIMUM STEP SIZE REDUCTION FACTOR  BMIN .
-      IF (SSPAR(6) .LE. 0.0) SSPAR(6)= .1_R8
+      IF (SSPAR(6) .LE. 0.0) SSPAR(6)= .1_dp
 C MAXIMUM STEP SIZE EXPANSION FACTOR  BMAX .
       IF (SSPAR(7) .LE. 0.0) SSPAR(7)= 3.0
 C ASSUMED OPERATING ORDER  P .
@@ -2227,35 +2039,35 @@ C    vectors and quasi-Newton steps.
 C
 C
 C ***** DECLARATIONS *****
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
 C     FUNCTION DECLARATIONS 
 C 
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
 C     LOCAL VARIABLES 
 C
-      REAL (KIND=R8), SAVE:: ABSERR, H, HOLD, RELERR, S, WK 
+      REAL (dp), SAVE:: ABSERR, H, HOLD, RELERR, S, WK 
       INTEGER, SAVE:: IFLAGC, ITER, JW, LIMIT, NP1
       LOGICAL, SAVE:: CRASH, START       
 C
 C     SCALAR ARGUMENTS 
 C
-      REAL (KIND=R8):: ARCRE, ARCAE, ANSRE, ANSAE, ARCLEN
+      REAL (dp):: ARCRE, ARCAE, ANSRE, ANSAE, ARCLEN
       INTEGER:: N,IFLAG,TRACE,NFE
 C
 C     ARRAY DECLARATIONS 
 C
-      REAL (KIND=R8), DIMENSION(:), ALLOCATABLE, SAVE::
+      REAL (dp), DIMENSION(:), ALLOCATABLE, SAVE::
      &  R,YOLD,YP,YPOLD
-      REAL (KIND=R8), DIMENSION(:,:), ALLOCATABLE, SAVE:: Q
-      REAL (KIND=R8):: A(:), DZ(N+1), F0(N+1), F1(N+1),
+      REAL (dp), DIMENSION(:,:), ALLOCATABLE, SAVE:: Q
+      REAL (dp):: A(:), DZ(N+1), F0(N+1), F1(N+1),
      &    SSPAR(4), T(N+1), W(N+1), Y(:), YSAV(N+1), Z0(N+1)
 C 
 C ***** END OF DECLARATIONS *****
@@ -2263,20 +2075,20 @@ C ***** END OF DECLARATIONS *****
         SUBROUTINE STEPQF(N,NFE,IFLAG,START,CRASH,HOLD,H,
      &    WK,RELERR,ABSERR,S,Y,YP,YOLD,YPOLD,A,Q,R,
      &    F0,F1,Z0,DZ,W,T,SSPAR)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N, NFE, IFLAG
         LOGICAL:: START, CRASH
-        REAL (KIND=R8):: HOLD, H, WK, RELERR, ABSERR, S
-        REAL (KIND=R8):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
+        REAL (dp):: HOLD, H, WK, RELERR, ABSERR, S
+        REAL (dp):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
      &    Q(N+1,N+1), R((N+1)*(N+2)/2), SSPAR(4), T(N+1), W(N+1),
      &    Y(:), YOLD(N+1), YP(N+1), YPOLD(N+1), Z0(N+1)
         END SUBROUTINE STEPQF
         SUBROUTINE ROOTQF(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,
      &    YPOLD,A,Q,R,DZ,Z,W,T,F0,F1)
-        USE REAL_PRECISION
-        REAL (KIND=R8):: RELERR, ABSERR
+        use hompack_kinds, only: dp
+        REAL (dp):: RELERR, ABSERR
         INTEGER:: N, NFE, IFLAG
-        REAL (KIND=R8):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
+        REAL (dp):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
      &    Q(N+1,N+1), R((N+1)*(N+2)/2), T(N+1), W(N+1),
      &    Y(:), YOLD(N+1), YP(N+1), YPOLD(N+1), Z(N+1)
         END SUBROUTINE ROOTQF
@@ -2339,11 +2151,11 @@ C
 C SET OPTIMAL STEP SIZE ESTIMATION PARAMETERS.
 C
 C     MINIMUM STEP SIZE HMIN
-      IF (SSPAR(1) .LE. 0.0) SSPAR(1)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_R8)
+      IF (SSPAR(1) .LE. 0.0) SSPAR(1)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_dp)
 C     MAXIMUM STEP SIZE HMAX
       IF (SSPAR(2) .LE. 0.0) SSPAR(2)= 1.0
 C     MINIMUM STEP REDUCTION FACTOR BMIN
-      IF (SSPAR(3) .LE. 0.0) SSPAR(3)= 0.1_R8
+      IF (SSPAR(3) .LE. 0.0) SSPAR(3)= 0.1_dp
 C     MAXIMUM STEP EXPANSION FACTOR BMAX
       IF (SSPAR(4) .LE. 0.0) SSPAR(4)= 7.0
 C
@@ -2666,34 +2478,34 @@ C
 C
 C
       USE HOMOTOPY, QR => QRSPARSE
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN)::LENQR,MODE,N,TRACE
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+      REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
       INTEGER, INTENT(IN OUT)::IFLAG
-      REAL (KIND=R8), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,SSPAR(4)
+      REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,SSPAR(4)
       INTEGER, INTENT(OUT)::NFE
-      REAL (KIND=R8), INTENT(OUT)::ARCLEN
+      REAL (dp), INTENT(OUT)::ARCLEN
 C
 C     FUNCTION DECLARATIONS 
 C 
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
 C     LOCAL VARIABLES 
 C
-      REAL (KIND=R8), SAVE:: ABSERR, H, HOLD, RELERR, S, WK 
+      REAL (dp), SAVE:: ABSERR, H, HOLD, RELERR, S, WK 
       INTEGER, SAVE:: IFLAGC, ITER, JW, LIMIT, NP1
       LOGICAL, SAVE:: CRASH, START       
 C
 C     WORK ARRAYS 
 C
-      REAL (KIND=R8), ALLOCATABLE, DIMENSION(:), SAVE:: YP,YOLD,YPOLD
-      REAL (KIND=R8):: DZ(N+1),T(N+1),Z0(N+1) 
+      REAL (dp), ALLOCATABLE, DIMENSION(:), SAVE:: YP,YOLD,YPOLD
+      REAL (dp):: DZ(N+1),T(N+1),Z0(N+1) 
 C
 C LIMITD  IS AN UPPER BOUND ON THE NUMBER OF STEPS.  IT MAY BE 
 C CHANGED BY CHANGING THE FOLLOWING PARAMETER STATEMENT:
@@ -2703,25 +2515,25 @@ C
         SUBROUTINE ROOTNS(N,NFE,IFLAGC,ANSRE,ANSAE,Y,YP,
      &    YOLD,YPOLD,A,MODE,LENQR)
         USE HOMOTOPY, QR => QRSPARSE
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: LENQR,MODE,N
         INTEGER, INTENT(IN OUT):: IFLAGC,NFE
-        REAL (KIND=R8), INTENT(IN):: A(:)
-        REAL (KIND=R8), INTENT(IN):: ANSAE,ANSRE
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
+        REAL (dp), INTENT(IN):: A(:)
+        REAL (dp), INTENT(IN):: ANSAE,ANSRE
+        REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
         END SUBROUTINE ROOTNS
 C
         SUBROUTINE STEPQS(N,NFE,IFLAGC,MODE,LENQR,START,CRASH,HOLD,H,
      &    WK,RELERR,ABSERR,S,Y,YP,YOLD,YPOLD,A,Z0,DZ,T,SSPAR)
         USE HOMOTOPY, QR => QRSPARSE
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: LENQR,MODE,N
         INTEGER, INTENT(IN OUT):: IFLAGC,NFE
         LOGICAL, INTENT(IN OUT):: CRASH,START
-        REAL (KIND=R8), INTENT(IN):: A(:),SSPAR(4)
-        REAL (KIND=R8), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,WK,
+        REAL (dp), INTENT(IN):: A(:),SSPAR(4)
+        REAL (dp), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,WK,
      &    Y(:),YOLD(:),YP(:),YPOLD(:)
-        REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: DZ,T,Z0
+        REAL (dp), INTENT(OUT), DIMENSION(:):: DZ,T,Z0
         END SUBROUTINE STEPQS
       END INTERFACE
 C
@@ -2773,11 +2585,11 @@ C
 C SET OPTIMAL STEP SIZE ESTIMATION PARAMETERS.
 C
 C     MINIMUM STEP SIZE HMIN
-      IF (SSPAR(1) .LE. 0.0) SSPAR(1)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_R8)
+      IF (SSPAR(1) .LE. 0.0) SSPAR(1)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_dp)
 C     MAXIMUM STEP SIZE HMAX
       IF (SSPAR(2) .LE. 0.0) SSPAR(2)= 1.0
 C     MINIMUM STEP REDUCTION FACTOR BMIN
-      IF (SSPAR(3) .LE. 0.0) SSPAR(3)= 0.1_R8
+      IF (SSPAR(3) .LE. 0.0) SSPAR(3)= 0.1_dp
 C     MAXIMUM STEP EXPANSION FACTOR BMAX
       IF (SSPAR(4) .LE. 0.0) SSPAR(4)= 7.0
 C
@@ -3140,54 +2952,54 @@ C   track the Mth path for M =1, ..., TOTDG.
 C
 C ----------------------------------------------------------------------
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTERFACE
         SUBROUTINE INITP(IFLG1,N,NUMT,KDEG,COEF,
      &                              IDEG,FACV,CL,PDG,QDG,R)
         USE HOMOTOPY
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: IFLG1,N,NUMT(:)
         INTEGER, INTENT(IN OUT):: KDEG(:,:,:)
-        REAL (KIND=R8), INTENT(IN OUT):: COEF(:,:)
+        REAL (dp), INTENT(IN OUT):: COEF(:,:)
         INTEGER, INTENT(OUT):: IDEG(N)
-        REAL (KIND=R8), INTENT(OUT):: 
+        REAL (dp), INTENT(OUT):: 
      &    FACV(N),CL(2,N+1),PDG(2,N),QDG(2*N),R(2,N)
         END SUBROUTINE INITP
 C
         SUBROUTINE STRPTP(N,ICOUNT,IDEG,R,X)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,ICOUNT(N),IDEG(N)
-        REAL (KIND=R8):: R(2,N),X(2*N)
+        REAL (dp):: R(2,N),X(2*N)
         END SUBROUTINE STRPTP
 C
 !       SUBROUTINE FIXPNF(N,Y,IFLAG,ARCRE,ARCAE,ANSRE,ANSAE,TRACE,A,
 !    &    SSPAR,NFE,ARCLEN,POLY_SWITCH)
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN)::N,TRACE
-!       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
 !       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (KIND=R8), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
+!       REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
 !    &    SSPAR(8)
 !       INTEGER, INTENT(OUT)::NFE
-!       REAL (KIND=R8), INTENT(OUT)::ARCLEN
+!       REAL (dp), INTENT(OUT)::ARCLEN
 !       LOGICAL, INTENT(IN), OPTIONAL::POLY_SWITCH
 !       END SUBROUTINE FIXPNF
 C
         SUBROUTINE OTPUTP(N,NUMPAT,CL,FACV,CLX,X,XNP1)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N,NUMPAT
-        REAL (KIND=R8), INTENT(IN):: CL(2,N+1),FACV(N)
-        REAL (KIND=R8), INTENT(IN OUT):: CLX(2,N),X(2,N),XNP1(2)
+        REAL (dp), INTENT(IN):: CL(2,N+1),FACV(N)
+        REAL (dp), INTENT(IN OUT):: CLX(2,N),X(2,N),XNP1(2)
         END SUBROUTINE OTPUTP
       END INTERFACE
 C
 C TYPE DECLARATIONS FOR INPUT AND OUTPUT
 C
       INTEGER, INTENT(IN):: N,NUMT(:),NUMRR
-      REAL (KIND=R8), INTENT(IN OUT):: COEF(:,:),SSPAR(8)
+      REAL (dp), INTENT(IN OUT):: COEF(:,:),SSPAR(8)
       INTEGER, INTENT(IN OUT):: KDEG(:,:,:),IFLG1,IFLG2(:)
-      REAL (KIND=R8), INTENT(IN):: EPSBIG,EPSSML
-      REAL (KIND=R8), INTENT(OUT):: LAMBDA(:),ROOTS(:,:,:),ARCLEN(:)
+      REAL (dp), INTENT(IN):: EPSBIG,EPSSML
+      REAL (dp), INTENT(OUT):: LAMBDA(:),ROOTS(:,:,:),ARCLEN(:)
       INTEGER, INTENT(OUT):: NFE(:)
 C
 C TYPE DECLARATIONS FOR LOCAL VARIABLES
@@ -3195,7 +3007,7 @@ C
       INTEGER:: I,ICOUNT(N),IDEG(N),IDUMMY,IFLAG,IJ,
      &  IPROFF(15),J,LIPAR(15),LPAR(25),MAXT,N2,N2P1,
      &  NNFE,NP1,NUMPAT,PROFF(25),TOTDG,TRACE
-      REAL (KIND=R8):: AARCLN,ANSAE,ANSRE,ARCAE,ARCRE,CL(2,N+1),
+      REAL (dp):: AARCLN,ANSAE,ANSRE,ARCAE,ARCRE,CL(2,N+1),
      &  FACV(N),PDG(2,N),QDG(2*N),R(2,N),XNP1(2),Y(2*N+1)
 C
 C ----------------------------------------------------------------------
@@ -3414,32 +3226,32 @@ C
 C  0   IF DIVISION DOES NOT CAUSE OVERFLOW.
 C
 C DECLARATION OF INPUT
-      USE REAL_PRECISION
-      REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+      use hompack_kinds, only: dp
+      REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
 C
 C DECLARATION OF OUTPUT
       INTEGER, INTENT(OUT):: IERR
-      REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+      REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
 C
 C DECLARATION OF VARIABLES
-      REAL (KIND=R8):: DENOM,XNUM
+      REAL (dp):: DENOM,XNUM
 C
       IERR = 0
       DENOM = YYYY(1)*YYYY(1) + YYYY(2)*YYYY(2)
       XNUM    =   XXXX(1)*YYYY(1) + XXXX(2)*YYYY(2)
       IF (ABS(DENOM) .GE. 1.0  .OR.  ( ABS(DENOM) .LT. 1.0   .AND.
-     & ABS(XNUM)/HUGE(1.0_R8) .LT. ABS(DENOM) ) ) THEN
+     & ABS(XNUM)/HUGE(1.0_dp) .LT. ABS(DENOM) ) ) THEN
             ZZZZ(1) = XNUM/DENOM
           ELSE
-            ZZZZ(1) = HUGE(1.0_R8)
+            ZZZZ(1) = HUGE(1.0_dp)
             IERR =1
           END IF
       XNUM    =   XXXX(2)*YYYY(1) - XXXX(1)*YYYY(2)
       IF (ABS(DENOM) .GE. 1.0  .OR.  ( ABS(DENOM) .LT. 1.0   .AND.
-     & ABS(XNUM)/HUGE(1.0_R8) .LT. ABS(DENOM) ) ) THEN
+     & ABS(XNUM)/HUGE(1.0_dp) .LT. ABS(DENOM) ) ) THEN
             ZZZZ(2) = XNUM/DENOM
           ELSE
-            ZZZZ(2) = HUGE(1.0_R8)
+            ZZZZ(2) = HUGE(1.0_dp)
             IERR =1
           END IF
       RETURN
@@ -3594,39 +3406,39 @@ C   IF THE PROJECTIVE TRANSFORMATION IS NOT SPECIFIED.
 C
 C  SUBROUTINES: MULP,POWP,DIVP.
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
       INTERFACE
         SUBROUTINE DIVP(XXXX,YYYY,ZZZZ,IERR)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
         INTEGER, INTENT(OUT):: IERR
-        REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+        REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
         END SUBROUTINE DIVP
         SUBROUTINE MULP(XXXX,YYYY,ZZZZ)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
-        REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+        REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
         END SUBROUTINE MULP
         SUBROUTINE POWP(NNNN,XXXX,YYYY)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: NNNN
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN OUT):: YYYY
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX
+        REAL (dp), DIMENSION(2), INTENT(IN OUT):: YYYY
         END SUBROUTINE POWP
       END INTERFACE
 C
 C DECLARATION OF INPUT AND OUTPUT:
       INTEGER, INTENT(IN):: N,NUMT(N),MAXT,KDEG(N,N+1,MAXT)
-      REAL (KIND=R8), INTENT(IN):: COEF(N,MAXT),CL(2,N+1),X(2,N)
-      REAL (KIND=R8), INTENT(IN OUT):: 
+      REAL (dp), INTENT(IN):: COEF(N,MAXT),CL(2,N+1),X(2,N)
+      REAL (dp), INTENT(IN OUT):: 
      &  XX(2,N,N+1,MAXT),TRM(2,N,MAXT),DTRM(2,N,N+1,MAXT)
-      REAL (KIND=R8), INTENT(OUT):: 
+      REAL (dp), INTENT(OUT):: 
      &  CLX(2,N),DXNP1(2,N),F(2,N),DF(2,N,N+1)
 C
 C DECLARATION OF LOCAL VARIABLES:
       INTEGER:: IERR,J,K,L,M,NNNN,NP1
-      REAL (KIND=R8), DIMENSION(2):: TEMP1,TEMP2,XNP1
+      REAL (dp), DIMENSION(2):: TEMP1,TEMP2,XNP1
 C
       NP1=N+1
 C
@@ -3738,16 +3550,16 @@ C
 C CALLS  DGEQPF , DNRM2 .
 C
       USE HOMOTOPY
-      USE REAL_PRECISION
-      REAL (KIND=R8):: DNRM2,S,YPNORM
+      use hompack_kinds, only: dp
+      REAL (dp):: DNRM2,S,YPNORM
       INTEGER:: I,IFLAG,IK,K,KP1,LW,N,NFE,NP1
 C
 C *****  ARRAY DECLARATIONS.  *****
 C
-      REAL (KIND=R8):: A(:),Y(:),YP(N+1),YPOLD(N+1)
+      REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
 C
 C ARRAYS FOR COMPUTING THE JACOBIAN MATRIX AND ITS KERNEL.
-      REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+1),TZ(N+1)
+      REAL (dp):: ALPHA(3*N+3),QR(N,N+1),TZ(N+1)
       INTEGER, DIMENSION(N+1):: PIVOT
 C
 C *****  END OF DIMENSIONAL INFORMATION.  *****
@@ -3802,7 +3614,7 @@ C
 C
       CALL DGEQPF(N,NP1,QR,N,PIVOT,YP,ALPHA,K)
 C
-      IF (ABS(QR(N,N)) .LE. ABS(QR(1,1))*EPSILON(1.0_R8)) THEN 
+      IF (ABS(QR(N,N)) .LE. ABS(QR(1,1))*EPSILON(1.0_dp)) THEN 
         IFLAG=4
         RETURN
       ENDIF 
@@ -3829,29 +3641,29 @@ C IS THE ZERO CURVE OF THE HOMOTOPY MAP.  S = ARC LENGTH,
 C YP = DY/DS, AND  Y(S) = (X(S), LAMBDA(S)) .
 C
       USE HOMOTOPY, QR => QRSPARSE
-      USE REAL_PRECISION
-      REAL (KIND=R8):: LAMBDA,S,YPNORM
+      use hompack_kinds, only: dp
+      REAL (dp):: LAMBDA,S,YPNORM
       INTEGER:: IFLAG,J,JPOS,LENQR,MODE,N,NDIMA,NFE,NP1
-      REAL (KIND=R8):: A(NDIMA),Y(N+1),YP(N+1),YPOLD(N+1)
+      REAL (dp):: A(NDIMA),Y(N+1),YP(N+1),YPOLD(N+1)
       INTERFACE
         SUBROUTINE PCGDS(N,LENQR,IFLAG,YP,RHO)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER, INTENT(IN):: LENQR,N
           INTEGER, INTENT(IN OUT):: IFLAG
-          REAL (KIND=R8), INTENT(IN OUT):: YP(N+1)
-          REAL (KIND=R8), OPTIONAL, INTENT(IN):: RHO(N)
+          REAL (dp), INTENT(IN OUT):: YP(N+1)
+          REAL (dp), OPTIONAL, INTENT(IN):: RHO(N)
         END SUBROUTINE PCGDS
         SUBROUTINE GMRILUDS(N,LENQR,IFLAG,YP,RHO)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER, INTENT(IN):: LENQR,N
           INTEGER, INTENT(IN OUT):: IFLAG
-          REAL (KIND=R8), INTENT(IN OUT):: YP(N+1)
-          REAL (KIND=R8), OPTIONAL, INTENT(IN):: RHO(N)
+          REAL (dp), INTENT(IN OUT):: YP(N+1)
+          REAL (dp), OPTIONAL, INTENT(IN):: RHO(N)
         END SUBROUTINE GMRILUDS
         FUNCTION DNRM2(N,X,STRIDE)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER:: N,STRIDE
-          REAL (KIND=R8):: DNRM2,X(N)
+          REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
@@ -4009,34 +3821,34 @@ C   J-TH INDEPENDENT VARIABLE.
 C
 C SUBROUTINES:  MULP, POWP.
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
       INTERFACE
         SUBROUTINE DIVP(XXXX,YYYY,ZZZZ,IERR)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
         INTEGER, INTENT(OUT):: IERR
-        REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+        REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
         END SUBROUTINE DIVP
         SUBROUTINE MULP(XXXX,YYYY,ZZZZ)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
-        REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+        REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
         END SUBROUTINE MULP
         SUBROUTINE POWP(NNNN,XXXX,YYYY)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: NNNN
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN OUT):: YYYY
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX
+        REAL (dp), DIMENSION(2), INTENT(IN OUT):: YYYY
         END SUBROUTINE POWP
       END INTERFACE
 C
 C DECLARATION OF INPUT AND OUTPUT:
       INTEGER, INTENT(IN):: N,IDEG(N)
-      REAL (KIND=R8), INTENT(IN):: PDG(2,N),QDG(2,N),X(2,N)
-      REAL (KIND=R8), INTENT(IN OUT):: XDGM1(2,N),XDG(2,N),PXDGM1(2,N),
+      REAL (dp), INTENT(IN):: PDG(2,N),QDG(2,N),X(2,N)
+      REAL (dp), INTENT(IN OUT):: XDGM1(2,N),XDG(2,N),PXDGM1(2,N),
      &  PXDG(2,N)
-      REAL (KIND=R8), INTENT(OUT):: G(2,N),DG(2,N)
+      REAL (dp), INTENT(OUT):: G(2,N),DG(2,N)
 C
 C DECLARATION LOCAL OF VARIABLES
       INTEGER:: I,J
@@ -4097,12 +3909,12 @@ C
 C     No working storage is required by this routine.
 C
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: NN,NWK,MAXA(NN+1)
-      REAL (KIND=R8), INTENT(IN OUT):: A(NWK)
+      REAL (dp), INTENT(IN OUT):: A(NWK)
       INTEGER:: I,I0,I1,I2,I3,I4,J,J1,K,K1,K2,KH,KL,KN,KU,KZ,L,L1,
      &   L2,L3,M,M1,N1,NNN
-      REAL (KIND=R8):: BET,DEL,DJ,G,GAM,GAM1,PHI,
+      REAL (dp):: BET,DEL,DJ,G,GAM,GAM1,PHI,
      &   THE,THE1,XT1,XT2,ZET,ZET1
       G=0.0
       GAM=0.0
@@ -4126,7 +3938,7 @@ C
          END DO
       END DO
       ZET=ZET/NN
-      DEL=EPSILON(1.0_R8)
+      DEL=EPSILON(1.0_dp)
       BET=DEL
       IF (ZET .GT. BET) BET=ZET
       IF (GAM .GT. BET) BET=GAM
@@ -4261,11 +4073,11 @@ C  CALLS DNRM2, ILUSOLVDS, MULTDS, MULT2DS, SOLVDS, AND INTERNAL
 C  SUBROUTINES MULM1 AND MULM2 AND INTERNAL FUNCTIONS APPL_HOUSE, HOUSE.
 C
       USE HOMOTOPY, AA=>QRSPARSE
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: KVAL, N
       INTEGER, INTENT(IN OUT):: IFLAG, ITMAX, KDMAX
-      REAL (KIND=R8), INTENT(IN):: PRECON(:), RHS(N)  
-      REAL (KIND=R8), INTENT(IN OUT):: X(N)
+      REAL (dp), INTENT(IN):: PRECON(:), RHS(N)  
+      REAL (dp), INTENT(IN OUT):: X(N)
       INTEGER, INTENT(IN), OPTIONAL:: COLPOSP(:), ROWPOSP(:)
 C
 C IPRINT  IS A PARAMETER FOR THE FORTRAN UNIT NUMBER, WHICH IF POSITIVE
@@ -4285,16 +4097,16 @@ C LOCAL VARIABLES.
 C
       INTEGER:: I, IFLAGC, IFLAGI, IQUIT, ITNO, KD, 
      &  KDP1, KDLIMIT, LENAA 
-      REAL (KIND=R8), ALLOCATABLE:: C(:), R(:,:), S(:), SVBIG(:), 
+      REAL (dp), ALLOCATABLE:: C(:), R(:,:), S(:), SVBIG(:), 
      &  SVSML(:), V(:,:), W(:)
-      REAL (KIND=R8):: VTEMP(N), VTEMP2(N)
-      REAL (KIND=R8):: BIG, BIGCND, CC, CNDMAX,
+      REAL (dp):: VTEMP(N), VTEMP2(N)
+      REAL (dp):: BIG, BIGCND, CC, CNDMAX,
      &  RSN, RSNOLD, SESTPR, SMALL, SS, TEMP, TOL 
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
@@ -4319,7 +4131,7 @@ C
       IFLAGC = 0
       IFLAGI = 1
       LENAA = ROWPOS(N)-1
-      TOL = MAX(100.0, 1.01*REAL(LENAA)/REAL(N))*EPSILON(1.0_R8)
+      TOL = MAX(100.0, 1.01*REAL(LENAA)/REAL(N))*EPSILON(1.0_dp)
       VTEMP = X
       IF (PRESENT(ROWPOSP) .AND. PRESENT( COLPOSP)) THEN
         CALL MULM2(V(:,1),VTEMP)            ! MODE=2 
@@ -4342,7 +4154,7 @@ C
             RETURN
          ENDIF
       ENDIF
-      CNDMAX = 1.0/(50.0*EPSILON(1.0_R8))
+      CNDMAX = 1.0/(50.0*EPSILON(1.0_dp))
       IQUIT = 0
       BIGCND = 0.0
 C
@@ -4517,7 +4329,7 @@ C TEST FOR STAGNATION.
 C
       ELSE 
         TEMP = KD*LOG(TOL/RSN)/
-     &    LOG(RSN/((1.0 + 10.0*EPSILON(1.0_R8))*RSNOLD))
+     &    LOG(RSN/((1.0 + 10.0*EPSILON(1.0_dp))*RSNOLD))
         IF (TEMP .GE. 40.0*(ITMAX - ITNO)) THEN
           IF (KDMAX .LE. KDLIMIT-M) THEN
             IFLAGI = 3
@@ -4610,7 +4422,7 @@ C
 C TEST FOR STAGNATION USING TRUE RESIDUAL NORM.
 C
         TEMP = KD*LOG(TOL/RSN)/
-     &     LOG(RSN/((1.0 + 10.0*EPSILON(1.0_R8))*RSNOLD))
+     &     LOG(RSN/((1.0 + 10.0*EPSILON(1.0_dp))*RSNOLD))
         IF (TEMP .GE. 70.0*(ITMAX - ITNO)) THEN
           IFLAGI = 3
           IF ( KDMAX .LE. KDLIMIT-M ) THEN
@@ -4639,8 +4451,8 @@ C
 C
 C MATRIX-VECTOR MULTIPLY FOR MODE = 1.
 C 
-        REAL (KIND=R8), INTENT(IN):: X(N) 
-        REAL (KIND=R8), INTENT(OUT):: Y(N) 
+        REAL (dp), INTENT(IN):: X(N) 
+        REAL (dp), INTENT(OUT):: Y(N) 
         Y = 0.0
         CALL MULTDS(Y(1:N-1), AA, X(1:N-1), ROWPOS(1:N),
      &    N-1, ROWPOS(N)-1)       
@@ -4657,15 +4469,15 @@ C
 C
 C MATRIX-VECTOR MULTIPLY FOR MODE = 2.
 C
-        REAL (KIND=R8), INTENT(IN):: X(N)
-        REAL (KIND=R8), INTENT(OUT):: Y(N) 
+        REAL (dp), INTENT(IN):: X(N)
+        REAL (dp), INTENT(OUT):: Y(N) 
         INTERFACE
           SUBROUTINE MULT2DS(Y, B, X, ROWPOS, COLPOS, N, LENB)
-            USE REAL_PRECISION
+            use hompack_kinds, only: dp
             INTEGER, INTENT (IN):: LENB, N, ROWPOS(N+1),   
      &        COLPOS(LENB)
-            REAL (KIND=R8), INTENT(IN):: X(:), B(LENB)
-            REAL (KIND=R8), INTENT (OUT):: Y(N)
+            REAL (dp), INTENT(IN):: X(:), B(LENB)
+            REAL (dp), INTENT (OUT):: Y(N)
           END SUBROUTINE MULT2DS
         END INTERFACE
         Y = 0.0
@@ -4700,8 +4512,8 @@ C ROUTINE DLARFG WITH TRIVIAL MODIFICATIONS FOR COMPATIBILITY WITH
 C HOMPACK90.
 C
       INTEGER, INTENT(IN):: N
-      REAL (KIND=R8), INTENT(OUT):: ALPHA, TAU
-      REAL (KIND=R8), INTENT(IN OUT):: X(N-1)
+      REAL (dp), INTENT(OUT):: ALPHA, TAU
+      REAL (dp), INTENT(IN OUT):: X(N-1)
 !
 !  Purpose
 !  =======
@@ -4747,26 +4559,26 @@ C
 !  =====================================================================
 !
 !     .. Parameters ..
-      REAL (KIND=R8), PARAMETER:: ONE = 1.0_R8, ZERO = 0.0_R8
+      REAL (dp), PARAMETER:: ONE = 1.0_dp, ZERO = 0.0_dp
 !     .. Local Scalars ..
       INTEGER::          J, KNT
-      REAL (KIND=R8)::   BETA, RSAFMN, SAFMIN, XNORM
+      REAL (dp)::   BETA, RSAFMN, SAFMIN, XNORM
 !       
 !     .. External Functions ..
       INTERFACE
         FUNCTION DLAMCH(CMACH)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           CHARACTER (LEN=1):: CMACH
-          REAL (KIND=R8):: DLAMCH
+          REAL (dp):: DLAMCH
         END FUNCTION DLAMCH
         FUNCTION DLAPY2(X,Y)
-          USE REAL_PRECISION
-          REAL (KIND=R8):: DLAPY2,X,Y
+          use hompack_kinds, only: dp
+          REAL (dp):: DLAPY2,X,Y
         END FUNCTION DLAPY2
         FUNCTION DNRM2(N,X,STRIDE)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER:: N,STRIDE
-          REAL (KIND=R8):: DNRM2,X(N)
+          REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 !      
@@ -4830,8 +4642,8 @@ C THE LAPACK ROUTINE DLARFX WITH MODIFICATIONS FOR
 C COMPATIBILITY WITH HOMPACK 90.
 C
       INTEGER, INTENT(IN):: M
-      REAL (KIND=R8), INTENT(IN):: TAU, V(M)
-      REAL (KIND=R8), INTENT(IN OUT):: C(M) 
+      REAL (dp), INTENT(IN):: TAU, V(M)
+      REAL (dp), INTENT(IN OUT):: C(M) 
 !
 !  Purpose
 !  =======
@@ -4866,10 +4678,10 @@ C
 !  =====================================================================
 !
 !     ..  Parameters ..
-      REAL (KIND=R8), PARAMETER:: ONE=1.0_R8, ZERO=0.0_R8
+      REAL (dp), PARAMETER:: ONE=1.0_dp, ZERO=0.0_dp
 !
 !     .. Local Scalars ..
-      REAL (KIND=R8):: SUM, T1, T10, T2, T3, T4, T5, T6, T7, T8, T9,
+      REAL (dp):: SUM, T1, T10, T2, T3, T4, T5, T6, T7, T8, T9,
      &                   V1, V10, V2, V3, V4, V5, V6, V7, V8, V9
 !
 !     .. Executable Statements ..  
@@ -5229,19 +5041,19 @@ C
 C  Calls subroutines ILUFDS and GMRES.
 C
       USE HOMOTOPY, AA => QRSPARSE, WORK => PAR, IWORK => IPAR
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
       INTEGER, INTENT(IN):: NN,LENAA
       INTEGER, INTENT(IN OUT):: IFLAG
-      REAL (KIND=R8), INTENT(IN OUT):: START(NN+1)
-      REAL (KIND=R8), INTENT(IN), OPTIONAL :: RHS(NN)
+      REAL (dp), INTENT(IN OUT):: START(NN+1)
+      REAL (dp), INTENT(IN), OPTIONAL :: RHS(NN)
 C
 C LOCAL VARIABLES.
 C
       INTEGER:: I, ITMAX, K, KD, NP1, QIND, ZBIND  
       INTEGER:: CIND, RIND, ROWL, STRT 
-      REAL (KIND=R8):: STARTK
-      REAL (KIND=R8):: RHSC(NN+1)
+      REAL (dp):: STARTK
+      REAL (dp):: RHSC(NN+1)
 C
 C GMRES PARAMETER.
 C
@@ -5251,17 +5063,17 @@ C
         SUBROUTINE GMRES(N, KDMAX, ITMAX, RHSC, X, KVAL,
      &                Q, IFLAG, ROWPOSP, COLPOSP)
           USE HOMOTOPY
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER, INTENT(IN):: KVAL, N
           INTEGER, INTENT(IN OUT):: IFLAG, ITMAX, KDMAX
-          REAL (KIND=R8), INTENT(IN):: Q(:), RHSC(N)
-          REAL (KIND=R8), INTENT(IN OUT):: X(N)
+          REAL (dp), INTENT(IN):: Q(:), RHSC(N)
+          REAL (dp), INTENT(IN OUT):: X(N)
           INTEGER, INTENT(IN), OPTIONAL:: COLPOSP(:), ROWPOSP(:)
         END SUBROUTINE GMRES
         SUBROUTINE ILUFDS(NN, Q, LENQ, ROWPOS, COLPOS)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER, INTENT(IN):: LENQ, NN, COLPOS(LENQ), ROWPOS(NN+1) 
-          REAL (KIND=R8), INTENT(IN OUT):: Q(LENQ) 
+          REAL (dp), INTENT(IN OUT):: Q(LENQ) 
         END SUBROUTINE ILUFDS
       END INTERFACE 
 C 
@@ -5440,20 +5252,20 @@ C    ONEML
 C
 C  SUBROUTINES:  GFUNP, FFUNP.
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C DECLARATION OF INPUT, WORKSPACE, AND OUTPUT:
       INTEGER, INTENT(IN):: N,MAXT,IDEG(N),NUMT(N),KDEG(N,N+1,MAXT)
-      REAL (KIND=R8), INTENT(IN):: QDG(2,N),LAMBDA,X(2,N),
+      REAL (dp), INTENT(IN):: QDG(2,N),LAMBDA,X(2,N),
      &  PDG(2,N),CL(2,N+1),COEF(N,MAXT)
-      REAL (KIND=R8), INTENT(OUT):: RHO(2*N),DRHOX(2*N,2*N),DRHOL(2*N)
-      REAL (KIND=R8), INTENT(IN OUT):: XDGM1(2,N),XDG(2,N),
+      REAL (dp), INTENT(OUT):: RHO(2*N),DRHOX(2*N,2*N),DRHOL(2*N)
+      REAL (dp), INTENT(IN OUT):: XDGM1(2,N),XDG(2,N),
      &  G(2,N),DG(2,N),PXDGM1(2,N),PXDG(2,N),
      &  F(2,N), DF(2,N,N+1),XX(2,N,N+1,MAXT),TRM(2,N,MAXT),
      &  DTRM(2,N,N+1,MAXT),CLX(2,N),DXNP1(2,N)
 C
 C DECLARATION OF LOCAL VARIABLES:
       INTEGER:: J,J2,J2M1,K,K2,K2M1
-      REAL (KIND=R8):: ONEML
+      REAL (dp):: ONEML
 C
       CALL GFUNP(N,IDEG,PDG,QDG,X,XDGM1,XDG,PXDGM1,PXDG,G,DG)
       CALL FFUNP(N,NUMT,MAXT,KDEG,COEF,CL,X,XX,TRM,DTRM,CLX,DXNP1,F,DF)
@@ -5538,9 +5350,9 @@ C
 C SUBROUTINES:  HFUN1P.
 C
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: N
-      REAL (KIND=R8), INTENT(IN):: QDG(2,N),LAMBDA,X(2,N)
+      REAL (dp), INTENT(IN):: QDG(2,N),LAMBDA,X(2,N)
 C
       CALL HFUN1P(QDG,LAMBDA,X,
      & PAR( IPAR(3 + ( 1-1))), PAR( IPAR(3 + ( 2-1))),
@@ -5583,12 +5395,12 @@ C     Output variables:
 C       B       the ILU factors of input matrix B.
 C-------------------------------------------------------------
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: LENB, NP1, ROWPOSP(NP1+1), COLPOSP(LENB)
-      REAL (KIND=R8), INTENT(IN OUT):: B(LENB)
+      REAL (dp), INTENT(IN OUT):: B(LENB)
 C
 C LOCAL VARIABLES
-      REAL (KIND=R8):: SIJ, LIT, LII
+      REAL (dp):: SIJ, LIT, LII
       INTEGER:: I, J, COUNT, ISTRT, IFIN, TMAX, K, T, M
 C
 C
@@ -5669,10 +5481,10 @@ C       B        solution of Qx = B.
 C
 C---------------------------------------------------------------------
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN) ::  NN, LENQ, ROWPOSP(NN+1), COLPOSP(LENQ)
-      REAL (KIND=R8), INTENT(IN) :: Q(LENQ) 
-      REAL (KIND=R8), INTENT(IN OUT) :: B(NN)
+      REAL (dp), INTENT(IN) :: Q(LENQ) 
+      REAL (dp), INTENT(IN OUT) :: B(NN)
 C 
 C LOCAL VARIABLES
       INTEGER:: DIAG(NN), I, K, J
@@ -5749,47 +5561,47 @@ C R  IS USED IN SUBROUTINE  STRPTP  TO GENERATE SOLUTIONS TO G(X)=0.
 C
 C
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C DECLARATIONS OF INPUT AND OUTPUT:
       INTEGER, INTENT(IN):: IFLG1,N,NUMT(:)
       INTEGER, INTENT(IN OUT):: KDEG(:,:,:)
-      REAL (KIND=R8), INTENT(IN OUT):: COEF(:,:)
+      REAL (dp), INTENT(IN OUT):: COEF(:,:)
       INTEGER, INTENT(OUT):: IDEG(N)
-      REAL (KIND=R8), INTENT(OUT):: 
+      REAL (dp), INTENT(OUT):: 
      &  FACV(N),CL(2,N+1),PDG(2,N),QDG(2,N),R(2,N)
 C
 C DECLARATIONS OF LOCAL VARIABLES:
       INTEGER:: IERR,J,JJ,MAXT,N2,NP1
-      REAL (KIND=R8):: CCL(2,11),P(2,10),Q(2,10),ZERO
+      REAL (dp):: CCL(2,11),P(2,10),Q(2,10),ZERO
 C
       INTERFACE
         SUBROUTINE DIVP(XXXX,YYYY,ZZZZ,IERR)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
         INTEGER, INTENT(OUT):: IERR
-        REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+        REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
         END SUBROUTINE DIVP
         SUBROUTINE MULP(XXXX,YYYY,ZZZZ)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
-        REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+        REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
         END SUBROUTINE MULP
         SUBROUTINE POWP(NNNN,XXXX,YYYY)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: NNNN
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN OUT):: YYYY
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX
+        REAL (dp), DIMENSION(2), INTENT(IN OUT):: YYYY
         END SUBROUTINE POWP
         SUBROUTINE SCLGNP(N,MAXT,NUMT,DEG,MODE,EPS0,COEF,
      &    NNUMT,DDEG,CCOEF,ALPHA,BETA,RWORK,XWORK,
      &    FACV,FACE,COESCL,IERR)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N,MAXT,NUMT(:),DEG(:,:,:),MODE
-        REAL (KIND=R8), INTENT(IN):: EPS0,COEF(:,:)
+        REAL (dp), INTENT(IN):: EPS0,COEF(:,:)
         INTEGER, INTENT(IN OUT):: NNUMT(N),DDEG(N,N+1,MAXT)
-        REAL (KIND=R8), INTENT(IN OUT):: CCOEF(N,MAXT),ALPHA(2*N,2*N),
+        REAL (dp), INTENT(IN OUT):: CCOEF(N,MAXT),ALPHA(2*N,2*N),
      &    BETA(2*N),RWORK(N*(2*N+1)),XWORK(2*N)
-        REAL (KIND=R8), INTENT(OUT):: FACV(N),FACE(N),COESCL(N,MAXT)
+        REAL (dp), INTENT(OUT):: FACV(N),FACE(N),COESCL(N,MAXT)
         INTEGER, INTENT(OUT):: IERR
         END SUBROUTINE SCLGNP
       END INTERFACE
@@ -5862,70 +5674,70 @@ C
         END IF
       END IF
 C
-      P(1, 1)= .12324754231_R8
-          P(2, 1)= .76253746298_R8
-      P(1, 2)= .93857838950_R8
-          P(2, 2)=-.99375892810_R8
-      P(1, 3)=-.23467908356_R8
-          P(2, 3)= .39383930009_R8
-      P(1, 4)= .83542556622_R8
-          P(2, 4)=-.10192888288_R8
-      P(1, 5)=-.55763522521_R8
-          P(2, 5)=-.83729899911_R8
-      P(1, 6)=-.78348738738_R8
-          P(2, 6)=-.10578234903_R8
-      P(1, 7)= .03938347346_R8
-          P(2, 7)= .04825184716_R8
-      P(1, 8)=-.43428734331_R8
-          P(2, 8)= .93836289418_R8
-      P(1, 9)=-.99383729993_R8
-          P(2, 9)=-.40947822291_R8
-      P(1,10)= .09383736736_R8
-          P(2,10)= .26459172298_R8
+      P(1, 1)= .12324754231_dp
+          P(2, 1)= .76253746298_dp
+      P(1, 2)= .93857838950_dp
+          P(2, 2)=-.99375892810_dp
+      P(1, 3)=-.23467908356_dp
+          P(2, 3)= .39383930009_dp
+      P(1, 4)= .83542556622_dp
+          P(2, 4)=-.10192888288_dp
+      P(1, 5)=-.55763522521_dp
+          P(2, 5)=-.83729899911_dp
+      P(1, 6)=-.78348738738_dp
+          P(2, 6)=-.10578234903_dp
+      P(1, 7)= .03938347346_dp
+          P(2, 7)= .04825184716_dp
+      P(1, 8)=-.43428734331_dp
+          P(2, 8)= .93836289418_dp
+      P(1, 9)=-.99383729993_dp
+          P(2, 9)=-.40947822291_dp
+      P(1,10)= .09383736736_dp
+          P(2,10)= .26459172298_dp
 C
-      Q(1, 1)= .58720452864_R8
-          Q(2, 1)= .01321964722_R8
-      Q(1, 2)= .97884134700_R8
-          Q(2, 2)=-.14433009712_R8
-      Q(1, 3)= .39383737289_R8
-          Q(2, 3)= .41543223411_R8
-      Q(1, 4)=-.03938376373_R8
-          Q(2, 4)=-.61253112318_R8
-      Q(1, 5)= .39383737388_R8
-          Q(2, 5)=-.26454678861_R8
-      Q(1, 6)=-.00938376766_R8
-          Q(2, 6)= .34447867861_R8
-      Q(1, 7)=-.04837366632_R8
-          Q(2, 7)= .48252736790_R8
-      Q(1, 8)= .93725237347_R8
-          Q(2, 8)=-.54356527623_R8
-      Q(1, 9)= .39373957747_R8
-          Q(2, 9)= .65573434564_R8
-      Q(1,10)=-.39380038371_R8
-          Q(2,10)= .98903450052_R8
+      Q(1, 1)= .58720452864_dp
+          Q(2, 1)= .01321964722_dp
+      Q(1, 2)= .97884134700_dp
+          Q(2, 2)=-.14433009712_dp
+      Q(1, 3)= .39383737289_dp
+          Q(2, 3)= .41543223411_dp
+      Q(1, 4)=-.03938376373_dp
+          Q(2, 4)=-.61253112318_dp
+      Q(1, 5)= .39383737388_dp
+          Q(2, 5)=-.26454678861_dp
+      Q(1, 6)=-.00938376766_dp
+          Q(2, 6)= .34447867861_dp
+      Q(1, 7)=-.04837366632_dp
+          Q(2, 7)= .48252736790_dp
+      Q(1, 8)= .93725237347_dp
+          Q(2, 8)=-.54356527623_dp
+      Q(1, 9)= .39373957747_dp
+          Q(2, 9)= .65573434564_dp
+      Q(1,10)=-.39380038371_dp
+          Q(2,10)= .98903450052_dp
 C
-      CCL(1, 1)=-.03485644332_R8
-          CCL(2, 1)= .28554634336_R8
-      CCL(1, 2)= .91453454766_R8
-          CCL(2, 2)= .35354566613_R8
-      CCL(1, 3)=-.36568737635_R8
-          CCL(2, 3)= .45634642477_R8
-      CCL(1, 4)=-.89089767544_R8
-          CCL(2, 4)= .34524523544_R8
-      CCL(1, 5)= .13523462465_R8
-          CCL(2, 5)= .43534535555_R8
-      CCL(1, 6)=-.34523544445_R8
-          CCL(2, 6)= .00734522256_R8
-      CCL(1, 7)=-.80004678763_R8
-          CCL(2, 7)=-.009387123644_R8
-      CCL(1, 8)=-.875432124245_R8
-          CCL(2, 8)= .00045687651_R8
-      CCL(1, 9)= .65256352333_R8
-          CCL(2, 9)=-.12356777452_R8
-      CCL(1,10)= .09986798321548_R8
-          CCL(2,10)=-.56753456577_R8
-      CCL(1,11)= .29674947394739_R8
-          CCL(2,11)= .93274302173_R8
+      CCL(1, 1)=-.03485644332_dp
+          CCL(2, 1)= .28554634336_dp
+      CCL(1, 2)= .91453454766_dp
+          CCL(2, 2)= .35354566613_dp
+      CCL(1, 3)=-.36568737635_dp
+          CCL(2, 3)= .45634642477_dp
+      CCL(1, 4)=-.89089767544_dp
+          CCL(2, 4)= .34524523544_dp
+      CCL(1, 5)= .13523462465_dp
+          CCL(2, 5)= .43534535555_dp
+      CCL(1, 6)=-.34523544445_dp
+          CCL(2, 6)= .00734522256_dp
+      CCL(1, 7)=-.80004678763_dp
+          CCL(2, 7)=-.009387123644_dp
+      CCL(1, 8)=-.875432124245_dp
+          CCL(2, 8)= .00045687651_dp
+      CCL(1, 9)= .65256352333_dp
+          CCL(2, 9)=-.12356777452_dp
+      CCL(1,10)= .09986798321548_dp
+          CCL(2,10)=-.56753456577_dp
+      CCL(1,11)= .29674947394739_dp
+          CCL(2,11)= .93274302173_dp
 C
 C IF THE PROJECTIVE TRANSFORMATION IS TO BE USED, THEN  CL  IS
 C SET EQUAL TO THE  CCL  VALUES.  OTHERWISE,  CL  IS SET
@@ -5977,11 +5789,11 @@ C       THE MULTIPLICATION, ZZZZ = XXXX*YYYY, WHERE ZZZZ(1) =
 C       REAL PART OF ZZZZ AND ZZZZ(2) = IMAGINARY PART OF ZZZZ.
 C
 C DECLARATION OF INPUT
-      USE REAL_PRECISION
-      REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+      use hompack_kinds, only: dp
+      REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
 C
 C DECLARATION OF OUTPUT
-      REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+      REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
 C
       ZZZZ(1) = XXXX(1)*YYYY(1) - XXXX(2)*YYYY(2)
       ZZZZ(2) = XXXX(1)*YYYY(2) + XXXX(2)*YYYY(1)
@@ -6009,15 +5821,15 @@ C       Y       value of B*X.
 C
 C---------------------------------------------------------------------
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT (IN):: LENB, N, ROWPOS(N+1), COLPOS(LENB)
-      REAL (KIND=R8), INTENT(IN):: X(:), B(LENB)
-      REAL (KIND=R8), INTENT (OUT) :: Y(N)
+      REAL (dp), INTENT(IN):: X(:), B(LENB)
+      REAL (dp), INTENT (OUT) :: Y(N)
 C
 C LOCAL VARIABLES.
 C
       INTEGER:: I, FIN, STRT, K
-      REAL (KIND=R8):: TMP
+      REAL (dp):: TMP
 C
         DO I = 1, N
          STRT = ROWPOS(I)
@@ -6058,12 +5870,12 @@ C       y -- real vector of length NN containing the product  AA*x .
 C
 C
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: LENAA,NN,MAXA(NN+1)
-      REAL (KIND=R8), INTENT(IN):: AA(LENAA),X(NN)
-      REAL (KIND=R8), INTENT(OUT):: Y(NN)
+      REAL (dp), INTENT(IN):: AA(LENAA),X(NN)
+      REAL (dp), INTENT(OUT):: Y(NN)
       INTEGER:: I,II,KK,KL,KU
-      REAL (KIND=R8):: B,CC
+      REAL (dp):: B,CC
       IF (LENAA .LE. NN) THEN
         DO I=1,NN
           Y(I)=AA(I)*X(I)
@@ -6127,36 +5939,36 @@ C
 C XNP1  IS THE PROJECTIVE COORDINATE "X(N+1)".  XNP1  EQUALS UNITY IF
 C   THE PROJECTIVE TRANSFORMATION IS NOT SPECIFIED.
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
       INTERFACE
         SUBROUTINE DIVP(XXXX,YYYY,ZZZZ,IERR)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
         INTEGER, INTENT(OUT):: IERR
-        REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+        REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
         END SUBROUTINE DIVP
         SUBROUTINE MULP(XXXX,YYYY,ZZZZ)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX,YYYY
-        REAL (KIND=R8), DIMENSION(2), INTENT(OUT):: ZZZZ
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+        REAL (dp), DIMENSION(2), INTENT(OUT):: ZZZZ
         END SUBROUTINE MULP
         SUBROUTINE POWP(NNNN,XXXX,YYYY)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: NNNN
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX
-        REAL (KIND=R8), DIMENSION(2), INTENT(IN OUT):: YYYY
+        REAL (dp), DIMENSION(2), INTENT(IN):: XXXX
+        REAL (dp), DIMENSION(2), INTENT(IN OUT):: YYYY
         END SUBROUTINE POWP
       END INTERFACE
 C
 C DECLARATIONS OF INPUT, WORKSPACE, AND OUTPUT:
       INTEGER, INTENT(IN):: N,NUMPAT
-      REAL (KIND=R8), INTENT(IN):: CL(2,N+1),FACV(N)
-      REAL (KIND=R8), INTENT(IN OUT):: CLX(2,N),X(2,N),XNP1(2)
+      REAL (dp), INTENT(IN):: CL(2,N+1),FACV(N)
+      REAL (dp), INTENT(IN OUT):: CLX(2,N),X(2,N),XNP1(2)
 C
 C DECLARATION OF LOCAL VARIABLES
       INTEGER:: I,IERR,J,NP1 
-      REAL (KIND=R8):: FAC,TEMP(2)
+      REAL (dp):: FAC,TEMP(2)
 C
       NP1=N+1
 C COMPUTE XNP1
@@ -6171,7 +5983,7 @@ C UNTRANSFORM VARIABLES
         X(2,J)=TEMP(2)
       END DO
 C UNSCALE VARIABLES
-      TEMP(1) = HUGE(1.0_R8)
+      TEMP(1) = HUGE(1.0_dp)
       DO J=1,N
         FAC=10.**FACV(J)
         DO I=1,2
@@ -6287,17 +6099,17 @@ C
 C    Calls subroutines GMFADS and GMRES.
 C
       USE HOMOTOPY, AA => QRSPARSE, WORK => PAR
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: LENAA, NN
       INTEGER, INTENT(IN OUT):: IFLAG
-      REAL (KIND=R8), INTENT(IN OUT):: START(NN+1)
-      REAL (KIND=R8), INTENT(IN), OPTIONAL:: RHS(NN)
+      REAL (dp), INTENT(IN OUT):: START(NN+1)
+      REAL (dp), INTENT(IN), OPTIONAL:: RHS(NN)
 C
 C LOCAL VARIABLES.
 C
       INTEGER:: ITMAX, K, KD, NP1, QIND, ZBIND, ZUIND
-      REAL (KIND=R8):: STARTK
-      REAL (KIND=R8):: RHSC(NN+1)            ! RIGHT-HAND SIDE FOR GMRES.
+      REAL (dp):: STARTK
+      REAL (dp):: RHSC(NN+1)            ! RIGHT-HAND SIDE FOR GMRES.
 C
 C GMRES PARAMETERS.
 C 
@@ -6305,18 +6117,18 @@ C
 C
       INTERFACE 
         SUBROUTINE GMFADS(NN,A,NWK,MAXA)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER, INTENT(IN):: NN,NWK,MAXA(NN+1)
-          REAL (KIND=R8), INTENT(IN OUT):: A(NWK)
+          REAL (dp), INTENT(IN OUT):: A(NWK)
         END SUBROUTINE GMFADS
         SUBROUTINE GMRES(N, KDMAX, ITMAX, RHSC, X, KVAL,
      &                Q, IFLAG, ROWPOSP, COLPOSP)
           USE HOMOTOPY
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER, INTENT(IN):: KVAL, N
           INTEGER, INTENT(IN OUT):: IFLAG, ITMAX, KDMAX
-          REAL (KIND=R8), INTENT(IN):: Q(:), RHSC(N)
-          REAL (KIND=R8), INTENT(IN OUT):: X(N)
+          REAL (dp), INTENT(IN):: Q(:), RHSC(N)
+          REAL (dp), INTENT(IN OUT):: X(N)
           INTEGER, INTENT(IN), OPTIONAL:: COLPOSP(:), ROWPOSP(:)
         END SUBROUTINE GMRES
       END INTERFACE
@@ -6425,18 +6237,18 @@ C
 C SUBROUTINES: COS, SIN, ATAN2, DNRM2
 C
 C DECLARATION OF INPUT
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: NNNN
-      REAL (KIND=R8), DIMENSION(2), INTENT(IN):: XXXX
+      REAL (dp), DIMENSION(2), INTENT(IN):: XXXX
 C
 C DECLARATION OF OUTPUT
-      REAL (KIND=R8), DIMENSION(2), INTENT(IN OUT):: YYYY
+      REAL (dp), DIMENSION(2), INTENT(IN OUT):: YYYY
 C
 C DECLARATION OF VARIABLES
-      REAL (KIND=R8):: R,RR,T,TT
+      REAL (dp):: R,RR,T,TT
 C
 C DECLARATION OF FUNCTIONS
-      REAL (KIND=R8)::  DNRM2
+      REAL (dp)::  DNRM2
 C
       IF (NNNN .EQ. 0) THEN
           YYYY(1)=1.
@@ -6514,8 +6326,8 @@ C  EXPLAINED AND DOCUMENTED IN THE TEXT  NUMERICAL COMPUTING:  AN
 C  INTRODUCTION,  BY L. F. SHAMPINE AND R. C. ALLEN.
 C
 C
-      USE REAL_PRECISION
-      REAL (KIND=R8):: A,ABSERR,ACBS,ACMB,AE,B,C,CMB,FA,FB,
+      use hompack_kinds, only: dp
+      REAL (dp):: A,ABSERR,ACBS,ACMB,AE,B,C,CMB,FA,FB,
      &  FC,FT,FX,P,Q,RE,RELERR,T,TOL,U
       INTEGER IC,IFLAG,KOUNT
       SAVE
@@ -6523,9 +6335,9 @@ C
       IF(IFLAG.GE.0) GO TO 100
       IFLAG=ABS(IFLAG)
       GO TO (200,300,400), IFLAG
-  100 U=EPSILON(1.0_R8)
+  100 U=EPSILON(1.0_dp)
       RE=MAX(RELERR,U)
-      AE=MAX(ABSERR,0.0_R8)
+      AE=MAX(ABSERR,0.0_dp)
       IC=0
       ACBS=ABS(B-C)
       A=C
@@ -6610,14 +6422,14 @@ C
   400 FB=FT
       IF(FB.EQ.0.0)GO TO 9
       KOUNT=KOUNT+1
-      IF(SIGN(1.0_R8,FB).NE.SIGN(1.0_R8,FC))GO TO 1
+      IF(SIGN(1.0_dp,FB).NE.SIGN(1.0_dp,FC))GO TO 1
       C=A
       FC=FA
       GO TO 1
 C
 C FINISHED.  SET IFLAG.
 C
-    8 IF(SIGN(1.0_R8,FB).EQ.SIGN(1.0_R8,FC))GO TO 11
+    8 IF(SIGN(1.0_dp,FB).EQ.SIGN(1.0_dp,FC))GO TO 11
       IF(ABS(FB).GT.FX)GO TO 10
       IFLAG=1
       RETURN
@@ -6646,9 +6458,9 @@ C     INTERFACE
 C       SUBROUTINE ROOTNF(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,
 C    &    YPOLD,A,QR,ALPHA,TZ,PIVOT,W,WP)
 C       USE REAL_PRECISION
-C       REAL (KIND=R8):: ABSERR,RELERR
+C       REAL (dp):: ABSERR,RELERR
 C       INTEGER:: IFLAG,N,NFE
-C       REAL (KIND=R8):: A(:),ALPHA(3*N+3),QR(N,N+2),TZ(N+1),W(N+1),
+C       REAL (dp):: A(:),ALPHA(3*N+3),QR(N,N+2),TZ(N+1),W(N+1),
 C    &    WP(N+1),Y(:),YOLD(N+1),YP(N+1),YPOLD(N+1)
 C       INTEGER:: PIVOT(N+1)
 C       END SUBROUTINE ROOTNF
@@ -6710,8 +6522,8 @@ C
 C
 C CALLS  DNRM2 , ROOT , TANGNF .
 C
-      USE REAL_PRECISION
-      REAL (KIND=R8):: ABSERR,AERR,
+      use hompack_kinds, only: dp
+      REAL (dp):: ABSERR,AERR,
      &   DD001,DD0011,DD01,DD011,DELS,F0,F1,FP0,FP1,
      &   QOFS,QSOUT,RELERR,RERR,S,SA,SB,SOUT,U
       INTEGER:: IFLAG,JUDY,JW,LCODE,LIMIT,N,NFE,NP1
@@ -6719,7 +6531,7 @@ C
 C
 C ***** ARRAY DECLARATIONS. *****
 C
-      REAL (KIND=R8):: A(:),ALPHA(3*N+3),QR(N,N+2),TZ(N+1),W(N+1),
+      REAL (dp):: A(:),ALPHA(3*N+3),QR(N,N+2),TZ(N+1),W(N+1),
      &   WP(N+1),Y(:),YOLD(N+1),YP(N+1),YPOLD(N+1)
       INTEGER:: PIVOT(N+1)
 C
@@ -6727,17 +6539,17 @@ C ***** END OF DIMENSIONAL INFORMATION. *****
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
         SUBROUTINE TANGNF(RHOLEN,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,
      &    NFE,N,IFLAG)
-        USE REAL_PRECISION
-        REAL (KIND=R8):: RHOLEN
+        use hompack_kinds, only: dp
+        REAL (dp):: RHOLEN
         INTEGER:: IFLAG,N,NFE
-        REAL (KIND=R8):: A(:),Y(:),YP(N+1),YPOLD(N+1)
-        REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
+        REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
+        REAL (dp):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
         INTEGER:: PIVOT(N+1)
         END SUBROUTINE TANGNF
       END INTERFACE
@@ -6753,9 +6565,9 @@ C
      &   DD001(F0,FP0,F1,DELS))*S + FP0)*S + F0
 C
 C
-      U=EPSILON(1.0_R8)
+      U=EPSILON(1.0_dp)
       RERR=MAX(RELERR,U)
-      AERR=MAX(ABSERR,0.0_R8)
+      AERR=MAX(ABSERR,0.0_dp)
       NP1=N+1
 C
 C THE LIMIT ON THE NUMBER OF ITERATIONS ALLOWED MAY BE CHANGED BY
@@ -6903,9 +6715,9 @@ C    &     A,MODE,LENQR)
 C       USE REAL_PRECISION
 C       INTEGER, INTENT(IN):: LENQR,MODE,NC
 C       INTEGER, INTENT(IN OUT):: IFLAGC,NFEC
-C       REAL (KIND=R8), INTENT(IN):: A(:)
-C       REAL (KIND=R8), INTENT(IN):: ANSAE,ANSRE
-C       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
+C       REAL (dp), INTENT(IN):: A(:)
+C       REAL (dp), INTENT(IN):: ANSAE,ANSRE
+C       REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
 C       END SUBROUTINE ROOTNS
 C     END INTERFACE
 C
@@ -6970,30 +6782,30 @@ C
 C
 C CALLS  DNRM2 , ROOT , TANGNS .
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: LENQR,MODE,N
       INTEGER, INTENT(IN OUT):: IFLAG,NFE
-      REAL (KIND=R8), INTENT(IN):: A(:)
-      REAL (KIND=R8), INTENT(IN):: ABSERR,RELERR
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
+      REAL (dp), INTENT(IN):: A(:)
+      REAL (dp), INTENT(IN):: ABSERR,RELERR
+      REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
 C
 C ***** LOCAL VARIABLES. *****
 C
-      REAL (KIND=R8):: AERR,DD001,DD0011,DD01,DD011,DELS,
+      REAL (dp):: AERR,DD001,DD0011,DD01,DD011,DELS,
      &   F0,F1,FP0,FP1,QOFS,QSOUT,RERR,S,SA,SB,SOUT,U
       INTEGER:: JUDY,JW,LCODE,NP1
       LOGICAL:: BRACK
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
 C ***** AUTOMATIC WORK ARRAYS. *****
 C
-      REAL (KIND=R8):: TZ(N+1),W(N+1),WP(N+1)
+      REAL (dp):: TZ(N+1),W(N+1),WP(N+1)
 C
 C THE LIMIT ON THE NUMBER OF ITERATIONS ALLOWED MAY BE CHANGED BY
 C CHANGING THE FOLLOWING PARAMETER STATEMENT:
@@ -7002,10 +6814,10 @@ C
       INTERFACE
         SUBROUTINE TANGNS(RHOLEN,Y,YP,TZ,YPOLD,A,MODE,LENQR,
      &    NFE,N,IFLAG)
-        USE REAL_PRECISION
-        REAL (KIND=R8), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
-        REAL (KIND=R8), INTENT(IN OUT):: RHOLEN
-        REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: TZ,YP
+        use hompack_kinds, only: dp
+        REAL (dp), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
+        REAL (dp), INTENT(IN OUT):: RHOLEN
+        REAL (dp), INTENT(OUT), DIMENSION(:):: TZ,YP
         INTEGER, INTENT(IN):: LENQR,MODE,N
         INTEGER, INTENT(IN OUT):: IFLAG,NFE
         END SUBROUTINE TANGNS
@@ -7023,9 +6835,9 @@ C
 C
 C ***** END OF SPECIFICATION INFORMATION. *****
 C
-      U=EPSILON(1.0_R8)
+      U=EPSILON(1.0_dp)
       RERR=MAX(RELERR,U)
-      AERR=MAX(ABSERR,0.0_R8)
+      AERR=MAX(ABSERR,0.0_dp)
       NP1=N+1
       TZ=Y - YOLD
       DELS=DNRM2(NP1,TZ,1)
@@ -7174,10 +6986,10 @@ C       USE HOMOTOPY
 C       USE REAL_PRECISION
 C       INTEGER, INTENT(IN):: N
 C       INTEGER, INTENT(IN OUT):: NFE,IFLAG
-C       REAL (KIND=R8), INTENT(IN):: RELERR,ABSERR
-C       REAL (KIND=R8), DIMENSION(:), INTENT(IN):: A
-C       REAL (KIND=R8), INTENT(IN OUT):: GOFW
-C       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+C       REAL (dp), INTENT(IN):: RELERR,ABSERR
+C       REAL (dp), DIMENSION(:), INTENT(IN):: A
+C       REAL (dp), INTENT(IN OUT):: GOFW
+C       REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
 C    &    TZ,W,WP
 C       END SUBROUTINE ROOTNX
 C     END INTERFACE
@@ -7265,20 +7077,20 @@ C
 C Calls  DNRM2 , ROOT .
 C
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: N
       INTEGER, INTENT(IN OUT):: NFE,IFLAG
-      REAL (KIND=R8), INTENT(IN):: RELERR,ABSERR
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN):: A
-      REAL (KIND=R8), INTENT(IN OUT):: GOFW
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+      REAL (dp), INTENT(IN):: RELERR,ABSERR
+      REAL (dp), DIMENSION(:), INTENT(IN):: A
+      REAL (dp), INTENT(IN OUT):: GOFW
+      REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
      &    TZ,W,WP
 C
 C ***** LOCAL VARIABLES. *****
 C
-      REAL (KIND=R8), SAVE:: AERR,DELS,F0,F1,FP0,FP1,GOFY,
+      REAL (dp), SAVE:: AERR,DELS,F0,F1,FP0,FP1,GOFY,
      &  GOFYOLD,GOFYP,RERR,S,SA,SB,SOUT,U
-      REAL (KIND=R8):: DD001,DD0011,DD01,DD011,DNRM2,QOFS
+      REAL (dp):: DD001,DD0011,DD01,DD011,DNRM2,QOFS
       INTEGER, SAVE:: IFLAGC,JUDY,JW,LCODE,LIMIT,NP1
       LOGICAL, SAVE:: BRACK
 C
@@ -7312,9 +7124,9 @@ C
       IF (IFLAG < -2) THEN
         GO TO (100,110,130,210,200), ABS(IFLAG)/10
       ENDIF
-      U=EPSILON(1.0_R8)
+      U=EPSILON(1.0_dp)
       RERR=MAX(RELERR,U)
-      AERR=MAX(ABSERR,0.0_R8)
+      AERR=MAX(ABSERR,0.0_dp)
 C
 C THE LIMIT ON THE NUMBER OF ITERATIONS ALLOWED MAY BE CHANGED BY
 C CHANGING THE FOLLOWING STATEMENT:
@@ -7447,7 +7259,7 @@ C
       IF (S .GE. 1.0) THEN
         SA = GOFY/(GOFY - GOFYOLD)
         TZ = SA*(YOLD - Y)
-      ELSE IF (ANY(ABS(GOFY*(YOLD-Y)) .GE. S*HUGE(1.0_R8))) THEN
+      ELSE IF (ANY(ABS(GOFY*(YOLD-Y)) .GE. S*HUGE(1.0_dp))) THEN
         TZ = DELS
       ELSE
         SA = GOFY/(GOFY - GOFYOLD)
@@ -7500,9 +7312,9 @@ C     INTERFACE
 C       SUBROUTINE ROOTQF(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,
 C    &    YPOLD,A,Q,R,DZ,Z,W,T,F0,F1)
 C       USE REAL_PRECISION
-C       REAL (KIND=R8):: RELERR, ABSERR
+C       REAL (dp):: RELERR, ABSERR
 C       INTEGER:: N, NFE, IFLAG
-C       REAL (KIND=R8):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
+C       REAL (dp):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
 C    &    Q(N+1,N+1), R((N+1)*(N+2)/2), T(N+1), W(N+1),
 C    &    Y(:), YOLD(N+1), YP(N+1), YPOLD(N+1), Z(N+1)
 C       END SUBROUTINE ROOTQF
@@ -7575,22 +7387,22 @@ C CALLS  DGEMV, DNRM2, DTPSV, F (OR RHO), ROOT, UPQRQF.
 C
 C ***** DECLARATIONS ***** 
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
 C FUNCTION DECLARATIONS 
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
-      REAL (KIND=R8):: QOFS
+      REAL (dp):: QOFS
 C
 C LOCAL VARIABLES 
 C
-      REAL (KIND=R8):: AERR, DD001, DD0011, DD01, DD011, DELS, ETA, 
+      REAL (dp):: AERR, DD001, DD0011, DD01, DD011, DELS, ETA, 
      &   ONE, P0, P1, PP0, PP1, QSOUT, RERR, S, SA, SB, SOUT,
      &   U, ZERO
       INTEGER:: ISTEP, I, LCODE, LIMIT,NP1
@@ -7598,12 +7410,12 @@ C
 C
 C SCALAR ARGUMENTS 
 C
-      REAL (KIND=R8):: RELERR, ABSERR
+      REAL (dp):: RELERR, ABSERR
       INTEGER:: N, NFE, IFLAG
 C
 C ARRAY DECLARATIONS 
 C
-      REAL (KIND=R8):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
+      REAL (dp):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
      &   Q(N+1,N+1), R((N+1)*(N+2)/2), T(N+1), W(N+1),
      &   Y(:), YOLD(N+1), YP(N+1), YPOLD(N+1), Z(N+1)
 C
@@ -7629,7 +7441,7 @@ C LIMIT = MAXIMUM NUMBER OF ITERATIONS ALLOWED.
 C
       ONE=1.0
       ZERO=0.0
-      U=EPSILON(1.0_R8)
+      U=EPSILON(1.0_dp)
       RERR=MAX(RELERR,U)
       AERR=MAX(ABSERR,ZERO)
       NP1=N+1
@@ -7902,31 +7714,31 @@ C   =0  IF SCALING MATRIX, ALPHA, IS WELL CONDITIONED.
 C   =1  OTHERWISE.  IN THIS CASE, ALPHA IS "REPAIRED" AND A
 C         SCALING IS COMPUTED.
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
 C DECLARATION OF INPUT
       INTEGER, INTENT(IN):: N,MAXT,NUMT(:),DEG(:,:,:),MODE
-      REAL (KIND=R8), INTENT(IN):: EPS0,COEF(:,:)
+      REAL (dp), INTENT(IN):: EPS0,COEF(:,:)
 C
 C DECLARATION OF WORKSPACE
       INTEGER, INTENT(IN OUT):: NNUMT(N),DDEG(N,N+1,MAXT)
-      REAL (KIND=R8), INTENT(IN OUT):: CCOEF(N,MAXT),ALPHA(2*N,2*N),
+      REAL (dp), INTENT(IN OUT):: CCOEF(N,MAXT),ALPHA(2*N,2*N),
      &  BETA(2*N),RWORK(N*(2*N+1)),XWORK(2*N)
 C
 C DECLARATION OF OUTPUT
-      REAL (KIND=R8), INTENT(OUT):: FACV(N),FACE(N),COESCL(N,MAXT)
+      REAL (dp), INTENT(OUT):: FACV(N),FACE(N),COESCL(N,MAXT)
       INTEGER, INTENT(OUT):: IERR
 C
 C DECLARATION OF LOCAL VARIABLES
       INTEGER:: I,IDAMAX,ICMAX,IRMAX,J,JJ,K,LENR,N2,S
-      REAL (KIND=R8):: DUM,LMFPN,NTUR,RTOL,TUM
+      REAL (dp):: DUM,LMFPN,NTUR,RTOL,TUM
 C
       SAVE
 C
       IERR=0
       N2=2*N
-      LMFPN=HUGE(1.0_R8)
-      NTUR=EPSILON(1.0_R8)*N
+      LMFPN=HUGE(1.0_dp)
+      NTUR=EPSILON(1.0_dp)*N
       LENR=N*(N+1)/2
 C
 C  DELETE NEAR ZERO TERMS
@@ -8096,8 +7908,8 @@ C                 1984.
 C***ROUTINES CALLED  (NONE) 
 C***END PROLOGUE  SINTRP
 C 
-      USE REAL_PRECISION
-      REAL (KIND=R8):: ALP,ALPHA,C,G,GAMMA,GDI,GDIF,GI,GTEMP,
+      use hompack_kinds, only: dp
+      REAL (dp):: ALP,ALPHA,C,G,GAMMA,GDI,GDIF,GI,GTEMP,
      &  H,HI,HMU,P,PHI,RMU,SIGMA,TEMP1,TEMP2,TEMP3,W,WTEMP,
      &  X,XI,XIM1,XIQ,XOLD,XOUT,Y,YOUT,YPOUT
       INTEGER I,IQ,IV,IVC,IW,J,JQ,KGI,KOLD,KP1,KP2,L,M,NEQN
@@ -8217,13 +8029,13 @@ C
 C
 C     No working storage is required by this routine.
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: NN,MAXA(NN+1),NWK
-      REAL (KIND=R8), INTENT(IN):: A(NWK)
-      REAL (KIND=R8), INTENT(IN OUT):: V(NN)
+      REAL (dp), INTENT(IN):: A(NWK)
+      REAL (dp), INTENT(IN OUT):: V(NN)
 C local variables.
       INTEGER:: K,KK,KL,KU,L,N
-      REAL (KIND=R8):: C
+      REAL (dp):: C
       DO N=1,NN
          KL=MAXA(N)+1
          KU=MAXA(N+1)-1
@@ -8401,8 +8213,8 @@ C***REFERENCES  SHAMPINE L.F., GORDON M.K., *SOLVING ORDINARY
 C                 DIFFERENTIAL EQUATIONS WITH ODE, STEP, AND INTRP*,
 C                 SLA-73-1060, SANDIA LABORATORIES, 1973. 
 C 
-      USE REAL_PRECISION
-      REAL (KIND=R8):: ABSH,EPS,ERK,ERKM1,ERKM2,ERKP1,ERR,FOURU,H,
+      use hompack_kinds, only: dp
+      REAL (dp):: ABSH,EPS,ERK,ERKM1,ERKM2,ERKP1,ERR,FOURU,H,
      &  HNEW,HOLD,P5EPS,R,REALI,REALNS,RHO,ROUND,SUM,TAU,
      &  TEMP1,TEMP2,TEMP3,TEMP4,TEMP5,TEMP6,TWOU,X,XOLD
       INTEGER:: I,IFAIL,IFLAGC,IM1,IP1,IQ,IV(10),IVC,J,JV,K,KGI,
@@ -8410,7 +8222,7 @@ C
      &  MODE,NDIMA,NEQN,NFEC,NS,NSM2,NSP1,NSP2
       LOGICAL:: CRASH,NORND,PHASE1,START
 C
-      REAL (KIND=R8):: A(NDIMA),ALPHA(12),BETA(12),G(13),GI(11),
+      REAL (dp):: A(NDIMA),ALPHA(12),BETA(12),G(13),GI(11),
      &  P(NEQN),PHI(NEQN,16),PSI(12),SIG(13),V(12),W(12),
      &  WT(NEQN),Y(NEQN),YP(NEQN),YPOLD(NEQN)
 C
@@ -8421,13 +8233,13 @@ C
 C
       INTERFACE
         SUBROUTINE F(S,Y,YP,N,IFLAG,YPOLD,A,NDIMA,LENQR,MODE,NFE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: IFLAG,LENQR,MODE,N,NDIMA,NFE
-        REAL (KIND=R8):: A(NDIMA),S,Y(N+1),YP(N+1),YPOLD(N+1)
+        REAL (dp):: A(NDIMA),S,Y(N+1),YP(N+1),YPOLD(N+1)
         END SUBROUTINE F
       END INTERFACE
 C 
-      REAL (KIND=R8), DIMENSION(13)::
+      REAL (dp), DIMENSION(13)::
      &  TWO=(/2.0,4.0,8.0,16.0,32.0,64.0,128.0,256.0,512.0,1024.0,
      &  2048.0,4096.0,8192.0/),
      &  GSTR=(/0.500,0.0833,0.0417,0.0264,0.0188,0.0143,0.0114,0.00936,
@@ -8443,7 +8255,7 @@ C
 C   IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE
 C 
 C***FIRST EXECUTABLE STATEMENT
-      TWOU = 2.0 * EPSILON(1.0_R8)
+      TWOU = 2.0 * EPSILON(1.0_dp)
       FOURU = TWOU + TWOU
       CRASH = .TRUE.
       IF(ABS(H) .GE. FOURU*ABS(X)) GO TO 5
@@ -8811,7 +8623,7 @@ C
       IF(P5EPS .GE. ERK) GO TO 465
       TEMP2 = K+1 
       R = (P5EPS/ERK)**(1.0/TEMP2)
-      HNEW = ABSH*MAX(0.5_R8,MIN(0.9_R8,R)) 
+      HNEW = ABSH*MAX(0.5_dp,MIN(0.9_dp,R)) 
       HNEW = SIGN(MAX(HNEW,FOURU*ABS(X)),H) 
  465  H = HNEW
       RETURN
@@ -8838,10 +8650,10 @@ C       SUBROUTINE STEPNF(N,NFE,IFLAG,START,CRASH,HOLD,H,RELERR,
 C    &    ABSERR,S,Y,YP,YOLD,YPOLD,A,QR,ALPHA,TZ,PIVOT,W,WP,
 C    &    Z0,Z1,SSPAR)
 C       USE REAL_PRECISION
-C       REAL (KIND=R8):: ABSERR,H,HOLD,RELERR,S
+C       REAL (dp):: ABSERR,H,HOLD,RELERR,S
 C       INTEGER:: IFLAG,N,NFE
 C       LOGICAL:: CRASH,START
-C       REAL (KIND=R8):: A(:),ALPHA(3*N+3),QR(N,N+2),SSPAR(8),TZ(N+1),
+C       REAL (dp):: A(:),ALPHA(3*N+3),QR(N,N+2),SSPAR(8),TZ(N+1),
 C    &    W(N+1),WP(N+1),Y(:),YOLD(N+1),YP(N+1),YPOLD(N+1),
 C    &    Z0(N+1),Z1(N+1)
 C       INTEGER:: PIVOT(N+1)
@@ -8944,8 +8756,8 @@ C
 C
 C CALLS  DNRM2 , TANGNF .
 C
-      USE REAL_PRECISION
-      REAL (KIND=R8):: ABSERR,DCALC,DD001,DD0011,DD01,
+      use hompack_kinds, only: dp
+      REAL (dp):: ABSERR,DCALC,DD001,DD0011,DD01,
      &   DD011,DELS,F0,F1,FOURU,FP0,FP1,H,HFAIL,HOLD,HT,
      &   LCALC,QOFS,RCALC,RELERR,RHOLEN,S,TEMP,TWOU
       INTEGER:: IFLAG,ITNUM,J,JUDY,N,NFE,NP1
@@ -8953,7 +8765,7 @@ C
 C
 C ***** ARRAY DECLARATIONS. *****
 C
-      REAL (KIND=R8):: A(:),ALPHA(3*N+3),QR(N,N+2),SSPAR(8),TZ(N+1),
+      REAL (dp):: A(:),ALPHA(3*N+3),QR(N,N+2),SSPAR(8),TZ(N+1),
      &  W(N+1),WP(N+1),Y(:),YOLD(N+1),YP(N+1),YPOLD(N+1),
      &  Z0(N+1),Z1(N+1)
       INTEGER:: PIVOT(N+1)
@@ -8962,17 +8774,17 @@ C ***** END OF DIMENSIONAL INFORMATION. *****
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
         SUBROUTINE TANGNF(RHOLEN,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,
      &    NFE,N,IFLAG)
-        USE REAL_PRECISION
-        REAL (KIND=R8):: RHOLEN
+        use hompack_kinds, only: dp
+        REAL (dp):: RHOLEN
         INTEGER:: IFLAG,N,NFE
-        REAL (KIND=R8):: A(:),Y(:),YP(N+1),YPOLD(N+1)
-        REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
+        REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
+        REAL (dp):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
         INTEGER:: PIVOT(N+1)
         END SUBROUTINE TANGNF
       END INTERFACE
@@ -8993,7 +8805,7 @@ C
      &   DD001(F0,FP0,F1,DELS))*S + FP0)*S + F0
 C
 C
-      TWOU=2.0*EPSILON(1.0_R8)
+      TWOU=2.0*EPSILON(1.0_dp)
       FOURU=TWOU+TWOU
       NP1=N+1
       CRASH=.TRUE.
@@ -9009,7 +8821,7 @@ C IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE VALUES.
       IF (.5*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
         IF (RELERR .NE. 0.0) THEN
           RELERR=FOURU*(1.0+FOURU)
-          ABSERR=MAX(ABSERR,0.0_R8)
+          ABSERR=MAX(ABSERR,0.0_dp)
         ELSE
           ABSERR=FOURU*TEMP
         ENDIF
@@ -9023,7 +8835,7 @@ C
       FAIL=.FALSE.
       START=.FALSE.
 C DETERMINE SUITABLE INITIAL STEP SIZE.
-      H=MIN(H, .10_R8, SQRT(SQRT(RELERR*TEMP+ABSERR)))
+      H=MIN(H, .10_dp, SQRT(SQRT(RELERR*TEMP+ABSERR)))
 C USE LINEAR PREDICTOR ALONG TANGENT DIRECTION TO START NEWTON ITERATION.
       YPOLD(1)=1.0
       YPOLD(2:NP1)=0.0
@@ -9199,10 +9011,10 @@ C       USE REAL_PRECISION
 C       INTEGER, INTENT(IN):: LENQR,MODE,N
 C       INTEGER, INTENT(IN OUT):: IFLAG,NFE
 C       LOGICAL, INTENT(IN OUT):: CRASH,START
-C       REAL (KIND=R8), INTENT(IN):: A(:),SSPAR(8)
-C       REAL (KIND=R8), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,
+C       REAL (dp), INTENT(IN):: A(:),SSPAR(8)
+C       REAL (dp), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,
 C    &    Y(:),YOLD(:),YP(:),YPOLD(:)
-C       REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: TZ,W,WP,Z0,Z1
+C       REAL (dp), INTENT(OUT), DIMENSION(:):: TZ,W,WP,Z0,Z1
 C       END SUBROUTINE STEPNS
 C     END INTERFACE
 C
@@ -9309,34 +9121,34 @@ C
 C
 C CALLS  DNRM2 , TANGNS .
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: LENQR,MODE,N
       INTEGER, INTENT(IN OUT):: IFLAG,NFE
       LOGICAL, INTENT(IN OUT):: CRASH,START
-      REAL (KIND=R8), INTENT(IN):: A(:),SSPAR(8)
-      REAL (KIND=R8), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,
+      REAL (dp), INTENT(IN):: A(:),SSPAR(8)
+      REAL (dp), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,
      &  Y(:),YOLD(:),YP(:),YPOLD(:)
-      REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: TZ,W,WP,Z0,Z1
+      REAL (dp), INTENT(OUT), DIMENSION(:):: TZ,W,WP,Z0,Z1
 C
 C *****  LOCAL VARIABLES.  *****
 C
-      REAL (KIND=R8):: DCALC,DD001,DD0011,DD01,DD011,DELS,F0,F1,
+      REAL (dp):: DCALC,DD001,DD0011,DD01,DD011,DELS,F0,F1,
      &   FOURU,FP0,FP1,HFAIL,HT,LCALC,QOFS,RCALC,RHOLEN,TEMP,TWOU
       INTEGER:: ITNUM,J,JUDY,NP1
       LOGICAL:: FAIL
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
         SUBROUTINE TANGNS(RHOLEN,Y,YP,TZ,YPOLD,A,MODE,LENQR,
      &    NFE,N,IFLAG)
-        USE REAL_PRECISION
-        REAL (KIND=R8), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
-        REAL (KIND=R8), INTENT(IN OUT):: RHOLEN
-        REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: TZ,YP
+        use hompack_kinds, only: dp
+        REAL (dp), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
+        REAL (dp), INTENT(IN OUT):: RHOLEN
+        REAL (dp), INTENT(OUT), DIMENSION(:):: TZ,YP
         INTEGER, INTENT(IN):: LENQR,MODE,N
         INTEGER, INTENT(IN OUT):: IFLAG,NFE
         END SUBROUTINE TANGNS
@@ -9360,7 +9172,7 @@ C
 C ***** END OF SPECIFICATION INFORMATION. *****
 C
 C
-      TWOU=2.0*EPSILON(1.0_R8)
+      TWOU=2.0*EPSILON(1.0_dp)
       FOURU=TWOU+TWOU
       NP1=N+1
       CRASH=.TRUE.
@@ -9376,7 +9188,7 @@ C IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE VALUES.
       IF (.5*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
         IF (RELERR .NE. 0.0) THEN
           RELERR=FOURU*(1.0+FOURU)
-          ABSERR=MAX(ABSERR,0.0_R8)
+          ABSERR=MAX(ABSERR,0.0_dp)
         ELSE
           ABSERR=FOURU*TEMP
         ENDIF
@@ -9390,7 +9202,7 @@ C
       FAIL=.FALSE.
       START=.FALSE.
 C DETERMINE SUITABLE INITIAL STEP SIZE.
-      H=MIN(H, .10_R8, SQRT(SQRT(RELERR*TEMP+ABSERR)))
+      H=MIN(H, .10_dp, SQRT(SQRT(RELERR*TEMP+ABSERR)))
 C USE LINEAR PREDICTOR ALONG TANGENT DIRECTION TO START NEWTON ITERATION.
       YPOLD(NP1)=1.0
       YPOLD(1:N)=0.0
@@ -9574,12 +9386,12 @@ C       USE REAL_PRECISION
 C       INTEGER, INTENT(IN):: N
 C       INTEGER, INTENT(IN OUT):: NFE,IFLAG
 C       LOGICAL, INTENT(IN OUT):: START,CRASH
-C       REAL (KIND=R8), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
+C       REAL (dp), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
 C    &    SSPAR(8)
-C       REAL (KIND=R8), DIMENSION(:), INTENT(IN):: A
-C       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+C       REAL (dp), DIMENSION(:), INTENT(IN):: A
+C       REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
 C    &    TZ,W,WP
-C       REAL (KIND=R8), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
+C       REAL (dp), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
 C       END SUBROUTINE STEPNX
 C     END INTERFACE
 C
@@ -9721,20 +9533,20 @@ C
 C Calls  DNRM2 .
 C
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: N
       INTEGER, INTENT(IN OUT):: NFE,IFLAG
       LOGICAL, INTENT(IN OUT):: START,CRASH
-      REAL (KIND=R8), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
+      REAL (dp), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
      &  SSPAR(8)
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN):: A
-      REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+      REAL (dp), DIMENSION(:), INTENT(IN):: A
+      REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
      &  TZ,W,WP
-      REAL (KIND=R8), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
+      REAL (dp), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
 C
 C ***** LOCAL VARIABLES. *****
 C
-      REAL (KIND=R8), SAVE:: DCALC,DELS,F0,F1,FOURU,FP0,FP1,
+      REAL (dp), SAVE:: DCALC,DELS,F0,F1,FOURU,FP0,FP1,
      &  HFAIL,HT,LCALC,RCALC,TEMP,TWOU
       INTEGER, SAVE:: IFLAGC,ITNUM,J,JUDY,NP1
       LOGICAL, SAVE:: FAIL
@@ -9748,7 +9560,7 @@ C STATEMENT:
 C
 C DEFINITION OF HERMITE CUBIC INTERPOLANT VIA DIVIDED DIFFERENCES.
 C
-      REAL (KIND=R8):: DD001,DD0011,DD01,DD011,DNRM2,QOFS
+      REAL (dp):: DD001,DD0011,DD01,DD011,DNRM2,QOFS
       DD01(F0,F1,DELS)=(F1-F0)/DELS
       DD001(F0,FP0,F1,DELS)=(DD01(F0,F1,DELS)-FP0)/DELS
       DD011(F0,F1,FP1,DELS)=(FP1-DD01(F0,F1,DELS))/DELS
@@ -9776,7 +9588,7 @@ C
       IF (IFLAG < -2) THEN
         GO TO (50,100,400,700), MOD(ABS(IFLAG),100)/10
       ENDIF
-      TWOU=2.0*EPSILON(1.0_R8)
+      TWOU=2.0*EPSILON(1.0_dp)
       FOURU=TWOU+TWOU
       CRASH=.TRUE.
 C THE ARCLENGTH  S  MUST BE NONNEGATIVE.
@@ -9791,7 +9603,7 @@ C IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE VALUES.
       IF (.5*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
         IF (RELERR .NE. 0.0) THEN
           RELERR=FOURU*(1.0+FOURU)
-          ABSERR=MAX(ABSERR,0.0_R8)
+          ABSERR=MAX(ABSERR,0.0_dp)
         ELSE
           ABSERR=FOURU*TEMP
         ENDIF
@@ -9818,18 +9630,18 @@ C IDEAL RESIDUAL FACTOR:  ||RHO(A, Z[1])|| / ||RHO(A, Z[0])||
 C IDEAL DISTANCE FACTOR:  ||Z[1] - Y|| / ||Z[0] - Y||
       IF (SSPAR(3) .LE. 0.0) SSPAR(3)= .5
 C MINIMUM STEP SIZE  HMIN .
-      IF (SSPAR(4) .LE. 0.0) SSPAR(4)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_R8)
+      IF (SSPAR(4) .LE. 0.0) SSPAR(4)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_dp)
 C MAXIMUM STEP SIZE  HMAX .
       IF (SSPAR(5) .LE. 0.0) SSPAR(5)= 1.0
 C MINIMUM STEP SIZE REDUCTION FACTOR  BMIN .
-      IF (SSPAR(6) .LE. 0.0) SSPAR(6)= .1_R8
+      IF (SSPAR(6) .LE. 0.0) SSPAR(6)= .1_dp
 C MAXIMUM STEP SIZE EXPANSION FACTOR  BMAX .
       IF (SSPAR(7) .LE. 0.0) SSPAR(7)= 3.0
 C ASSUMED OPERATING ORDER  P .
       IF (SSPAR(8) .LE. 0.0) SSPAR(8)= 2.0
 C
 C DETERMINE SUITABLE INITIAL STEP SIZE.
-      H=MIN(H, .10_R8, SQRT(SQRT(RELERR*TEMP+ABSERR)))
+      H=MIN(H, .10_dp, SQRT(SQRT(RELERR*TEMP+ABSERR)))
 C USE LINEAR PREDICTOR ALONG TANGENT DIRECTION TO START NEWTON ITERATION.
       YPOLD(1)=1.0
       YPOLD(2:NP1)=0.0
@@ -10031,8 +9843,8 @@ C    &    F0,F1,Z0,DZ,W,T,SSPAR)
 C       USE REAL_PRECISION
 C       INTEGER:: N, NFE, IFLAG
 C       LOGICAL:: START, CRASH
-C       REAL (KIND=R8):: HOLD, H, WK, RELERR, ABSERR, S
-C       REAL (KIND=R8):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
+C       REAL (dp):: HOLD, H, WK, RELERR, ABSERR, S
+C       REAL (dp):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
 C    &    Q(N+1,N+1), R((N+1)*(N+2)/2), SSPAR(4), T(N+1), W(N+1),
 C    &    Y(:), YOLD(N+1), YP(N+1), YPOLD(N+1), Z0(N+1)
 C       END SUBROUTINE STEPQF
@@ -10153,22 +9965,22 @@ C     FJAC (OR RHOJAC), TANGQF, UPQRQF.
 C
 C ***** DECLARATIONS *****
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
 C     FUNCTION DECLARATIONS  
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
-      REAL (KIND=R8):: DD001, DD0011, DD01, DD011, QOFS
+      REAL (dp):: DD001, DD0011, DD01, DD011, QOFS
 C
 C     LOCAL VARIABLES
 C
-      REAL (KIND=R8):: ALPHA, DELS, ETA, FOURU, GAMMA, HFAIL, HTEMP,
+      REAL (dp):: ALPHA, DELS, ETA, FOURU, GAMMA, HFAIL, HTEMP,
      &  IDLERR, ONE, P0, P1, PP0, PP1, TEMP, TWOU, WKOLD, ZERO         
       INTEGER:: I, ITCNT, LITFH, J, JP1, NP1
       LOGICAL:: FAILED
@@ -10177,11 +9989,11 @@ C     SCALAR ARGUMENTS
 C
       INTEGER:: N, NFE, IFLAG
       LOGICAL:: START, CRASH
-      REAL (KIND=R8):: HOLD, H, WK, RELERR, ABSERR, S
+      REAL (dp):: HOLD, H, WK, RELERR, ABSERR, S
 C
 C     ARRAY DECLARATIONS
 C
-      REAL (KIND=R8):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
+      REAL (dp):: A(:), DZ(N+1), F0(N+1), F1(N+1), 
      &   Q(N+1,N+1), R((N+1)*(N+2)/2), SSPAR(4), T(N+1), W(N+1),
      &   Y(:), YOLD(N+1), YP(N+1), YPOLD(N+1), Z0(N+1)
 C
@@ -10192,9 +10004,9 @@ C
       INTERFACE
         SUBROUTINE TANGQF(Y,YP,YPOLD,A,Q,R,W,S,T,N,IFLAG,NFE)
         USE HOMOTOPY
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N, IFLAG, NFE
-        REAL (KIND=R8):: A(:), Q(N+1,N+1), R((N+1)*(N+2)/2),
+        REAL (dp):: A(:), Q(N+1,N+1), R((N+1)*(N+2)/2),
      &    S(N+1), T(N+1), W(N+1), Y(:), YP(N+1), YPOLD(N+1)
         END SUBROUTINE TANGQF
       END INTERFACE
@@ -10219,7 +10031,7 @@ C LITFH = MAXIMUM NUMBER OF QUASI-NEWTON ITERATIONS ALLOWED.
 C
       ONE = 1.0
       ZERO = 0.0
-      TWOU = 2.0*EPSILON(1.0_R8)
+      TWOU = 2.0*EPSILON(1.0_dp)
       FOURU = TWOU + TWOU
       NP1 = N+1
       FAILED = .FALSE.
@@ -10583,10 +10395,10 @@ C       USE REAL_PRECISION
 C       INTEGER, INTENT(IN):: LENQR,MODE,N
 C       INTEGER, INTENT(IN OUT):: IFLAG,NFE
 C       LOGICAL, INTENT(IN OUT):: CRASH,START
-C       REAL (KIND=R8), INTENT(IN):: A(:),SSPAR(4)
-C       REAL (KIND=R8), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,WK,
+C       REAL (dp), INTENT(IN):: A(:),SSPAR(4)
+C       REAL (dp), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,WK,
 C    &    Y(:),YOLD(:),YP(:),YPOLD(:)
-C       REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: DZ,T,Z0
+C       REAL (dp), INTENT(OUT), DIMENSION(:):: DZ,T,Z0
 C       END SUBROUTINE STEPQS
 C     END INTERFACE
 C
@@ -10706,50 +10518,50 @@ C
 C
 C CALLS  DNRM2, TANGNS.
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
       INTEGER, INTENT(IN):: LENQR,MODE,N
       INTEGER, INTENT(IN OUT):: IFLAG,NFE
       LOGICAL, INTENT(IN OUT):: CRASH,START
-      REAL (KIND=R8), INTENT(IN):: A(:),SSPAR(4)
-      REAL (KIND=R8), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,WK,
+      REAL (dp), INTENT(IN):: A(:),SSPAR(4)
+      REAL (dp), INTENT(IN OUT):: ABSERR,H,HOLD,RELERR,S,WK,
      &    Y(:),YOLD(:),YP(:),YPOLD(:)
-      REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: DZ,T,Z0
+      REAL (dp), INTENT(OUT), DIMENSION(:):: DZ,T,Z0
 C
 C     FUNCTION DECLARATIONS.  
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
-      REAL (KIND=R8):: DD001,DD0011,DD01,DD011,QOFS
+      REAL (dp):: DD001,DD0011,DD01,DD011,QOFS
 C
 C     LOCAL VARIABLES.
 C
-      REAL (KIND=R8), SAVE:: ACOF(12), ALPHA, CORDIS, DELS, FOURU,
+      REAL (dp), SAVE:: ACOF(12), ALPHA, CORDIS, DELS, FOURU,
      &  GAMMA, HFAIL, HTEMP, IDLERR, OMEGA, P0, P1, PP0, PP1, 
      &  SIGMA, TEMP, THETA, TWOU, WKOLD, WRGE(8), XSTEP
       INTEGER:: I, ITCNT, LK, LST, NP1
       LOGICAL:: FAILED
       DATA WRGE  /
-     &   .8735115E+00_R8, .1531947E+00_R8, .3191815E-01_R8,
-     &   .3339946E-10_R8, .4677788E+00_R8, .6970123E-03_R8,
-     &   .1980863E-05_R8, .1122789E-08_R8/
+     &   .8735115E+00_dp, .1531947E+00_dp, .3191815E-01_dp,
+     &   .3339946E-10_dp, .4677788E+00_dp, .6970123E-03_dp,
+     &   .1980863E-05_dp, .1122789E-08_dp/
       DATA ACOF  /
-     &   .9043128E+00_R8, -.7075675E+00_R8, -.4667383E+01_R8,
-     &  -.3677482E+01_R8,  .8516099E+00_R8, -.1953119E+00_R8,
-     &  -.4830636E+01_R8, -.9770528E+00_R8,  .1040061E+01_R8,
-     &   .3793395E-01_R8,  .1042177E+01_R8,  .4450706E-01_R8/
+     &   .9043128E+00_dp, -.7075675E+00_dp, -.4667383E+01_dp,
+     &  -.3677482E+01_dp,  .8516099E+00_dp, -.1953119E+00_dp,
+     &  -.4830636E+01_dp, -.9770528E+00_dp,  .1040061E+01_dp,
+     &   .3793395E-01_dp,  .1042177E+01_dp,  .4450706E-01_dp/
 C
       INTERFACE
         SUBROUTINE TANGNS(RHOLEN,Y,YP,TZ,YPOLD,A,MODE,LENQR,
      &    NFE,N,IFLAG)
-        USE REAL_PRECISION
-        REAL (KIND=R8), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
-        REAL (KIND=R8), INTENT(IN OUT):: RHOLEN
-        REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: TZ,YP
+        use hompack_kinds, only: dp
+        REAL (dp), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
+        REAL (dp), INTENT(IN OUT):: RHOLEN
+        REAL (dp), INTENT(OUT), DIMENSION(:):: TZ,YP
         INTEGER, INTENT(IN):: LENQR,MODE,N
         INTEGER, INTENT(IN OUT):: IFLAG,NFE
         END SUBROUTINE TANGNS
@@ -10774,7 +10586,7 @@ C ***** END OF SPECIFICATION SECTION. *****
 C
 C ***** INITIALIZATION. *****
 C
-      TWOU = 2.0*EPSILON(1.0_R8)
+      TWOU = 2.0*EPSILON(1.0_dp)
       FOURU = TWOU + TWOU
       NP1 = N+1
       FAILED = .FALSE.
@@ -10981,7 +10793,7 @@ C
       ELSE 
         GAMMA = WK + HOLD/(HOLD+HTEMP)*(WK-WKOLD)
       END IF
-      GAMMA = MAX(GAMMA, 0.01_R8)
+      GAMMA = MAX(GAMMA, 0.01_dp)
       H = SQRT(2.0*IDLERR/GAMMA)
 C
 C     ENFORCE RESTRICTIONS ON STEP SIZE SO AS TO ENSURE STABILITY.
@@ -11080,7 +10892,7 @@ C      WT(*) -- VECTOR OF NON-ZERO WEIGHTS FOR ERROR CRITERION
 C      START -- .TRUE.
 C      KSTEPS -- SET KSTEPS TO ZERO 
 C   DEFINE U TO BE THE MACHINE UNIT ROUNDOFF QUANTITY BY CALLING
-C   THE INTRINSIC FUNCTION  EPSILON(1.0_R8), OR BY 
+C   THE INTRINSIC FUNCTION  EPSILON(1.0_dp), OR BY 
 C   COMPUTING U SO THAT U IS THE SMALLEST POSITIVE NUMBER SUCH
 C   THAT 1.0+U .GT. 1.0.
 C 
@@ -11141,8 +10953,8 @@ C***REFERENCES  SHAMPINE L.F., GORDON M.K., *SOLVING ORDINARY
 C                 DIFFERENTIAL EQUATIONS WITH ODE, STEP, AND INTRP*,
 C                 SLA-73-1060, SANDIA LABORATORIES, 1973. 
 C 
-      USE REAL_PRECISION
-      REAL (KIND=R8):: ABSH,ALPHA,BETA,EPS,ERK,ERKM1,ERKM2,
+      use hompack_kinds, only: dp
+      REAL (dp):: ABSH,ALPHA,BETA,EPS,ERK,ERKM1,ERKM2,
      &  ERKP1,ERR,FOURU,FPWA1,FPWA2,FPWA3,FPWA4,FPWA5,G,GI,GSTR,H,
      &  HNEW,HOLD,P,P5EPS,PHI,PSI,R,REALI,REALNS,RHO,ROUND,SIG,
      &  SUM,TAU,TEMP1,TEMP2,TEMP3,TEMP4,TEMP5,TEMP6,TWO,TWOU,V,
@@ -11165,21 +10977,21 @@ C
 C
       INTERFACE
         SUBROUTINE FODE(S,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,NFE,N,IFLAG)
-        USE REAL_PRECISION
-        REAL (KIND=R8):: S
+        use hompack_kinds, only: dp
+        REAL (dp):: S
         INTEGER:: IFLAG,N,NFE
-        REAL (KIND=R8):: A(:),Y(:),YP(N+1),YPOLD(N+1)
-        REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+1),TZ(N+1)
+        REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
+        REAL (dp):: ALPHA(3*N+3),QR(N,N+1),TZ(N+1)
         INTEGER, DIMENSION(N+1):: PIVOT
         END SUBROUTINE FODE
       END INTERFACE
 C
-      DATA TWO /2.0_R8, 4.0_R8, 8.0_R8, 16.0_R8, 32.0_R8, 64.0_R8,
-     &  128.0_R8, 256.0_R8, 512.0_R8, 1024.0_R8, 2048.0_R8,
-     &  4096.0_R8, 8192.0_R8/
-      DATA GSTR /0.500_R8, 0.0833_R8, 0.0417_R8, 0.0264_R8,
-     &  0.0188_R8, 0.0143_R8, 0.0114_R8, 0.00936_R8, 0.00789_R8,
-     &  0.00679_R8, 0.00592_R8, 0.00524_R8, 0.00468_R8/
+      DATA TWO /2.0_dp, 4.0_dp, 8.0_dp, 16.0_dp, 32.0_dp, 64.0_dp,
+     &  128.0_dp, 256.0_dp, 512.0_dp, 1024.0_dp, 2048.0_dp,
+     &  4096.0_dp, 8192.0_dp/
+      DATA GSTR /0.500_dp, 0.0833_dp, 0.0417_dp, 0.0264_dp,
+     &  0.0188_dp, 0.0143_dp, 0.0114_dp, 0.00936_dp, 0.00789_dp,
+     &  0.00679_dp, 0.00592_dp, 0.00524_dp, 0.00468_dp/
 C 
 C 
 C       ***     BEGIN BLOCK 0     *** 
@@ -11191,7 +11003,7 @@ C
 C   IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE
 C 
 C***FIRST EXECUTABLE STATEMENT
-      TWOU = 2.0 * EPSILON(1.0_R8)
+      TWOU = 2.0 * EPSILON(1.0_dp)
       FOURU = TWOU + TWOU
       CRASH = .TRUE.
       IF(ABS(H) .GE. FOURU*ABS(X)) GO TO 5
@@ -11583,7 +11395,7 @@ C
       IF(P5EPS .GE. ERK) GO TO 465
       TEMP2 = K+1 
       R = (P5EPS/ERK)**(1.0/TEMP2)
-      HNEW = ABSH*MAX(0.5_R8,MIN(0.9_R8,R)) 
+      HNEW = ABSH*MAX(0.5_dp,MIN(0.9_dp,R)) 
       HNEW = SIGN(MAX(HNEW,FOURU*ABS(X)),H) 
  465  H = HNEW
       RETURN
@@ -11615,15 +11427,15 @@ C   J-TH VARIABLE, RESPECTIVELY.
 C
 C FUNCTIONS USED:  ATAN, COS, SIN.
 C
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C DECLARATION OF INPUT AND OUTPUT:
       INTEGER:: N,ICOUNT(N),IDEG(N)
-      REAL (KIND=R8):: R(2,N),X(2*N)
+      REAL (dp):: R(2,N),X(2*N)
 C
 C DECLARATION OF LOCAL VARIABLES:
       INTEGER:: J
-      REAL (KIND=R8):: ANGLE,TWOPI
-      COMPLEX (KIND=R8):: XXXX
+      REAL (dp):: ANGLE,TWOPI
+      COMPLEX (dp):: XXXX
 C
       DO J=1,N
         IF (ICOUNT(J) .GE. IDEG(J)) THEN
@@ -11633,11 +11445,11 @@ C
           EXIT
         END IF
       END DO
-      TWOPI = 8.0_R8*ATAN(1.0_R8)
+      TWOPI = 8.0_dp*ATAN(1.0_dp)
       DO J=1,N
         ANGLE = ( TWOPI/IDEG(J) )*ICOUNT(J)
-        XXXX = CMPLX(COS(ANGLE),SIN(ANGLE),KIND=R8)*
-     &        CMPLX(R(1,J),R(2,J),KIND=R8)
+        XXXX = CMPLX(COS(ANGLE),SIN(ANGLE),kind=dp)*
+     &        CMPLX(R(1,J),R(2,J),kind=dp)
         X(2*J-1) = REAL(XXXX)
         X(2*J) = AIMAG(XXXX)
       END DO
@@ -11657,10 +11469,10 @@ C     INTERFACE
 C       SUBROUTINE TANGNF(RHOLEN,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,
 C    &    NFE,N,IFLAG)
 C       USE REAL_PRECISION
-C       REAL (KIND=R8):: RHOLEN
+C       REAL (dp):: RHOLEN
 C       INTEGER:: IFLAG,N,NFE
-C       REAL (KIND=R8):: A(:),Y(:),YP(N+1),YPOLD(N+1)
-C       REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
+C       REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
+C       REAL (dp):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
 C       INTEGER:: PIVOT(N+1)
 C       END SUBROUTINE TANGNF
 C     END INTERFACE
@@ -11713,23 +11525,23 @@ C
 C CALLS  DGEQPF , DNRM2 , DORMQR , F (OR  RHO ), FJAC (OR  RHOJAC ).
 C
       USE HOMOTOPY
-      USE REAL_PRECISION
-      REAL (KIND=R8):: LAMBDA,RHOLEN,SIGMA,YPNORM
+      use hompack_kinds, only: dp
+      REAL (dp):: LAMBDA,RHOLEN,SIGMA,YPNORM
       INTEGER:: I,IFLAG,J,K,KP1,N,NFE,NP1,NP2
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
 C *****  ARRAY DECLARATIONS.  *****
 C
-      REAL (KIND=R8):: A(:),Y(:),YP(N+1),YPOLD(N+1)
+      REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
 C
 C ARRAYS AND FLAG FOR COMPUTING THE JACOBIAN MATRIX AND ITS KERNEL.
-      REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
+      REAL (dp):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
       INTEGER:: PIVOT(N+1)
 C
 C *****  END OF DIMENSIONAL INFORMATION.  *****
@@ -11794,7 +11606,7 @@ C
 C
       CALL DGEQPF(N,NP1,QR,N,PIVOT,YP,ALPHA,K)
 C
-      IF (ABS(QR(N,N)) .LE. ABS(QR(1,1))*EPSILON(1.0_R8)) THEN 
+      IF (ABS(QR(N,N)) .LE. ABS(QR(1,1))*EPSILON(1.0_dp)) THEN 
         IFLAG=4
         RETURN
       ENDIF
@@ -11848,9 +11660,9 @@ C       SUBROUTINE TANGNS(RHOLEN,Y,YP,TZ,YPOLD,A,MODE,LENQR,
 C    &    NFE,N,IFLAG)
 C       USE HOMOTOPY, QR => QRSPARSE
 C       USE REAL_PRECISION
-C       REAL (KIND=R8), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
-C       REAL (KIND=R8), INTENT(IN OUT):: RHOLEN
-C       REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: TZ,YP
+C       REAL (dp), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
+C       REAL (dp), INTENT(IN OUT):: RHOLEN
+C       REAL (dp), INTENT(OUT), DIMENSION(:):: TZ,YP
 C       INTEGER, INTENT(IN):: LENQR,MODE,N
 C       INTEGER, INTENT(IN OUT):: IFLAG,NFE
 C       END SUBROUTINE TANGNS
@@ -11910,37 +11722,37 @@ C CALLS  F (OR  RHO ), FJACS (OR  RHOJS ), PCGDS , GMRILUDS , AND THE
 C    BLAS ROUTINE  DNRM2 .
 C
         USE HOMOTOPY, QR => QRSPARSE
-        USE REAL_PRECISION
-        REAL (KIND=R8), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
-        REAL (KIND=R8), INTENT(IN OUT):: RHOLEN
-        REAL (KIND=R8), INTENT(OUT), DIMENSION(:):: TZ,YP
+        use hompack_kinds, only: dp
+        REAL (dp), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
+        REAL (dp), INTENT(IN OUT):: RHOLEN
+        REAL (dp), INTENT(OUT), DIMENSION(:):: TZ,YP
         INTEGER, INTENT(IN):: LENQR,MODE,N
         INTEGER, INTENT(IN OUT):: IFLAG,NFE
 C
 C ***** LOCAL VARIABLES AND AUTOMATIC WORK ARRAYS. *****
 C
-      REAL (KIND=R8):: LAMBDA,RHOVEC(N),SIGMA,YPNORM
+      REAL (dp):: LAMBDA,RHOVEC(N),SIGMA,YPNORM
       INTEGER:: J,NP1,JPOS
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER:: N,STRIDE
-          REAL (KIND=R8):: DNRM2,X(N)
+          REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
         SUBROUTINE PCGDS(N,LENQR,IFLAG,YP,RHS)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER, INTENT(IN):: LENQR,N
           INTEGER, INTENT(IN OUT):: IFLAG
-          REAL (KIND=R8), INTENT(IN OUT):: YP(N+1)
-          REAL (KIND=R8), OPTIONAL, INTENT(IN):: RHS(N)
+          REAL (dp), INTENT(IN OUT):: YP(N+1)
+          REAL (dp), OPTIONAL, INTENT(IN):: RHS(N)
         END SUBROUTINE PCGDS
         SUBROUTINE GMRILUDS(N,LENQR,IFLAG,YP,RHS)
-          USE REAL_PRECISION
+          use hompack_kinds, only: dp
           INTEGER, INTENT(IN):: LENQR,N
           INTEGER, INTENT(IN OUT):: IFLAG
-          REAL (KIND=R8), INTENT(IN OUT):: YP(N+1)
-          REAL (KIND=R8), OPTIONAL, INTENT(IN):: RHS(N)
+          REAL (dp), INTENT(IN OUT):: YP(N+1)
+          REAL (dp), OPTIONAL, INTENT(IN):: RHS(N)
         END SUBROUTINE GMRILUDS
       END INTERFACE
 C
@@ -12124,7 +11936,7 @@ C       SUBROUTINE TANGQF(Y,YP,YPOLD,A,Q,R,W,S,T,N,IFLAG,NFE)
 C       USE HOMOTOPY
 C       USE REAL_PRECISION
 C       INTEGER:: N, IFLAG, NFE
-C       REAL (KIND=R8):: A(:), Q(N+1,N+1), R((N+1)*(N+2)/2),
+C       REAL (dp):: A(:), Q(N+1,N+1), R((N+1)*(N+2)/2),
 C    &    S(N+1), T(N+1), W(N+1), Y(:), YP(N+1), YPOLD(N+1)
 C       END SUBROUTINE TANGQF
 C     END INTERFACE
@@ -12177,21 +11989,21 @@ C R1UPQF (WHICH IS AN ENTRY POINT OF UPQRQF).
 C        
 C ***** DECLARATIONS *****
       USE HOMOTOPY
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
 C FUNCTION DECLARATIONS
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
 C LOCAL VARIABLES
 C
-      REAL (KIND=R8):: LAMBDA, YPNRM
+      REAL (dp):: LAMBDA, YPNRM
       INTEGER:: I, J, JP1, NP1
 C
 C SCALAR ARGUMENTS
@@ -12200,7 +12012,7 @@ C
 C
 C ARRAY DECLARATIONS 
 C
-      REAL (KIND=R8):: A(:), Q(N+1,N+1), R((N+1)*(N+2)/2),
+      REAL (dp):: A(:), Q(N+1,N+1), R((N+1)*(N+2)/2),
      &  S(N+1), T(N+1), W(N+1), Y(:), YP(N+1), YPOLD(N+1)
 C
 C ***** END OF DECLARATIONS *****
@@ -12362,32 +12174,32 @@ C
 C CALLS   DGEMV, DNRM2, DTPMV.
 C
 C ***** DECLARATIONS *****
-      USE REAL_PRECISION
+      use hompack_kinds, only: dp
 C
 C FUNCTION DECLARATIONS 
 C
       INTERFACE
         FUNCTION DNRM2(N,X,STRIDE)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER:: N,STRIDE
-        REAL (KIND=R8):: DNRM2,X(N)
+        REAL (dp):: DNRM2,X(N)
         END FUNCTION DNRM2
       END INTERFACE
 C
 C LOCAL VARIABLES 
 C
-      REAL (KIND=R8):: C, DEN, ONE, SS, WW, YY, ZERO
+      REAL (dp):: C, DEN, ONE, SS, WW, YY, ZERO
       INTEGER:: I, INDEXC, INDEXD, INDXC2, J, K
       LOGICAL:: SKIPUP
 C
 C SCALAR ARGUMENTS 
 C
-      REAL (KIND=R8):: ETA
+      REAL (dp):: ETA
       INTEGER:: N
 C
 C ARRAY DECLARATIONS  
 C
-      REAL (KIND=R8)::  S(N), F0(N), F1(N), Q(N,N), R(N*(N+1)/2),
+      REAL (dp)::  S(N), F0(N), F1(N), Q(N,N), R(N*(N+1)/2),
      &    W(N), T(N), TT(2)
 C
 C ***** END OF DECLARATIONS *****  
