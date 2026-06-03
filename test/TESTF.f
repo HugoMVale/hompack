@@ -40,11 +40,11 @@ C   1.00000000E+00
 C
 C
       PROGRAM TESTF
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90, ONLY : FIXPDF, FIXPNF, FIXPQF
       IMPLICIT NONE
       INTEGER, PARAMETER:: N=5, NDIMA=5
-      REAL (KIND=R8):: A(N),ANSAE,ANSRE,ARCAE,ARCRE,
+      REAL (dp):: A(N),ANSAE,ANSRE,ARCAE,ARCRE,
      &  ARCLEN,DTIME,SSPAR(8),Y(N+1)
       INTEGER:: IFLAG,II,J,NFE,NP1,TIMENEW(8),TIMEOLD(8),TRACE
       CHARACTER (LEN=6) NAME
@@ -56,23 +56,23 @@ C
 !    &    NFE,ARCLEN)
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN)::N,NDIMA,TRACE
-!       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
 !       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (KIND=R8), INTENT(IN OUT)::ARCTOL,EPS
+!       REAL (dp), INTENT(IN OUT)::ARCTOL,EPS
 !       INTEGER, INTENT(OUT)::NFE
-!       REAL (KIND=R8), INTENT(OUT)::ARCLEN
+!       REAL (dp), INTENT(OUT)::ARCLEN
 !       END SUBROUTINE FIXPDF
 C
 !       SUBROUTINE FIXPNF(N,Y,IFLAG,ARCRE,ARCAE,ANSRE,ANSAE,TRACE,A,
 !    &    SSPAR,NFE,ARCLEN,POLY_SWITCH)
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN)::N,TRACE
-!       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
 !       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (KIND=R8), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
+!       REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
 !    &    SSPAR(8)
 !       INTEGER, INTENT(OUT)::NFE
-!       REAL (KIND=R8), INTENT(OUT)::ARCLEN
+!       REAL (dp), INTENT(OUT)::ARCLEN
 !       LOGICAL, INTENT(IN), OPTIONAL::POLY_SWITCH
 !      END SUBROUTINE FIXPNF
 C
@@ -80,12 +80,12 @@ C
 !    &    SSPAR,NFE,ARCLEN)
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN)::N,TRACE
-!       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
 !       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (KIND=R8), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
+!       REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
 !    &    SSPAR(4)
 !       INTEGER, INTENT(OUT)::NFE
-!       REAL (KIND=R8), INTENT(OUT)::ARCLEN
+!       REAL (dp), INTENT(OUT)::ARCLEN
 !      END SUBROUTINE FIXPQF
 !     END INTERFACE
 C
@@ -167,10 +167,10 @@ C      SUBROUTINE F(X,V) -- EVALUATES BROWN'S FUNCTION AT THE POINT
 C         X, AND RETURNS THE VALUE IN V.
 C
 C********************************************************************
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       IMPLICIT NONE
-      REAL (KIND=R8), INTENT(IN):: X(:)
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      REAL (dp), INTENT(IN):: X(:)
+      REAL (dp), INTENT(OUT):: V(:)
       INTEGER:: N
       N=SIZE(X)
       V(1)=PRODUCT(X) - 1.0
@@ -185,12 +185,12 @@ C         THE JACOBIAN MATRIX FOR BROWN'S FUNCTION EVALUATED AT
 C         THE POINT X, RETURNING THE VALUE IN V.
 C
 C********************************************************************
-      USE REAL_PRECISION, ONLY : R8
-      REAL (KIND=R8), INTENT(IN):: X(:)
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      use hompack_kinds, only: dp
+      REAL (dp), INTENT(IN):: X(:)
+      REAL (dp), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
       INTEGER:: J,N
-      REAL (KIND=R8):: PROD
+      REAL (dp):: PROD
 C
       N=SIZE(X)
       PROD=1.0
@@ -211,11 +211,11 @@ C THE REST OF THESE SUBROUTINES ARE NOT USED BY PROGRAM TESTF, AND ARE
 C INCLUDED HERE SIMPLY FOR COMPLETENESS AND AS TEMPLATES FOR THEIR USE.
 C
       SUBROUTINE RHO(A,LAMBDA,X,V)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL
-      REAL (KIND=R8), INTENT(IN):: A(:),X(:)
-      REAL (KIND=R8), INTENT(IN OUT):: LAMBDA
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      REAL (dp), INTENT(IN):: A(:),X(:)
+      REAL (dp), INTENT(IN OUT):: LAMBDA
+      REAL (dp), INTENT(OUT):: V(:)
 C
 C EVALUATE  RHO(A,LAMBDA,X)  AND RETURN IN THE VECTOR  V .
 C
@@ -225,9 +225,9 @@ C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
       INTERFACE
         SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N
-        REAL (KIND=R8), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
+        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
         END SUBROUTINE HFUNP
       END INTERFACE
       INTEGER:: J,NPOL
@@ -243,9 +243,9 @@ C
       END SUBROUTINE RHO
 
       SUBROUTINE RHOA(A,LAMBDA,X)
-      USE REAL_PRECISION, ONLY : R8
-      REAL (KIND=R8), INTENT(OUT):: A(:)
-      REAL (KIND=R8), INTENT(IN):: LAMBDA,X(:)
+      use hompack_kinds, only: dp
+      REAL (dp), INTENT(OUT):: A(:)
+      REAL (dp), INTENT(IN):: LAMBDA,X(:)
 C
 C CALCULATE AND RETURN IN  A  THE VECTOR Z SUCH THAT
 C  RHO(Z,LAMBDA,X) = 0 .
@@ -255,11 +255,11 @@ C
       END SUBROUTINE RHOA
 
       SUBROUTINE RHOJAC(A,LAMBDA,X,V,K)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL
-      REAL (KIND=R8), INTENT(IN):: A(:),X(:)
-      REAL (KIND=R8), INTENT(IN OUT):: LAMBDA
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      REAL (dp), INTENT(IN):: A(:),X(:)
+      REAL (dp), INTENT(IN OUT):: LAMBDA
+      REAL (dp), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
 C
 C RETURN IN THE VECTOR  V  THE KTH COLUMN OF THE JACOBIAN
@@ -272,9 +272,9 @@ C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
       INTERFACE
         SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N
-        REAL (KIND=R8), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
+        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
         END SUBROUTINE HFUNP
       END INTERFACE
       INTEGER:: J,NPOL,N2
@@ -298,9 +298,9 @@ C
       END SUBROUTINE RHOJAC
 
       SUBROUTINE FJACS(X)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL
-      REAL (KIND=R8), INTENT(IN):: X(:)
+      REAL (dp), INTENT(IN):: X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
@@ -322,9 +322,9 @@ C
       END SUBROUTINE FJACS
 
       SUBROUTINE RHOJS(A,LAMBDA,X)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL
-      REAL (KIND=R8), INTENT(IN):: A(:),LAMBDA,X(:)
+      REAL (dp), INTENT(IN):: A(:),LAMBDA,X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
@@ -353,11 +353,11 @@ C  MORE JACOBIAN EVALUATIONS SINCE THE UNDEFINED FUNCTION OPTION OF
 C  STEPNX  IS USED TO FORCE SMALLER STEPS.
 C
       SUBROUTINE MAINX
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMOTOPY
       IMPLICIT NONE
       INTEGER, PARAMETER:: N=5, NDIMA=5
-      REAL (KIND=R8):: A(NDIMA),ABSERR,ALPHA(3*N+3),
+      REAL (dp):: A(NDIMA),ABSERR,ALPHA(3*N+3),
      &  ANSAE,ANSRE,ARCAE,ARCRE,ARCLEN,DTIME,GOFW,H,HOLD,
      &  QR(N,N+2),RELERR,RHOLEN,S,SSPAR(8),TZ(N+1),W(N+1),
      &  WP(N+1),Y(N+1),YOLD(N+1),YOLDS(N+1),YP(N+1),YPOLD(N+1)
@@ -369,36 +369,36 @@ C
         SUBROUTINE ROOTNX(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,
      &   YPOLD,A,GOFW,TZ,W,WP)
         USE HOMOTOPY
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N
         INTEGER, INTENT(IN OUT):: NFE,IFLAG
-        REAL (KIND=R8), INTENT(IN):: RELERR,ABSERR
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN):: A
-        REAL (KIND=R8), INTENT(IN OUT):: GOFW
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+        REAL (dp), INTENT(IN):: RELERR,ABSERR
+        REAL (dp), DIMENSION(:), INTENT(IN):: A
+        REAL (dp), INTENT(IN OUT):: GOFW
+        REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
      &    TZ,W,WP
         END SUBROUTINE ROOTNX
         SUBROUTINE STEPNX(N,NFE,IFLAG,START,CRASH,HOLD,H,RELERR,
      &    ABSERR,S,Y,YP,YOLD,YPOLD,A,TZ,W,WP,RHOLEN,SSPAR)
         USE HOMOTOPY
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N
         INTEGER, INTENT(IN OUT):: NFE,IFLAG
         LOGICAL, INTENT(IN OUT):: START,CRASH
-        REAL (KIND=R8), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
+        REAL (dp), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
      &    SSPAR(8)
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN):: A
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+        REAL (dp), DIMENSION(:), INTENT(IN):: A
+        REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
      &    TZ,W,WP
-        REAL (KIND=R8), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
+        REAL (dp), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
         END SUBROUTINE STEPNX
         SUBROUTINE TANGNF(RHOLEN,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,
      &    NFE,N,IFLAG)
-        USE REAL_PRECISION
-        REAL (KIND=R8):: RHOLEN
+        use hompack_kinds, only: dp
+        REAL (dp):: RHOLEN
         INTEGER:: IFLAG,N,NFE
-        REAL (KIND=R8):: A(:),Y(:),YP(N+1),YPOLD(N+1)
-        REAL (KIND=R8):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
+        REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
+        REAL (dp):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
         INTEGER:: PIVOT(N+1)
         END SUBROUTINE TANGNF
       END INTERFACE
@@ -431,7 +431,7 @@ C
 C
 C TRACK CURVE TILL LAMBDA > 1.0 .
 C
-      TRACK: DO WHILE (Y(1) < 1.0_R8)
+      TRACK: DO WHILE (Y(1) < 1.0_dp)
         CALL STEPNX (N,NFE,IFLAG,START,CRASH,HOLD,H,RELERR,
      &       ABSERR,S,Y,YP,YOLD,YPOLD,A,TZ,W,WP,RHOLEN,SSPAR)
         IF (CRASH) CYCLE TRACK
@@ -445,7 +445,7 @@ C
             ENDIF
             CYCLE TRACK
           CASE (-12:-10)   ! TANGENT VECTOR
-            IF (H > .1_R8) THEN
+            IF (H > .1_dp) THEN
               IFLAG = IFLAG - 100
               CYCLE TRACK
             END IF
@@ -453,7 +453,7 @@ C
             CALL TANGNF(RHOLEN,W,WP,YPOLD,A,QR,ALPHA,TZ,PIVOT,
      &      NFEC,N,IFLAG)
           CASE (-32:-20)   ! TANGENT VECTOR AND NEWTON STEP
-            IF (H > .1_R8) THEN
+            IF (H > .1_dp) THEN
               IFLAG = IFLAG - 100
               CYCLE TRACK
             END IF

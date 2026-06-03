@@ -59,11 +59,11 @@ C
 !
       PROGRAM TESTS
       USE SWITCH
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90, ONLY : FIXPDS, FIXPNS, FIXPQS
       IMPLICIT NONE
       INTEGER, PARAMETER:: N=8, NDIMA=8
-      REAL (KIND=R8):: A(N),ANSAE,ANSRE,ARCAE,ARCRE,
+      REAL (dp):: A(N),ANSAE,ANSRE,ARCAE,ARCRE,
      &  ARCLEN,DTIME,SSPAR(8),Y(N+1)
       INTEGER:: IFLAG,II,J,LENQR,MODE,NFE,NP1,TIMENEW(8),
      &  TIMEOLD(8),TRACE
@@ -76,35 +76,35 @@ C
 !    &    NFE,ARCLEN,MODE,LENQR)
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN)::LENQR,MODE,N,NDIMA,TRACE
-!       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
 !       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (KIND=R8), INTENT(IN OUT)::ARCTOL,EPS
+!       REAL (dp), INTENT(IN OUT)::ARCTOL,EPS
 !       INTEGER, INTENT(OUT)::NFE
-!       REAL (KIND=R8), INTENT(OUT)::ARCLEN
+!       REAL (dp), INTENT(OUT)::ARCLEN
 !       END SUBROUTINE FIXPDS
 C
 !       SUBROUTINE FIXPNS(N,Y,IFLAG,ARCRE,ARCAE,ANSRE,ANSAE,TRACE,A,
 !    &    NFE,ARCLEN,MODE,LENQR,SSPAR)
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN)::LENQR,MODE,N,TRACE
-!       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
 !       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (KIND=R8), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
+!       REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
 !    &    SSPAR(8)
 !       INTEGER, INTENT(OUT)::NFE
-!       REAL (KIND=R8), INTENT(OUT)::ARCLEN
+!       REAL (dp), INTENT(OUT)::ARCLEN
 !       END SUBROUTINE FIXPNS
 C
 !       SUBROUTINE FIXPQS(N,Y,IFLAG,ARCRE,ARCAE,ANSRE,ANSAE,TRACE,A,
 !    &    NFE,ARCLEN,MODE,LENQR,SSPAR)
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN)::LENQR,MODE,N,TRACE
-!       REAL (KIND=R8), DIMENSION(:), INTENT(IN OUT)::A,Y
+!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
 !       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (KIND=R8), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
+!       REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
 !    &    SSPAR(4)
 !       INTEGER, INTENT(OUT)::NFE
-!       REAL (KIND=R8), INTENT(OUT)::ARCLEN
+!       REAL (dp), INTENT(OUT)::ARCLEN
 !       END SUBROUTINE FIXPQS
 !     END INTERFACE
 C
@@ -128,7 +128,7 @@ C
          TRACE=0
          SSPAR=0.0
          IFLAG=-MODE
-         Y(1:N)=0.5_R8
+         Y(1:N)=0.5_dp
          IF(IFLAG .EQ. -2) A=Y(1:N)
          ROWSET = .FALSE.
 C
@@ -190,10 +190,10 @@ C
 C SUBROUTINE F(X,V) COMPUTES F AT THE POINT X, RETURNING THE VALUE IN V.
 C
 C***********************************************************************
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       IMPLICIT NONE
-      REAL (KIND=R8), INTENT(IN):: X(:)
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      REAL (dp), INTENT(IN):: X(:)
+      REAL (dp), INTENT(OUT):: V(:)
        V(1)=X(1)**3+6.0*X(2)*X(3)-1+2.0*X(1)
        V(2)=6.0*X(1)*X(3)+X(2)**4*X(5)-1+3.0*X(2)
        V(3)=6.0*X(1)*X(2)+X(3)*X(5)-1+4.0*X(3)
@@ -214,10 +214,10 @@ C X, RETURNING THE JACOBIAN MATRIX IN PACKED SKYLINE FORM (MODE=1)
 C IN THE ARRAYS  QRSPARSE  AND  ROWPOS .
 C
 C*****************************************************************
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
       USE SWITCH
-      REAL (KIND=R8), INTENT(IN):: X(:)
+      REAL (dp), INTENT(IN):: X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
@@ -263,15 +263,15 @@ C
       END SUBROUTINE FJACS
 C
       SUBROUTINE RHO(A,LAMBDA,X,V)
-      USE REAL_PRECISION, ONLY : R8
-      REAL (KIND=R8), INTENT(IN):: A(:),X(:)
-      REAL (KIND=R8), INTENT(IN OUT):: LAMBDA
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      use hompack_kinds, only: dp
+      REAL (dp), INTENT(IN):: A(:),X(:)
+      REAL (dp), INTENT(IN OUT):: LAMBDA
+      REAL (dp), INTENT(OUT):: V(:)
       INTERFACE
         SUBROUTINE F(X,V)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN):: X
-        REAL (KIND=R8), DIMENSION(:), INTENT(OUT):: V
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(:), INTENT(IN):: X
+        REAL (dp), DIMENSION(:), INTENT(OUT):: V
         END SUBROUTINE F
       END INTERFACE
 C
@@ -286,14 +286,14 @@ C
       END SUBROUTINE RHO
 C
       SUBROUTINE RHOA(A,LAMBDA,X)
-      USE REAL_PRECISION, ONLY : R8
-      REAL (KIND=R8), INTENT(OUT):: A(:)
-      REAL (KIND=R8), INTENT(IN):: LAMBDA,X(:)
+      use hompack_kinds, only: dp
+      REAL (dp), INTENT(OUT):: A(:)
+      REAL (dp), INTENT(IN):: LAMBDA,X(:)
       INTERFACE
         SUBROUTINE F(X,V)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN):: X
-        REAL (KIND=R8), DIMENSION(:), INTENT(OUT):: V
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(:), INTENT(IN):: X
+        REAL (dp), DIMENSION(:), INTENT(OUT):: V
         END SUBROUTINE F
       END INTERFACE
 C
@@ -318,15 +318,15 @@ C storage format (MODE = 2) in the arrays QRSPARSE, ROWPOS, and
 C COLPOS.
 C
 C*****************************************************************
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
       USE SWITCH
-      REAL (KIND=R8), INTENT(IN):: A(:),LAMBDA,X(:)
+      REAL (dp), INTENT(IN):: A(:),LAMBDA,X(:)
       INTERFACE
         SUBROUTINE F(X,V)
-        USE REAL_PRECISION
-        REAL (KIND=R8), DIMENSION(:), INTENT(IN):: X
-        REAL (KIND=R8), DIMENSION(:), INTENT(OUT):: V
+        use hompack_kinds, only: dp
+        REAL (dp), DIMENSION(:), INTENT(IN):: X
+        REAL (dp), DIMENSION(:), INTENT(OUT):: V
         END SUBROUTINE F
       END INTERFACE
 C
@@ -354,7 +354,7 @@ C  LOCAL VARIABLES
 C
       INTEGER, PARAMETER:: N=8
       INTEGER:: J, JPOS, ELEM(N) = (/4,9,14,18,24,27,30,36/)
-      REAL (KIND=R8):: DRHODL(N)
+      REAL (dp):: DRHODL(N)
 C
       IF (.NOT. ROWSET) THEN  
         ROWSET=.TRUE.
@@ -431,9 +431,9 @@ C THE REST OF THESE SUBROUTINES ARE NOT USED BY PROGRAM TESTS, AND ARE
 C INCLUDED HERE SIMPLY FOR COMPLETENESS AND AS TEMPLATES FOR THEIR USE.
 C
       SUBROUTINE FJAC(X,V,K)
-      USE REAL_PRECISION, ONLY : R8
-      REAL (KIND=R8), INTENT(IN):: X(:)
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      use hompack_kinds, only: dp
+      REAL (dp), INTENT(IN):: X(:)
+      REAL (dp), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
 C
 C RETURN IN  V  THE KTH COLUMN OF THE JACOBIAN MATRIX OF
@@ -444,11 +444,11 @@ C
       END SUBROUTINE FJAC
 C
       SUBROUTINE RHOJAC(A,LAMBDA,X,V,K)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL, ONLY: IPAR, PAR
-      REAL (KIND=R8), INTENT(IN):: A(:),X(:)
-      REAL (KIND=R8), INTENT(IN OUT):: LAMBDA
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      REAL (dp), INTENT(IN):: A(:),X(:)
+      REAL (dp), INTENT(IN OUT):: LAMBDA
+      REAL (dp), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
 C
 C RETURN IN THE VECTOR  V  THE KTH COLUMN OF THE JACOBIAN
@@ -461,9 +461,9 @@ C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
       INTERFACE
         SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N
-        REAL (KIND=R8), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
+        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
         END SUBROUTINE HFUNP
       END INTERFACE
       INTEGER:: J,NPOL,N2

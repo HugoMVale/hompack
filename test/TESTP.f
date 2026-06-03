@@ -214,13 +214,13 @@ C
 C NN=10, MMAXT=30, TTOTDG=1024
 C
       PROGRAM TESTP
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90, ONLY : POLSYS1H
       INTEGER, PARAMETER:: NN=10,MMAXT=30,TTOTDG=1024
       INTEGER:: IFLG1,IFLG2(TTOTDG),IFLGHM,IFLGSC,ITOTIT,J,K,
      &  KDEG(NN,NN+1,MMAXT),L,M,MAXT,N,NFE(TTOTDG),NP1,NT,
      &  NUMRR,NUMT(NN),TOTDG
-      REAL (KIND=R8):: ARCLEN(TTOTDG),COEF(NN,MMAXT),EPSBIG,EPSSML,
+      REAL (dp):: ARCLEN(TTOTDG),COEF(NN,MMAXT),EPSBIG,EPSSML,
      &  LAMBDA(TTOTDG),ROOTS(2,NN+1,TTOTDG),SSPAR(8)
       CHARACTER (LEN=72):: TITLE
 ! If using a subroutine library of the HOMPACK90 subroutines rather than
@@ -232,10 +232,10 @@ C
 !       USE HOMOTOPY
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN):: N,NUMT(:),KDEG(:,:,:),NUMRR
-!       REAL (KIND=R8), INTENT(IN):: COEF(:,:),EPSBIG,EPSSML
+!       REAL (dp), INTENT(IN):: COEF(:,:),EPSBIG,EPSSML
 !       INTEGER, INTENT(IN OUT):: IFLG1,IFLG2(:)
-!       REAL (KIND=R8), INTENT(IN OUT):: SSPAR(8)
-!       REAL (KIND=R8), INTENT(OUT):: LAMBDA(:),ROOTS(:,:,:),ARCLEN(:)
+!       REAL (dp), INTENT(IN OUT):: SSPAR(8)
+!       REAL (dp), INTENT(OUT):: LAMBDA(:),ROOTS(:,:,:),ARCLEN(:)
 !       INTEGER, INTENT(OUT):: NFE(:)
 !       END SUBROUTINE POLSYS1H
 !     END INTERFACE
@@ -376,9 +376,9 @@ C SIMPLY AS TEMPLATES.
 C ###################################################################
 !
       SUBROUTINE F(X,V)
-      USE REAL_PRECISION, ONLY : R8
-      REAL (KIND=R8), INTENT(IN):: X(:)
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      use hompack_kinds, only: dp
+      REAL (dp), INTENT(IN):: X(:)
+      REAL (dp), INTENT(OUT):: V(:)
 C
 C EVALUATE  F(X)  AND RETURN IN THE VECTOR  V .
 C
@@ -387,9 +387,9 @@ C
       END SUBROUTINE F
 
       SUBROUTINE FJAC(X,V,K)
-      USE REAL_PRECISION, ONLY : R8
-      REAL (KIND=R8), INTENT(IN):: X(:)
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      use hompack_kinds, only: dp
+      REAL (dp), INTENT(IN):: X(:)
+      REAL (dp), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
 C
 C RETURN IN  V  THE KTH COLUMN OF THE JACOBIAN MATRIX OF
@@ -400,11 +400,11 @@ C
       END SUBROUTINE FJAC
 
       SUBROUTINE RHO(A,LAMBDA,X,V)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL, ONLY: IPAR, PAR
-      REAL (KIND=R8), INTENT(IN):: A(:),X(:)
-      REAL (KIND=R8), INTENT(IN OUT):: LAMBDA
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      REAL (dp), INTENT(IN):: A(:),X(:)
+      REAL (dp), INTENT(IN OUT):: LAMBDA
+      REAL (dp), INTENT(OUT):: V(:)
 C
 C EVALUATE  RHO(A,LAMBDA,X)  AND RETURN IN THE VECTOR  V .
 C
@@ -414,9 +414,9 @@ C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
       INTERFACE
         SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N
-        REAL (KIND=R8), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
+        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
         END SUBROUTINE HFUNP
       END INTERFACE
       INTEGER:: J,NPOL
@@ -432,9 +432,9 @@ C
       END SUBROUTINE RHO
 
       SUBROUTINE RHOA(A,LAMBDA,X)
-      USE REAL_PRECISION, ONLY : R8
-      REAL (KIND=R8), INTENT(OUT):: A(:)
-      REAL (KIND=R8), INTENT(IN):: LAMBDA,X(:)
+      use hompack_kinds, only: dp
+      REAL (dp), INTENT(OUT):: A(:)
+      REAL (dp), INTENT(IN):: LAMBDA,X(:)
 C
 C CALCULATE AND RETURN IN  A  THE VECTOR Z SUCH THAT
 C  RHO(Z,LAMBDA,X) = 0 .
@@ -444,11 +444,11 @@ C
       END SUBROUTINE RHOA
 
       SUBROUTINE RHOJAC(A,LAMBDA,X,V,K)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL, ONLY: IPAR, PAR
-      REAL (KIND=R8), INTENT(IN):: A(:),X(:)
-      REAL (KIND=R8), INTENT(IN OUT):: LAMBDA
-      REAL (KIND=R8), INTENT(OUT):: V(:)
+      REAL (dp), INTENT(IN):: A(:),X(:)
+      REAL (dp), INTENT(IN OUT):: LAMBDA
+      REAL (dp), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
 C
 C RETURN IN THE VECTOR  V  THE KTH COLUMN OF THE JACOBIAN
@@ -461,9 +461,9 @@ C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
       INTERFACE
         SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        USE REAL_PRECISION
+        use hompack_kinds, only: dp
         INTEGER, INTENT(IN):: N
-        REAL (KIND=R8), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
+        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
         END SUBROUTINE HFUNP
       END INTERFACE
       INTEGER:: J,NPOL,N2
@@ -487,9 +487,9 @@ C
       END SUBROUTINE RHOJAC
 
       SUBROUTINE FJACS(X)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
-      REAL (KIND=R8), INTENT(IN):: X(:)
+      REAL (dp), INTENT(IN):: X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
@@ -511,9 +511,9 @@ C
       END SUBROUTINE FJACS
 
       SUBROUTINE RHOJS(A,LAMBDA,X)
-      USE REAL_PRECISION, ONLY : R8
+      use hompack_kinds, only: dp
       USE HOMPACK90_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
-      REAL (KIND=R8), INTENT(IN):: A(:),LAMBDA,X(:)
+      REAL (dp), INTENT(IN):: A(:),LAMBDA,X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
