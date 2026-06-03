@@ -13,16 +13,16 @@
 
 The first version of the library, named HOMPACK, was originally released in 1987 [^1], and the last "official" update, named HOMPACK90, dates from 1997 [^2].
 
-`hompack` is a modernization of the HOMPACK90 code [^3], intended to make the library easier to use and maintain. The main changes include:
+`hompack` is (will be) a modernization of the HOMPACK90 code [^3], intended to make the library easier to use and maintain. The main changes include:
 
 * [ ] Conversion from fixed-form (`.f`) to free-form (`.f90`).
 * [ ] Conversion from upper case to lower case.
 * [ ] Modularization.
 * [ ] Removal of `DATA` statements, labeled do loops, and (most) `goto`s.
 * [ ] Addition of `intent(in/out)` to all procedures.
-* [ ] Addition of explicit interfaces to BLAS routines.
+* [ ] Addition of explicit interfaces to BLAS/LAPACK routines.
 * [ ] Implementation of a C API.
-* [ ] Automatic code documentation with FORD.
+* [x] Automatic code documentation with FORD.
 * [ ] Python bindings, available in the companion repo [hompack-python](https://github.com/HugoMVale/hompack-python).
 
 |    Version    | Year |   Standard   |
