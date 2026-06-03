@@ -1,5 +1,5 @@
-module homotopy
-! interfaces for user written subroutines.
+module hompack_interfaces
+! Interfaces for user written subroutines.
 
    use hompack_kinds, only: dp
    use hompack90_global
@@ -159,4 +159,4 @@ module homotopy
 
    end interface
 
-end module homotopy
+end module hompack_interfaces
