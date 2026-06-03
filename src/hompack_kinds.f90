@@ -3,10 +3,6 @@ module hompack_kinds
 
    use iso_fortran_env, only: real64
    implicit none
-   private
-
-   public :: dp
-   public :: zero, one, pi
 
    integer, parameter :: dp = real64
 
