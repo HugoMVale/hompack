@@ -1,5 +1,5 @@
 module hompack_kinds
-!! Real kinds and common numeric constants.
+!! Real kinds and common numeric constants used by `hompack`.
 
    use iso_fortran_env, only: real64
    implicit none
