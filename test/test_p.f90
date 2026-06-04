@@ -220,13 +220,13 @@ program test_p
    use hompack, only: polsys1h
    implicit none
 
-   integer, parameter:: nn = 10, mmaxt = 30, ttotdg = 1024
-   integer:: iflg1, iflg2(ttotdg), iflghm, iflgsc, itotit, j, k, &
-             kdeg(nn, nn + 1, mmaxt), l, m, maxt, n, nfe(ttotdg), np1, nt, &
-             numrr, numt(nn), totdg
-   real(dp):: arclen(ttotdg), coef(nn, mmaxt), epsbig, epssml, &
-              lambda(ttotdg), roots(2, nn + 1, ttotdg), sspar(8)
-   character(len=72):: title
+   integer, parameter :: nn = 10, mmaxt = 30, ttotdg = 1024
+   integer :: iflg1, iflg2(ttotdg), iflghm, iflgsc, itotit, j, k, &
+              kdeg(nn, nn + 1, mmaxt), l, m, maxt, n, nfe(ttotdg), np1, nt, &
+              numrr, numt(nn), totdg
+   real(dp) :: arclen(ttotdg), coef(nn, mmaxt), epsbig, epssml, &
+               lambda(ttotdg), roots(2, nn + 1, ttotdg), sspar(8)
+   character(len=72) :: title
 
    namelist /problem/ iflghm, iflgsc, totdg, maxt, n, epsbig, epssml, sspar, numrr
 
