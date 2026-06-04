@@ -43,11 +43,11 @@ program test_f
    use hompack, only: fixpdf, fixpnf, fixpqf
    implicit none
 
-   integer, parameter:: n = 5, ndima = 5
-   real(dp):: a(n), ansae, ansre, arcae, arcre, &
-              arclen, dtime, sspar(8), y(n + 1)
-   integer:: iflag, ii, j, nfe, np1, timenew(8), timeold(8), trace
-   character(len=6) name
+   integer, parameter :: n = 5, ndima = 5
+   real(dp) :: a(n), ansae, ansre, arcae, arcre, &
+               arclen, dtime, sspar(8), y(n + 1)
+   integer :: iflag, ii, j, nfe, np1, timenew(8), timeold(8), trace
+   character(len=6) :: name
 
    interface
       subroutine mainx
@@ -115,8 +115,7 @@ program test_f
               'ARCLEN =', f10.3/(1x, 4es16.8))
    end do
 
-   ! TEST REVERSE CALL SUBROUTINES  STEPNX  AND  ROOTNX  ON THE SAME
-   ! PROBLEM
+   ! TEST REVERSE CALL SUBROUTINES  STEPNX  AND  ROOTNX  ON THE SAME PROBLEM
    call mainx
 
 end program test_f
@@ -198,7 +197,7 @@ subroutine rho(a, lambda, x, v)
    ! CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
    ! REPLACEMENT CODE HERE.
 
-   ! FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
+   ! FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0
    if (lambda .lt. zero) lambda = zero
    npol = ipar(1)
    ! CALL HFUNP(NPOL,A,LAMBDA,X)
@@ -306,7 +305,7 @@ subroutine rhojs(a, lambda, x)
    use hompack_global
    implicit none
 
-   real(dp), intent(in):: a(:), lambda, x(:)
+   real(dp), intent(in) :: a(:), lambda, x(:)
 
 end subroutine rhojs
 
@@ -320,14 +319,14 @@ subroutine mainx
    use hompack_core, only: rootnx, stepnx, tangnf
    implicit none
 
-   integer, parameter:: n = 5, ndima = 5
-   real(dp):: a(ndima), abserr, alpha(3*n + 3), &
-              ansae, ansre, arcae, arcre, arclen, dtime, gofw, h, hold, &
-              qr(n, n + 2), relerr, rholen, s, sspar(8), tz(n + 1), w(n + 1), &
-              wp(n + 1), y(n + 1), yold(n + 1), yolds(n + 1), yp(n + 1), ypold(n + 1)
-   integer:: iflag, iter = 0, j, nfe, nfec = 0, np1, pivot(n + 1), &
-             timenew(8), timeold(8), trace
-   logical:: crash, start
+   integer, parameter :: n = 5, ndima = 5
+   real(dp) :: a(ndima), abserr, alpha(3*n + 3), &
+               ansae, ansre, arcae, arcre, arclen, dtime, gofw, h, hold, &
+               qr(n, n + 2), relerr, rholen, s, sspar(8), tz(n + 1), w(n + 1), &
+               wp(n + 1), y(n + 1), yold(n + 1), yolds(n + 1), yp(n + 1), ypold(n + 1)
+   integer :: iflag, iter = 0, j, nfe, nfec = 0, np1, pivot(n + 1), &
+              timenew(8), timeold(8), trace
+   logical :: crash, start
 
    ! DEFINE ARGUMENTS FOR CALL TO HOMPACK PROCEDURE
    np1 = n + 1
