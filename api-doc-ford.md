@@ -3,7 +3,7 @@ project: hompack
 license: mit
 summary: hompack is a package for solving nonlinear systems of equations by homotopy methods.
 src_dir: src
-         example
+         test
 exclude: src/lapack.f
 output_dir: _site
 page_dir: doc
