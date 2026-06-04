@@ -217,7 +217,7 @@ C IN THE ARRAYS  QRSPARSE  AND  ROWPOS .
 C
 C*****************************************************************
       USE HOMPACK_KINDS, ONLY: DP
-      USE HOMPACK_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
+      USE HOMPACK_GLOBAL, ONLY: QRSPARSE, ROWPOS
       USE SWITCH
       IMPLICIT NONE
 C
