@@ -32,6 +32,7 @@ C      FLOATING POINT NUMBER, AS GIVEN BY FUNCTION  HUGE .
 C
 C  0   IF DIVISION DOES NOT CAUSE OVERFLOW.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       IMPLICIT NONE
 C
 C DECLARATION OF INPUT
@@ -48,19 +49,19 @@ C
       IERR = 0
       DENOM = YYYY(1)*YYYY(1) + YYYY(2)*YYYY(2)
       XNUM    =   XXXX(1)*YYYY(1) + XXXX(2)*YYYY(2)
-      IF (ABS(DENOM) .GE. 1.0  .OR.  ( ABS(DENOM) .LT. 1.0   .AND.
-     & ABS(XNUM)/HUGE(1.0_dp) .LT. ABS(DENOM) ) ) THEN
+      IF (ABS(DENOM) .GE. ONE  .OR.  ( ABS(DENOM) .LT. ONE   .AND.
+     & ABS(XNUM)/HUGE(ONE) .LT. ABS(DENOM) ) ) THEN
             ZZZZ(1) = XNUM/DENOM
           ELSE
-            ZZZZ(1) = HUGE(1.0_dp)
+            ZZZZ(1) = HUGE(ONE)
             IERR =1
           END IF
       XNUM    =   XXXX(2)*YYYY(1) - XXXX(1)*YYYY(2)
-      IF (ABS(DENOM) .GE. 1.0  .OR.  ( ABS(DENOM) .LT. 1.0   .AND.
-     & ABS(XNUM)/HUGE(1.0_dp) .LT. ABS(DENOM) ) ) THEN
+      IF (ABS(DENOM) .GE. ONE  .OR.  ( ABS(DENOM) .LT. ONE   .AND.
+     & ABS(XNUM)/HUGE(ONE) .LT. ABS(DENOM) ) ) THEN
             ZZZZ(2) = XNUM/DENOM
           ELSE
-            ZZZZ(2) = HUGE(1.0_dp)
+            ZZZZ(2) = HUGE(ONE)
             IERR =1
           END IF
       RETURN
@@ -216,6 +217,7 @@ C   IF THE PROJECTIVE TRANSFORMATION IS NOT SPECIFIED.
 C
 C  SUBROUTINES: MULP,POWP,DIVP.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO
       IMPLICIT NONE
 C
 C DECLARATION OF INPUT AND OUTPUT:
@@ -258,7 +260,7 @@ C
           END DO
         END DO
       END DO
-      TRM = 0.0
+      TRM = ZERO
       DO J=1,N
         DO K=1,NUMT(J)
           TRM(1,J,K)=COEF(J,K)
@@ -281,7 +283,7 @@ C
 C IF TERM DOES NOT INCLUDE X(M), SET PARTIAL DERIVATIVE OF TERM
 C   EQUAL TO ZERO.
           IF(KDEG(J,M,K) .EQ. 0) THEN
-            DTRM(1:2,J,M,K) = 0.0
+            DTRM(1:2,J,M,K) = ZERO
           ELSE
 C
 C IF TERM DOES INCLUDE X(M), TRY COMPUTING THE PARTIAL BY DIVIDING
@@ -295,7 +297,7 @@ C
 C IF DIVISION WOULD CAUSE OVERFLOW, GENERATE THE PARTIAL BY
 C   THE POLYNOMIAL FORMULA.
               DTRM(1,J,M,K)=COEF(J,K)
-              DTRM(2,J,M,K)=0.0
+              DTRM(2,J,M,K)=ZERO
               DO L=1,NP1
                 IF (L .EQ. M) CYCLE
                 CALL MULP(XX(1,J,L,K),DTRM(1,J,M,K),TEMP1)
@@ -340,6 +342,7 @@ C YP = DY/DS, AND  Y(S) = (LAMBDA(S), X(S)) .
 C
 C CALLS  DGEQPF , DNRM2 .
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE HOMPACK_INTERFACES, ONLY: F, FJAC, RHOJAC
       USE BLAS_INTERFACES, ONLY: DNRM2
       USE LAPACK_INTERFACES, ONLY: DGEQPF
@@ -385,7 +388,7 @@ C
             CALL FJAC(Y(2:NP1),TZ(1:N),K)
             KP1=K+1
             QR(:,KP1)=-Y(1)*TZ(1:N)
-            QR(K,KP1)=1.0+QR(K,KP1)
+            QR(K,KP1)= ONE + QR(K,KP1)
           END DO
         ELSE
 C
@@ -396,7 +399,7 @@ C
             CALL FJAC(Y(2:NP1),TZ(1:N),K)
             KP1=K+1
             QR(:,KP1)=Y(1)*TZ(1:N)
-            QR(K,KP1)=1.0-Y(1)+QR(K,KP1)
+            QR(K,KP1)=ONE - Y(1)+QR(K,KP1)
           END DO
         ENDIF
       ENDIF
@@ -408,12 +411,12 @@ C
 C
       CALL DGEQPF(N,NP1,QR,N,PIVOT,YP,ALPHA,K)
 C
-      IF (ABS(QR(N,N)) .LE. ABS(QR(1,1))*EPSILON(1.0_dp)) THEN 
+      IF (ABS(QR(N,N)) .LE. ABS(QR(1,1))*EPSILON(ONE)) THEN 
         IFLAG=4
         RETURN
       ENDIF 
 C COMPUTE KERNEL OF JACOBIAN, WHICH SPECIFIES YP=DY/DS.
-      TZ(NP1)=1.0
+      TZ(NP1)=ONE
       DO LW=1,N
         I=NP1-LW
         IK=I+1
@@ -421,7 +424,7 @@ C COMPUTE KERNEL OF JACOBIAN, WHICH SPECIFIES YP=DY/DS.
       END DO
       YPNORM=DNRM2(NP1,TZ,1)
       YP(PIVOT)=TZ/YPNORM
-      IF (DOT_PRODUCT(YP,YPOLD) .LT. 0.0) YP=-YP
+      IF (DOT_PRODUCT(YP,YPOLD) .LT. ZERO) YP=-YP
 C
 C SAVE CURRENT DERIVATIVE (= TANGENT VECTOR) IN  YPOLD .
       YPOLD=YP
@@ -435,6 +438,7 @@ C ORDINARY DIFFERENTIAL EQUATION  DY/DS = G(S,Y) , WHOSE SOLUTION
 C IS THE ZERO CURVE OF THE HOMOTOPY MAP.  S = ARC LENGTH,
 C YP = DY/DS, AND  Y(S) = (X(S), LAMBDA(S)) .
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE HOMPACK_INTERFACES, ONLY: F, FJACS, RHOJS
       USE HOMPACK_GLOBAL, ONLY: QR => QRSPARSE, ROWPOS, PP, COLPOS
       USE BLAS_INTERFACES, ONLY: DNRM2
@@ -474,7 +478,7 @@ C
           PP = PP - A(1:N)
           CALL FJACS(Y(1:N))
           QR = (-LAMBDA)*QR
-          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + 1.0
+          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + ONE
         ELSE
 C
 C   [QR | -PP] = [ LAMBDA*DF(X) + (1 - LAMBDA)*I | F(X) - X + A ] .
@@ -482,7 +486,7 @@ C
           PP = Y(1:N) - A(1:N) - PP
           CALL FJACS(Y(1:N))
           QR = LAMBDA*QR
-          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + 1.0 - LAMBDA
+          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + ONE - LAMBDA
         ENDIF
       ENDIF
       ELSE
@@ -515,7 +519,7 @@ C FIND INDEX JPOS OF DIAGONAL ELEMENT IN JTH ROW OF QR.
               IFLAG=4
               RETURN
             END DO
-            QR(JPOS) = QR(JPOS) + 1.0
+            QR(JPOS) = QR(JPOS) + ONE
           END DO
         ELSE
 C
@@ -534,7 +538,7 @@ C FIND INDEX JPOS OF DIAGONAL ELEMENT IN JTH ROW OF QR.
               IFLAG=4
               RETURN
             END DO
-            QR(JPOS) = QR(JPOS) + 1.0 - LAMBDA
+            QR(JPOS) = QR(JPOS) + ONE - LAMBDA
           END DO
         ENDIF
       ENDIF
@@ -554,10 +558,10 @@ C PRECONDITIONED CONJUGATE GRADIENT ALGORITHM.
 C
 C NORMALIZE TANGENT VECTOR YP.
       YPNORM=DNRM2(NP1,YP,1)
-      YP = (1.0/YPNORM)*YP
+      YP = (ONE/YPNORM)*YP
 C
 C CHOOSE UNIT TANGENT VECTOR DIRECTION TO MAINTAIN CONTINUITY.
-      IF (DOT_PRODUCT(YP,YPOLD) .LT. 0.0) YP = -YP
+      IF (DOT_PRODUCT(YP,YPOLD) .LT. ZERO) YP = -YP
 C
 C SAVE CURRENT DERIVATIVE (= TANGENT VECTOR) IN  YPOLD .
       YPOLD = YP
@@ -609,7 +613,7 @@ C DECLARATION OF INPUT AND OUTPUT:
       REAL(DP), INTENT(OUT):: G(2,N),DG(2,N)
 C
 C DECLARATION LOCAL OF VARIABLES
-      INTEGER:: I,J
+      INTEGER:: J
 C
 C COMPUTE THE (IDEG-1)-TH AND IDEG-TH POWER OF X
       DO J=1,N
@@ -667,6 +671,7 @@ C
 C
 C     No working storage is required by this routine.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       IMPLICIT NONE
 C
       INTEGER, INTENT(IN):: NN,NWK,MAXA(NN+1)
@@ -675,15 +680,15 @@ C
      &   L2,L3,M,M1,N1,NNN
       REAL(DP):: BET,DEL,DJ,G,GAM,GAM1,PHI,
      &   THE,THE1,XT1,XT2,ZET,ZET1
-      G=0.0
-      GAM=0.0
+      G=ZERO
+      GAM=ZERO
       DO I=1,NN
          K=MAXA(I)
          G=G+A(K)*A(K)
          GAM1=ABS(A(K))
          IF(GAM1.GT.GAM)GAM=GAM1
       END DO
-      ZET=0.0
+      ZET=ZERO
       DO I=1,NN
          K=MAXA(I)
          K1=MAXA(I+1)-1
@@ -691,18 +696,18 @@ C
          IF (K2.EQ.0) CYCLE
          L=K+1
          DO J=L,K1
-            G=G+2.0*A(J)*A(J)
+            G=G+2*A(J)*A(J)
             ZET1=ABS(A(J))
             IF(ZET1.GT.ZET)ZET=ZET1
          END DO
       END DO
       ZET=ZET/NN
-      DEL=EPSILON(1.0_dp)
+      DEL=EPSILON(ONE)
       BET=DEL
       IF (ZET .GT. BET) BET=ZET
       IF (GAM .GT. BET) BET=GAM
       G=SQRT(G)
-      IF (G .GT. 1.0) DEL=DEL*G
+      IF (G .GT. ONE) DEL=DEL*G
       DO I=1,NN
          N1=I-1
          KN=MAXA(I)
@@ -721,7 +726,7 @@ C
          END IF
          PHI=ABS(PHI)
          L=I+1
-         THE=0.0
+         THE=ZERO
          NNN=NN+1
          IF (L .NE. NNN) THEN
            DO J=L,NN
@@ -765,7 +770,7 @@ C
             A(M1)=A(M1)/A(KN)
          END DO
       END DO
-      RETURN
+C
       END SUBROUTINE GMFADS
 C
       SUBROUTINE GMRES(N, KDMAX, ITMAX, RHS, X, KVAL,
@@ -832,6 +837,7 @@ C
 C  CALLS DNRM2, ILUSOLVDS, MULTDS, MULT2DS, SOLVDS, AND INTERNAL
 C  SUBROUTINES MULM1 AND MULM2 AND INTERNAL FUNCTIONS APPL_HOUSE, HOUSE.
 C
+      USE HOMPACK_KINDS, ONLY: ONE, ZERO
       USE HOMPACK_GLOBAL, ONLY: AA=>QRSPARSE, ROWPOS, COLPOS, PP
       USE BLAS_INTERFACES, ONLY: DNRM2
       USE LAPACK_INTERFACES, ONLY: DLAIC1
@@ -887,7 +893,7 @@ C
       IFLAGC = 0
       IFLAGI = 1
       LENAA = ROWPOS(N)-1
-      TOL = MAX(100.0, 1.01*REAL(LENAA)/REAL(N))*EPSILON(1.0_dp)
+      TOL = REAL(MAX(1E2, 1.01*REAL(LENAA)/REAL(N)), DP)*EPSILON(ONE)
       VTEMP = X
       IF (PRESENT(ROWPOSP) .AND. PRESENT( COLPOSP)) THEN
         CALL MULM2(V(:,1),VTEMP)            ! MODE=2 
@@ -910,9 +916,9 @@ C
             RETURN
          ENDIF
       ENDIF
-      CNDMAX = 1.0/(50.0*EPSILON(1.0_dp))
+      CNDMAX = ONE/(50*EPSILON(ONE))
       IQUIT = 0
-      BIGCND = 0.0
+      BIGCND = ZERO
 C
 C FOR PRINTING:
 C
@@ -958,11 +964,11 @@ C
 C
 C FIND THE KD-TH ORTHOGONAL VECTOR.
 C
-      VTEMP = 0.0 
-      VTEMP(KD) = 1.0
+      VTEMP = ZERO
+      VTEMP(KD) = ONE
       DO I=KD,1,-1
         TEMP=V(I,I)
-        V(I,I)=1.0
+        V(I,I)=ONE
         CALL HREFX(N-I+1,V(I:N,I),TEMP,VTEMP(I:N))
         V(I,I)=TEMP
       END DO
@@ -985,11 +991,11 @@ C
       VTEMP(1:N)=VTEMP2(1:N)
       DO I=1,KD
         TEMP=V(I,I)
-        V(I,I)=1.0
+        V(I,I)=ONE
         CALL HREFX(N-I+1,V(I:N,I),TEMP,VTEMP(I:N))
         V(I,I)=TEMP
       END DO 
-      IF ( MAXVAL(ABS(VTEMP(KDP1:N))) .NE. 0.0) THEN
+      IF ( MAXVAL(ABS(VTEMP(KDP1:N))) .NE. ZERO) THEN
         V(KDP1+1:N, KDP1) = VTEMP(KDP1+1:N)
         CALL HREFG(N-KDP1+1,V(KDP1+1:N, KDP1),V(KDP1,KDP1), 
      &   VTEMP(KDP1))
@@ -1005,7 +1011,7 @@ C
 C
 C DETERMINE AND APPLY THE NEXT ROTATION. 
 C
-      IF (VTEMP(KDP1) .NE. 0.0) THEN
+      IF (VTEMP(KDP1) .NE. ZERO) THEN
         TEMP = VTEMP(KD)
         R(KD,KD) = SQRT(VTEMP(KD)**2 + VTEMP(KDP1)**2) 
         C(KD) = TEMP/R(KD,KD)
@@ -1019,8 +1025,8 @@ C
       IF (KD .EQ. 1) THEN 
         BIG = R(KD,KD) 
         SMALL = BIG 
-        SVBIG(1) = 1.0
-        SVSML(1) = 1.0
+        SVBIG(1) = ONE
+        SVSML(1) = ONE
       ELSE
         I = 1
         CALL DLAIC1(I, KD-1, SVBIG, BIG, R(1,KD), R(KD,KD),
@@ -1052,11 +1058,11 @@ C
 C
 C UPDATE W AND THE RESIDUAL NORM. 
 C
-      IF (VTEMP(KDP1) .NE. 0.0) THEN
+      IF (VTEMP(KDP1) .NE. ZERO) THEN
         W(KDP1)= -S(KD)*W(KD)
         W(KD) = C(KD)*W(KD)
       ELSE
-        W(KDP1) = 0.0
+        W(KDP1) = ZERO
       ENDIF 
       RSN = ABS(W(KDP1))
 C
@@ -1085,8 +1091,8 @@ C TEST FOR STAGNATION.
 C
       ELSE 
         TEMP = KD*LOG(TOL/RSN)/
-     &    LOG(RSN/((1.0 + 10.0*EPSILON(1.0_dp))*RSNOLD))
-        IF (TEMP .GE. 40.0*(ITMAX - ITNO)) THEN
+     &    LOG(RSN/((ONE + 10*EPSILON(ONE))*RSNOLD))
+        IF (TEMP .GE. REAL(40*(ITMAX - ITNO), DP)) THEN
           IF (KDMAX .LE. KDLIMIT-M) THEN
             IFLAGI = 3
             KDMAX = KDMAX + M ! INCREASE KDMAX BY M
@@ -1108,11 +1114,11 @@ C
 C
 C COMPUTE KD ORTHOGONAL VECTORS FROM HOUSEHOLDER VECTORS.
 C
-      VTEMP = 0.0
+      VTEMP = ZERO
       VTEMP(1:KD)=W(1:KD)
       DO I=KD,1,-1
         TEMP=V(I,I)
-        V(I,I)=1.0
+        V(I,I)=ONE
         CALL HREFX(N-I+1,V(I:N,I), TEMP, VTEMP(I:N))
         V(I,I)=TEMP
       END DO
@@ -1163,11 +1169,11 @@ C
             WRITE (IPRINT, 260) RSN     
  260        FORMAT(/,4X, '(TRUE) RESIDUAL NORM INCREASED TO',ES16.8)
           ENDIF
-          IF (RSN .LE. TOL**(2.0/3.0))  THEN
+          IF (RSN .LE. TOL**(2_DP/3_DP))  THEN
             IFLAGC = 0
           ELSE  IF (STRONG_VERSION) THEN
             IF (IPRINT .GT. 0) THEN
-              WRITE (IPRINT, 270) TOL**(2.0/3.0)                
+              WRITE (IPRINT, 270) TOL**(2_DP/3_DP)                
  270          FORMAT(/,4X,'(TRUE) RESIDUAL NORM IS LARGER THAN',ES16.8)
             ENDIF
             IFLAGC = 4
@@ -1178,15 +1184,15 @@ C
 C TEST FOR STAGNATION USING TRUE RESIDUAL NORM.
 C
         TEMP = KD*LOG(TOL/RSN)/
-     &     LOG(RSN/((1.0 + 10.0*EPSILON(1.0_dp))*RSNOLD))
-        IF (TEMP .GE. 70.0*(ITMAX - ITNO)) THEN
+     &     LOG(RSN/((ONE + 10*EPSILON(ONE))*RSNOLD))
+        IF (TEMP .GE. REAL(70*(ITMAX - ITNO), DP)) THEN
           IFLAGI = 3
           IF ( KDMAX .LE. KDLIMIT-M ) THEN
             KDMAX = KDMAX + M            ! INCREASE KDMAX
           ELSE IF (KDMAX .NE. KDLIMIT) THEN
             KDMAX = KDLIMIT
           END IF
-        ELSE  IF (TEMP .GE. 1000.0*(ITMAX - ITNO)) THEN
+        ELSE  IF (TEMP .GE. 1E3_DP*REAL(ITMAX - ITNO, DP)) THEN
           IFLAGC = 4
           EXIT OUTER
         END IF
@@ -1210,7 +1216,7 @@ C MATRIX-VECTOR MULTIPLY FOR MODE = 1.
 C 
         REAL(DP), INTENT(IN):: X(N) 
         REAL(DP), INTENT(OUT):: Y(N) 
-        Y = 0.0
+        Y = ZERO
         CALL MULTDS(Y(1:N-1), AA, X(1:N-1), ROWPOS(1:N),
      &    N-1, ROWPOS(N)-1)       
 C
@@ -1218,7 +1224,7 @@ C       RESULT MODIFIED ACCORDING TO KVAL.
 C
         Y(KVAL) = Y(KVAL)+X(N)
         IF (KVAL .LT. N) 
-     &    Y(N) = X(KVAL) + X(N)*(1.0/ABS(AA(ROWPOS(KVAL)))+1.0)
+     &    Y(N) = X(KVAL) + X(N)*(ONE/ABS(AA(ROWPOS(KVAL)))+ONE)
         RETURN
       END SUBROUTINE MULM1
 C       
@@ -1229,7 +1235,7 @@ C
         REAL(DP), INTENT(IN):: X(N)
         REAL(DP), INTENT(OUT):: Y(N) 
 C
-        Y = 0.0
+        Y = ZERO
         IF (IFLAG .NE. -2) THEN 
           CALL MULT2DS(Y(1:N-1), AA, X(1:N-1), ROWPOS(1:N), 
      &      COLPOS(1:LENAA), N-1, LENAA)
@@ -1311,11 +1317,9 @@ C
 !
 !  =====================================================================
 !
-!     .. Parameters ..
-      REAL(DP), PARAMETER:: ONE = 1.0_dp, ZERO = 0.0_dp
 !     .. Local Scalars ..
-      INTEGER::          J, KNT
-      REAL(DP)::   BETA, RSAFMN, SAFMIN, XNORM
+      INTEGER :: J, KNT
+      REAL(DP) :: BETA, RSAFMN, SAFMIN, XNORM
 !    
 !     .. Executable Statements ..
 !
@@ -1411,9 +1415,6 @@ C
 !          On exit, C is overwritten by H * C.
 !
 !  =====================================================================
-!
-!     ..  Parameters ..
-      REAL(DP), PARAMETER:: ONE=1.0_dp, ZERO=0.0_dp
 !
 !     .. Local Scalars ..
       REAL(DP):: SUM, T1, T10, T2, T3, T4, T5, T6, T7, T8, T9,
@@ -1659,7 +1660,7 @@ C
            C( 9 ) = C( 9 ) - SUM*T9
            C( 10 ) = C( 10 ) - SUM*T10
       END SELECT   
-      RETURN
+C
       END SUBROUTINE HREFX
 C
       END SUBROUTINE GMRES
@@ -1777,6 +1778,7 @@ C               with  IFLAG = 4 , and does not compute x.
 C
 C  Calls subroutines ILUFDS and GMRES.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE HOMPACK_GLOBAL, ONLY: AA => QRSPARSE, WORK => PAR, 
      &                          IWORK => IPAR, ROWPOS, PP, COLPOS
       IMPLICIT NONE
@@ -1812,7 +1814,7 @@ C
         ELSE
           ALLOCATE(WORK(NP1+LENAA+NN+2))
         END IF
-        WORK(1:NP1) = 0.0
+        WORK(1:NP1) = ZERO
       END IF
       IF (.NOT. ALLOCATED(IWORK)) THEN
         IF (IFLAG .EQ. -2) THEN
@@ -1854,10 +1856,10 @@ C       MERGE AA AND -PP INTO Q ONLY FOR IFLAG >= -1.
           END DO 
           IWORK(RIND+NP1) = ROWPOS(NN+2)+NN
         END IF
-        WORK(QIND+IWORK(RIND+NN)-1) = 1.0
+        WORK(QIND+IWORK(RIND+NN)-1) = ONE
         IWORK(CIND+IWORK(RIND+NN)-1) = K
         IF (K. LT. NP1) THEN
-          WORK(QIND+IWORK(RIND+NN)) = 0.0
+          WORK(QIND+IWORK(RIND+NN)) = ZERO
           IWORK(CIND+IWORK(RIND+NN)) = NP1
           IWORK(RIND+NP1) = IWORK(RIND+NP1)+1
         END IF
@@ -1872,7 +1874,7 @@ C
       IF (PRESENT(RHS)) THEN 
         RHSC(1:NN) = -RHS
       ELSE
-        RHSC(1:NN) = 0.0
+        RHSC(1:NN) = ZERO
       END IF
 C
 C CALL GMRES FOR THE Mx=b SYSTEM.
@@ -1973,6 +1975,7 @@ C    ONEML
 C
 C  SUBROUTINES:  GFUNP, FFUNP.
 C
+      USE HOMPACK_KINDS, ONLY: ONE
       IMPLICIT NONE
 C
 C DECLARATION OF INPUT, WORKSPACE, AND OUTPUT:
@@ -1991,7 +1994,7 @@ C DECLARATION OF LOCAL VARIABLES:
 C
       CALL GFUNP(N,IDEG,PDG,QDG,X,XDGM1,XDG,PXDGM1,PXDG,G,DG)
       CALL FFUNP(N,NUMT,MAXT,KDEG,COEF,CL,X,XX,TRM,DTRM,CLX,DXNP1,F,DF)
-      ONEML=1.0 - LAMBDA
+      ONEML=ONE - LAMBDA
       DO J=1,N
           J2=2*J
           J2M1=J2-1
@@ -2012,7 +2015,7 @@ C
           RHO(J2M1)      = LAMBDA*F(1,J) + ONEML* G(1,J)
           RHO(J2  )      = LAMBDA*F(2,J) + ONEML* G(2,J)
       END DO
-      RETURN
+C
       END SUBROUTINE HFUN1P
 C
       SUBROUTINE HFUNP(N,QDG,LAMBDA,X)
@@ -2119,6 +2122,7 @@ C     Output variables:
 C       B       the ILU factors of input matrix B.
 C-------------------------------------------------------------
 C
+      USE HOMPACK_KINDS, ONLY: ZERO
       IMPLICIT NONE
 C
       INTEGER, INTENT(IN):: LENB, NP1, ROWPOSP(NP1+1), COLPOSP(LENB)
@@ -2165,12 +2169,12 @@ C---------------------------------------  FIND VALUE OF L_{II}.
            ENDIF
            IF (COLPOSP(K) .EQ. I) THEN
               LII = B(K)
-              IF (DABS(LII) .EQ. 0.0) THEN
-                 LII = 0.00001
-                 B(K) = 0.00001
+              IF (DABS(LII) .EQ. ZERO) THEN
+                 LII = 0.00001_DP
+                 B(K) = 0.00001_DP
               ENDIF
            ELSE
-              LII = 0.00001
+              LII = 0.00001_DP
            ENDIF
 C---------------------------------------  UPDATE L OR U, AS NEEDED.
            IF (I .GE. J) THEN
@@ -2287,6 +2291,7 @@ C
 C R  IS USED IN SUBROUTINE  STRPTP  TO GENERATE SOLUTIONS TO G(X)=0.
 C
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE HOMPACK_GLOBAL, ONLY: PAR, IPAR
       IMPLICIT NONE
 C
@@ -2300,12 +2305,12 @@ C DECLARATIONS OF INPUT AND OUTPUT:
 C
 C DECLARATIONS OF LOCAL VARIABLES:
       INTEGER:: IERR,J,JJ,MAXT,N2,NP1
-      REAL(DP):: CCL(2,11),P(2,10),Q(2,10),ZERO
+      REAL(DP):: CCL(2,11),P(2,10),Q(2,10)
 C
       MAXT = MAXVAL(NUMT)
       N2 =2*N
       NP1=N+1
-      ZERO=0.0
+
       DO J=1,N
         IDEG(J)=MAXVAL(SUM(KDEG(J,1:N,1:NUMT(J)),DIM=1))
       END DO
@@ -2317,7 +2322,7 @@ C
 C       DON'T SCALE THE COEFFICIENTS.  SET  FACV  EQUAL TO NOMINAL 
 C       VALUES.
 C
-        FACV = 0.0
+        FACV = ZERO
       ELSE
 C
 C SET UP THE WORKSPACE FOR SUBROUTINE  SCLGNP  AND CALL  SCLGNP  TO
@@ -2440,9 +2445,9 @@ C SET EQUAL TO THE  CCL  VALUES.  OTHERWISE,  CL  IS SET
 C EQUAL TO NOMINAL VALUES.
 C
       IF (IFLG1 .EQ. 01  .OR.  IFLG1 .EQ. 00) THEN 
-        CL(1:2,1:N)=0.0
-        CL(1,NP1)=1.0
-        CL(2,NP1)=0.0
+        CL(1:2,1:N)=ZERO
+        CL(1,NP1)=ONE
+        CL(2,NP1)=ZERO
       ELSE
         DO J=1,NP1
           JJ=MOD(J-1,11)+1
@@ -2520,6 +2525,7 @@ C       Y       value of B*X.
 C
 C---------------------------------------------------------------------
 C
+      USE HOMPACK_KINDS, ONLY: ZERO
       IMPLICIT NONE
 C
       INTEGER, INTENT (IN):: LENB, N, ROWPOS(N+1), COLPOS(LENB)
@@ -2534,7 +2540,7 @@ C
         DO I = 1, N
          STRT = ROWPOS(I)
          FIN = ROWPOS(I+1)-1
-         TMP = 0.0
+         TMP = ZERO
          DO K = STRT, FIN
             TMP = TMP + B(K)*X(COLPOS(K))
          END DO 
@@ -2570,6 +2576,7 @@ C
 C       y -- real vector of length NN containing the product  AA*x .
 C
 C
+      USE HOMPACK_KINDS, ONLY: ZERO
       IMPLICIT NONE
 C
       INTEGER, INTENT(IN):: LENAA,NN,MAXA(NN+1)
@@ -2584,7 +2591,7 @@ C
         RETURN
       END IF
       DO I=1,NN
-        Y(I)=0.00
+        Y(I)=ZERO
       END DO
       DO I=1,NN
         KL=MAXA(I)
@@ -2602,7 +2609,7 @@ C
         KU=MAXA(I+1)-1
         IF (KU-KL .LT. 0) CYCLE
         II=I
-        B=0.00
+        B=ZERO
         DO KK=KL,KU
           II=II-1
           B=B+AA(KK)*X(II)
@@ -2641,6 +2648,7 @@ C
 C XNP1  IS THE PROJECTIVE COORDINATE "X(N+1)".  XNP1  EQUALS UNITY IF
 C   THE PROJECTIVE TRANSFORMATION IS NOT SPECIFIED.
 C
+      USE HOMPACK_KINDS, ONLY: ONE
       IMPLICIT NONE
 C
 C DECLARATIONS OF INPUT, WORKSPACE, AND OUTPUT:
@@ -2665,11 +2673,11 @@ C UNTRANSFORM VARIABLES
         X(2,J)=TEMP(2)
       END DO
 C UNSCALE VARIABLES
-      TEMP(1) = HUGE(1.0_dp)
+      TEMP(1) = HUGE(ONE)
       DO J=1,N
-        FAC=10.**FACV(J)
+        FAC=1E1_DP**FACV(J)
         DO I=1,2
-          IF( (ABS(X(I,J))/TEMP(1))*FAC .LT. 1.0 ) X(I,J)=FAC*X(I,J)
+          IF( (ABS(X(I,J))/TEMP(1))*FAC .LT. ONE ) X(I,J)=FAC*X(I,J)
         END DO
       END DO
 C
@@ -2781,6 +2789,7 @@ C                 with  IFLAG = 4 , and does not compute x.
 C
 C    Calls subroutines GMFADS and GMRES.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE HOMPACK_GLOBAL, ONLY: AA => QRSPARSE, WORK => PAR, ROWPOS, PP
       IMPLICIT NONE
 C
@@ -2809,7 +2818,7 @@ C
 C
       IF (.NOT. ALLOCATED(WORK)) THEN
         ALLOCATE(WORK(2*NP1+LENAA+NN+1))
-        WORK(1:2*NP1) = 0.0
+        WORK(1:2*NP1) = ZERO
       END IF
 C
 C     FIND THE ELEMENT OF LARGEST MAGNITUDE IN THE INITIAL VECTOR, AND
@@ -2825,10 +2834,10 @@ C
         WORK(QIND:QIND+LENAA-1) = AA(1:LENAA)
         ROWPOS(NP1) = LENAA+1
         ROWPOS(NN+2) = LENAA+NN+3-K
-        WORK(QIND+LENAA+NN+1-K) = 1.0
+        WORK(QIND+LENAA+NN+1-K) = ONE
         IF (K .LT. NP1) THEN
-          WORK(QIND+LENAA) = 1.0 + 1.0/ABS(AA(ROWPOS(K)))
-          WORK(QIND+LENAA+1:QIND+LENAA+NN-K) = 0.0
+          WORK(QIND+LENAA) = ONE + ONE/ABS(AA(ROWPOS(K)))
+          WORK(QIND+LENAA+1:QIND+LENAA+NN-K) = ZERO
         END IF
         CALL GMFADS(NP1, WORK(QIND:QIND+LENAA+NP1-K),
      &            ROWPOS(NN+2)-1, ROWPOS(1:NN+2))
@@ -2840,7 +2849,7 @@ C
       IF (PRESENT(RHS))  THEN
         RHSC(1:NN) = -RHS
       ELSE
-        RHSC(1:NN) = 0.0
+        RHSC(1:NN) = ZERO
       END IF
 C
 C CALL TO GMRES (MZ=B SYSTEM). 
@@ -2855,10 +2864,10 @@ C COMPUTE RIGHT HAND SIDE FOR  MZ=U.
 C
       RHSC(1:NN) = -PP(1:NN)
       IF (K .LT. NP1) THEN 
-        RHSC(K) = RHSC(K)-1.0
-        RHSC(NP1) = -(1.0+1.0/ABS(AA(ROWPOS(K))))
+        RHSC(K) = RHSC(K)-ONE
+        RHSC(NP1) = -(ONE + ONE/ABS(AA(ROWPOS(K))))
       ELSE
-        RHSC(NP1) = 0.0
+        RHSC(NP1) = ZERO
       END IF
 C
 C CALL TO GMRES (MZ=U SYSTEM).      
@@ -2871,7 +2880,7 @@ C
 C
 C COMPUTE THE FINAL SOLUTION BY SHERMAN-MORRISON FORMULA.
 C
-      STARTK = -WORK(ZBIND+NN)/(1.0+WORK(ZUIND+NN))
+      STARTK = -WORK(ZBIND+NN)/(ONE + WORK(ZUIND+NN))
       START(1:NP1) = WORK(ZBIND:ZBIND+NN) + STARTK*WORK(ZUIND:ZUIND+NN)
 C
       END SUBROUTINE PCGDS
@@ -2903,6 +2912,7 @@ C       REAL PART OF YYYY AND YYYY(2) = IMAGINARY PART OF YYYY.
 C
 C SUBROUTINES: COS, SIN, ATAN2, DNRM2
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACEs, ONLY: DNRM2
       IMPLICIT NONE
 C
@@ -2917,8 +2927,8 @@ C DECLARATION OF VARIABLES
       REAL(DP):: R,RR,T,TT
 C
       IF (NNNN .EQ. 0) THEN
-          YYYY(1)=1.
-          YYYY(2)=0.
+          YYYY(1)=ONE
+          YYYY(2)=ZERO
           RETURN
       ENDIF
       IF (NNNN .EQ. 1) THEN
@@ -2927,9 +2937,9 @@ C
           RETURN
       ENDIF
       R = DNRM2(2,XXXX,1)
-      IF (R .EQ. 0.0) THEN
-          YYYY(1)=0.0
-          YYYY(2)=0.0
+      IF (R .EQ. ZERO) THEN
+          YYYY(1)=ZERO
+          YYYY(2)=ZERO
           RETURN
       END IF
       RR= R**NNNN
@@ -2992,6 +3002,7 @@ C  THIS CODE IS A MODIFICATION OF THE CODE ZEROIN WHICH IS COMPLETELY
 C  EXPLAINED AND DOCUMENTED IN THE TEXT  NUMERICAL COMPUTING:  AN
 C  INTRODUCTION,  BY L. F. SHAMPINE AND R. C. ALLEN.
 C
+      USE HOMPACK_KINDS, ONLY: ONE, ZERO
       IMPLICIT NONE
 C
       REAL(DP):: A,ABSERR,ACBS,ACMB,AE,B,C,CMB,FA,FB,
@@ -3002,9 +3013,9 @@ C
       IF(IFLAG.GE.0) GO TO 100
       IFLAG=ABS(IFLAG)
       GO TO (200,300,400), IFLAG
-  100 U=EPSILON(1.0_dp)
+  100 U=EPSILON(ONE)
       RE=MAX(RELERR,U)
-      AE=MAX(ABSERR,0.0_dp)
+      AE=MAX(ABSERR,ZERO)
       IC=0
       ACBS=ABS(B-C)
       A=C
@@ -3029,7 +3040,7 @@ C
       FB=FC
       C=A
       FC=FA
-    2 CMB=0.5*(C-B)
+    2 CMB=(C-B)/2
       ACMB=ABS(CMB)
       TOL=RE*ABS(B)+AE
 C
@@ -3044,7 +3055,7 @@ C  FORM IS USED TO PREVENT OVERFLOW.
 C
       P=(B-A)*FB
       Q=FA-FB
-      IF(P.GE.0.0)GO TO 3
+      IF (P .GE. ZERO) GO TO 3
       P=-P
       Q=-Q
 C
@@ -3055,7 +3066,7 @@ C
       FA=FB
       IC=IC+1
       IF(IC.LT.4)GO TO 4
-      IF(8.0*ACMB.GE.ACBS)GO TO 6
+      IF(8*ACMB.GE.ACBS)GO TO 6
       IC=0
       ACBS=ACMB
 C
@@ -3079,7 +3090,7 @@ C
 C
 C  USE BISECTION.
 C
-    6 B=0.5*(C+B)
+    6 B=(C+B)/2
 C
 C  HAVE COMPLETED COMPUTATION FOR NEW ITERATE B.
 C
@@ -3087,16 +3098,16 @@ C
       IFLAG=-3
       RETURN
   400 FB=FT
-      IF(FB.EQ.0.0)GO TO 9
+      IF(FB.EQ.ZERO)GO TO 9
       KOUNT=KOUNT+1
-      IF(SIGN(1.0_dp,FB).NE.SIGN(1.0_dp,FC))GO TO 1
+      IF(SIGN(ONE,FB).NE.SIGN(ONE,FC))GO TO 1
       C=A
       FC=FA
       GO TO 1
 C
 C FINISHED.  SET IFLAG.
 C
-    8 IF(SIGN(1.0_dp,FB).EQ.SIGN(1.0_dp,FC))GO TO 11
+    8 IF(SIGN(ONE,FB).EQ.SIGN(ONE,FC))GO TO 11
       IF(ABS(FB).GT.FX)GO TO 10
       IFLAG=1
       RETURN
@@ -3190,6 +3201,7 @@ C
 C
 C CALLS  DNRM2 , ROOT , TANGNF .
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACES, ONLY: DNRM2
       IMPLICIT NONE
 C
@@ -3218,9 +3230,9 @@ C
      &   DD001(F0,FP0,F1,DELS))*S + FP0)*S + F0
 C
 C
-      U=EPSILON(1.0_dp)
+      U=EPSILON(ONE)
       RERR=MAX(RELERR,U)
-      AERR=MAX(ABSERR,0.0_dp)
+      AERR=MAX(ABSERR,ZERO)
       NP1=N+1
 C
 C THE LIMIT ON THE NUMBER OF ITERATIONS ALLOWED MAY BE CHANGED BY
@@ -3236,12 +3248,12 @@ C CORRESPONDING TO  LAMBDA = 1 .  THE TWO POINTS ON THE ZERO CURVE ARE
 C ALWAYS CHOSEN TO BRACKET LAMBDA=1, WITH THE BRACKETING INTERVAL
 C ALWAYS BEING [0, DELS].
 C
-      SA=0.0
+      SA=ZERO
       SB=DELS
       LCODE=1
 130   CALL ROOT(SOUT,QSOUT,SA,SB,RERR,AERR,LCODE)
       IF (LCODE .GT. 0) GO TO 140
-      QSOUT=QOFS(YOLD(1),YPOLD(1),Y(1),YP(1),DELS,SOUT) - 1.0
+      QSOUT=QOFS(YOLD(1),YPOLD(1),Y(1),YP(1),DELS,SOUT) - ONE
       GO TO 130
 C IF LAMBDA = 1 WERE BRACKETED,  ROOT  CANNOT FAIL.
 140   IF (LCODE .GT. 2) THEN
@@ -3281,7 +3293,7 @@ C
 C
 C CHECK FOR CONVERGENCE.
 C
-      IF ((ABS(W(1)-1.0) .LE. RERR+AERR) .AND.
+      IF ((ABS(W(1)-ONE) .LE. RERR+AERR) .AND.
      &    (DNRM2(NP1,TZ,1) .LE. RERR*DNRM2(N,W(2:NP1),1)+AERR)) THEN
         Y = W
         RETURN
@@ -3289,7 +3301,7 @@ C
 C
 C PREPARE FOR NEXT ITERATION.
 C
-      IF (ABS(W(1)-1.0) .LE. RERR+AERR) THEN
+      IF (ABS(W(1)-ONE) .LE. RERR+AERR) THEN
          YPOLD=WP
          CYCLE
       ENDIF
@@ -3303,7 +3315,7 @@ C    UPDATE  YP  SUCH THAT  YP  IS THE MOST RECENT POINT
 C    OPPOSITE OF  LAMBDA = 1  FROM  Y .  SET  BRACK = .TRUE.  IFF
 C    Y  AND  YOLD  BRACKET  LAMBDA = 1  SO THAT  YP = YOLD .
 C
-          IF ((Y(1)-1.0)*(YOLD(1)-1.0) .GT. 0) THEN
+          IF ((Y(1)-ONE)*(YOLD(1)-ONE) .GT. 0) THEN
             BRACK = .FALSE.
           ELSE
             BRACK = .TRUE.
@@ -3318,7 +3330,7 @@ C
 C       COMPUTE  TZ  FOR THE LINEAR PREDICTOR   W = Y + TZ,
 C           WHERE  TZ = SA*(YOLD-Y).
 C
-          SA = (1.0-Y(1))/(YOLD(1)-Y(1))
+          SA = (ONE-Y(1))/(YOLD(1)-Y(1))
           TZ = SA*(YOLD - Y)
 C
 C       TO INSURE STABILITY, THE LINEAR PREDICTION MUST BE NO FARTHER
@@ -3331,7 +3343,7 @@ C
 C
 C             COMPUTE  TZ = SA*(YP-Y).
 C
-              SA = (1.0-Y(1))/(YP(1)-Y(1))
+              SA = (ONE-Y(1))/(YP(1)-Y(1))
               TZ = SA*(YP - Y)
             END IF
           END IF
@@ -3436,6 +3448,7 @@ C
 C
 C CALLS  DNRM2 , ROOT , TANGNS .
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACES, ONLY: DNRM2
       IMPLICIT NONE
 C
@@ -3472,9 +3485,9 @@ C
 C
 C ***** END OF SPECIFICATION INFORMATION. *****
 C
-      U=EPSILON(1.0_dp)
+      U=EPSILON(ONE)
       RERR=MAX(RELERR,U)
-      AERR=MAX(ABSERR,0.0_dp)
+      AERR=MAX(ABSERR,ZERO)
       NP1=N+1
       TZ=Y - YOLD
       DELS=DNRM2(NP1,TZ,1)
@@ -3485,12 +3498,12 @@ C CORRESPONDING TO  LAMBDA = 1 .  THE TWO POINTS ON THE ZERO CURVE ARE
 C ALWAYS CHOSEN TO BRACKET LAMBDA=1, WITH THE BRACKETING INTERVAL
 C ALWAYS BEING [0, DELS].
 C
-      SA=0.0
+      SA=ZERO
       SB=DELS
       LCODE=1
 130   CALL ROOT(SOUT,QSOUT,SA,SB,RERR,AERR,LCODE)
       IF (LCODE .GT. 0) GO TO 140
-      QSOUT=QOFS(YOLD(NP1),YPOLD(NP1),Y(NP1),YP(NP1),DELS,SOUT) - 1.0
+      QSOUT=QOFS(YOLD(NP1),YPOLD(NP1),Y(NP1),YP(NP1),DELS,SOUT) - ONE
       GO TO 130
 C IF LAMBDA = 1 WERE BRACKETED,  ROOT  CANNOT FAIL.
 140   IF (LCODE .GT. 2) THEN
@@ -3520,7 +3533,7 @@ C
 C
       DO JUDY = 1,LIMIT         ! ***** MAIN LOOP. *****
 C CALCULATE NEWTON STEP AT CURRENT ESTIMATE  W .
-      SA = -1.0
+      SA = -ONE
       CALL TANGNS(SA,W,WP,TZ,YPOLD,A,MODE,LENQR,NFE,N,IFLAG)
       IF (IFLAG .GT. 0) RETURN
 C
@@ -3530,7 +3543,7 @@ C
 C
 C CHECK FOR CONVERGENCE.
 C
-      IF ((ABS(W(NP1)-1.0) .LE. RERR+AERR) .AND.
+      IF ((ABS(W(NP1)-ONE) .LE. RERR+AERR) .AND.
      &    (DNRM2(NP1,TZ,1) .LE. RERR*DNRM2(N,W(1:N),1)+AERR)) THEN
         Y = W
         RETURN
@@ -3538,7 +3551,7 @@ C
 C
 C PREPARE FOR NEXT ITERATION.
 C
-      IF (ABS(W(NP1)-1.0) .LE. RERR+AERR) THEN
+      IF (ABS(W(NP1)-ONE) .LE. RERR+AERR) THEN
          YPOLD=WP
          CYCLE
       ENDIF
@@ -3552,7 +3565,7 @@ C    UPDATE  YP  SUCH THAT  YP  IS THE MOST RECENT POINT
 C    OPPOSITE OF  LAMBDA = 1  FROM  Y .  SET  BRACK = .TRUE.  IFF
 C    Y  AND  YOLD  BRACKET  LAMBDA = 1  SO THAT  YP = YOLD .
 C
-          IF ((Y(NP1)-1.0)*(YOLD(NP1)-1.0) .GT. 0) THEN
+          IF ((Y(NP1)-ONE)*(YOLD(NP1)-ONE) .GT. ZERO) THEN
             BRACK = .FALSE.
           ELSE
             BRACK = .TRUE.
@@ -3567,7 +3580,7 @@ C
 C       COMPUTE  TZ  FOR THE LINEAR PREDICTOR   W = Y + TZ,
 C           WHERE  TZ = SA*(YOLD-Y).
 C
-          SA = (1.0-Y(NP1))/(YOLD(NP1)-Y(NP1))
+          SA = (ONE-Y(NP1))/(YOLD(NP1)-Y(NP1))
           TZ = SA*(YOLD - Y)
 C
 C       TO INSURE STABILITY, THE LINEAR PREDICTION MUST BE NO FARTHER
@@ -3580,7 +3593,7 @@ C
 C
 C             COMPUTE  TZ = SA*(YP-Y).
 C
-              SA = (1.0-Y(NP1))/(YP(NP1)-Y(NP1))
+              SA = (ONE-Y(NP1))/(YP(NP1)-Y(NP1))
               TZ = SA*(YP - Y)
             END IF
           END IF
@@ -3714,6 +3727,7 @@ C
 C
 C Calls  DNRM2 , ROOT .
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACES, ONLY: DNRM2
       IMPLICIT NONE
 C
@@ -3763,9 +3777,9 @@ C
       IF (IFLAG < -2) THEN
         GO TO (100,110,130,210,200), ABS(IFLAG)/10
       ENDIF
-      U=EPSILON(1.0_dp)
+      U=EPSILON(ONE)
       RERR=MAX(RELERR,U)
-      AERR=MAX(ABSERR,0.0_dp)
+      AERR=MAX(ABSERR,ZERO)
 C
 C THE LIMIT ON THE NUMBER OF ITERATIONS ALLOWED MAY BE CHANGED BY
 C CHANGING THE FOLLOWING STATEMENT:
@@ -3791,7 +3805,7 @@ C CORRESPONDING TO  G(Q(S)) = 0 .  THE TWO POINTS ON THE ZERO CURVE ARE
 C ALWAYS CHOSEN TO BRACKET  G(Y(S)) = 0, WITH THE BRACKETING INTERVAL
 C ALWAYS BEING [0, DELS].
 C
-      SA=0.0
+      SA=ZERO
       SB=DELS
       LCODE=1
 130   DO
@@ -3895,10 +3909,10 @@ C     COMPUTE  TZ  FOR THE LINEAR PREDICTOR   W = Y + TZ,
 C     WHERE  TZ = SA*(YOLD-Y).
 C
       S = ABS(GOFY - GOFYOLD)
-      IF (S .GE. 1.0) THEN
+      IF (S .GE. ONE) THEN
         SA = GOFY/(GOFY - GOFYOLD)
         TZ = SA*(YOLD - Y)
-      ELSE IF (ANY(ABS(GOFY*(YOLD-Y)) .GE. S*HUGE(1.0_dp))) THEN
+      ELSE IF (ANY(ABS(GOFY*(YOLD-Y)) .GE. S*HUGE(ONE))) THEN
         TZ = DELS
       ELSE
         SA = GOFY/(GOFY - GOFYOLD)
@@ -4027,6 +4041,7 @@ C CALLS  DGEMV, DNRM2, DTPSV, F (OR RHO), ROOT, UPQRQF.
 C
 C ***** DECLARATIONS ***** 
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE HOMPACK_INTERFACES, ONLY: F, RHO
       USE BLAS_INTERFACES, ONLY: DNRM2, DGEMV, DTPSV
       IMPLICIT NONE
@@ -4034,8 +4049,8 @@ C
 C LOCAL VARIABLES 
 C
       REAL(DP):: AERR, DD001, DD0011, DD01, DD011, DELS, ETA, 
-     &   ONE, P0, P1, PP0, PP1, QSOUT, RERR, S, SA, SB, SOUT,
-     &   U, ZERO, QOFS
+     &   P0, P1, PP0, PP1, QSOUT, RERR, S, SA, SB, SOUT,
+     &   U, QOFS
       INTEGER:: ISTEP, I, LCODE, LIMIT,NP1
       LOGICAL:: BRACK
 C
@@ -4070,13 +4085,11 @@ C
 C ETA = PARAMETER FOR BROYDEN'S UPDATE.
 C LIMIT = MAXIMUM NUMBER OF ITERATIONS ALLOWED.
 C
-      ONE=1.0
-      ZERO=0.0
-      U=EPSILON(1.0_dp)
+      U=EPSILON(ONE)
       RERR=MAX(RELERR,U)
       AERR=MAX(ABSERR,ZERO)
       NP1=N+1
-      ETA = 100.0*U
+      ETA = 100*U
       LIMIT = 2*(INT(ABS(LOG10(AERR+RERR)))+1)
 C
 C F0 = (RHO(Y), YP*Y) TRANSPOSE.
@@ -4091,7 +4104,7 @@ C
 C ZERO FINDING PROBLEM.
 C
         CALL F(Y(2:NP1),F0(1:N))
-        F0(1:N) = Y(1)*F0(1:N) + (1.0-Y(1))*(Y(2:NP1)-A(1:N))
+        F0(1:N) = Y(1)*F0(1:N) + (ONE-Y(1))*(Y(2:NP1)-A(1:N))
       ELSE
 C
 C FIXED POINT PROBLEM.
@@ -4116,12 +4129,12 @@ C CORRESPONDING TO  LAMBDA = 1.  THE TWO POINTS ON THE ZERO CURVE ARE
 C ALWAYS CHOSEN TO BRACKET  LAMBDA=1, WITH THE BRACKETING INTERVAL
 C ALWAYS BEING [0, DELS].
 C
-      SA=0.0
+      SA=ZERO
       SB=DELS
       LCODE=1
  40     CALL ROOT(SOUT,QSOUT,SA,SB,RERR,AERR,LCODE)
         IF (LCODE .GT. 0) GO TO 50
-        QSOUT=QOFS(YOLD(1),YPOLD(1),Y(1),YP(1),DELS,SOUT) - 1.0
+        QSOUT=QOFS(YOLD(1),YPOLD(1),Y(1),YP(1),DELS,SOUT) - ONE
       GO TO 40
 C
 C IF  LAMBDA = 1  WERE BRACKETED,  ROOT  CANNOT FAIL.
@@ -4166,7 +4179,7 @@ C
           CALL RHO(A,Z(1),Z(2:NP1),F1(1:N))
         ELSE IF (IFLAG .EQ. -1) THEN
           CALL F(Z(2:NP1),F1(1:N))
-          F1(1:N) = Z(1)*F1(1:N) + (1.0-Z(1))*(Z(2:NP1)-A(1:N))
+          F1(1:N) = Z(1)*F1(1:N) + (ONE-Z(1))*(Z(2:NP1)-A(1:N))
         ELSE
           CALL F(Z(2:NP1),F1(1:N))
           F1(1:N) = Z(1)*(A(1:N)-F1(1:N))+Z(2:NP1)-A(1:N)
@@ -4183,7 +4196,7 @@ C
 C COMPUTE NEWTON STEP.
 C
         T(1:N) = -F1(1:N)
-        T(NP1) = 0.0
+        T(NP1) = ZERO
         CALL DGEMV('T',NP1,NP1,ONE,Q,NP1,T,1,ZERO,DZ,1)
         CALL DTPSV('U', 'N', 'N', NP1, R, DZ, 1)
 C
@@ -4194,7 +4207,7 @@ C
 C
 C CHECK FOR CONVERGENCE. 
 C
-        IF ((ABS(Z(1)-1.0) .LE. RERR+AERR) .AND. 
+        IF ((ABS(Z(1)-ONE) .LE. RERR+AERR) .AND. 
      &        (DNRM2(NP1,DZ,1) .LE. RERR*DNRM2(N,Z(2),1)+AERR)) THEN
            Y = Z
            RETURN
@@ -4207,7 +4220,7 @@ C
 C IF  Z(1) = 1.0  THEN PERFORM QUASI-NEWTON ITERATION AGAIN
 C WITHOUT COMPUTING A NEW PREDICTOR.
 C
-        IF (ABS(Z(1)-1.0) .LE. RERR+AERR) THEN
+        IF (ABS(Z(1)-ONE) .LE. RERR+AERR) THEN
            DZ = Z - W
            CYCLE
         END IF
@@ -4221,7 +4234,7 @@ C UPDATE  YPOLD  SUCH THAT  YPOLD  IS THE MOST RECENT POINT
 C OPPOSITE OF  LAMBDA=1  FROM  Y.  SET  BRACK = .TRUE.  IFF  
 C Y & YOLD  BRACKET  LAMBDA=1  SO THAT  YPOLD=YOLD. 
 C
-        IF ((Y(1)-1.0)*(YOLD(1)-1.0) .GT. 0) THEN
+        IF ((Y(1)-ONE)*(YOLD(1)-ONE) .GT. 0) THEN
           BRACK = .FALSE.
         ELSE
           BRACK = .TRUE.
@@ -4236,7 +4249,7 @@ C
 C COMPUTE  DZ  FOR THE LINEAR PREDICTOR   Z = Y + DZ,
 C           WHERE  DZ = SA*(YOLD-Y).
 C
-        SA = (1.0-Y(1))/(YOLD(1)-Y(1))
+        SA = (ONE-Y(1))/(YOLD(1)-Y(1))
         DZ = SA*(YOLD - Y)
 C
 C TO INSURE STABILITY, THE LINEAR PREDICTION MUST BE NO FARTHER 
@@ -4249,7 +4262,7 @@ C
 C
 C COMPUTE  DZ = SA*(YPOLD-Y).
 C          
-            SA = (1.0-Y(1))/(YPOLD(1)-Y(1))
+            SA = (ONE-Y(1))/(YPOLD(1)-Y(1))
             DZ = SA*(YPOLD - Y)
           END IF
         END IF
@@ -4346,6 +4359,7 @@ C   =0  IF SCALING MATRIX, ALPHA, IS WELL CONDITIONED.
 C   =1  OTHERWISE.  IN THIS CASE, ALPHA IS "REPAIRED" AND A
 C         SCALING IS COMPUTED.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACES, ONLY: DTRSV, IDAMAX
       USE LAPACK_INTERFACES, ONLY: DGEQRF, DORMQR
       IMPLICIT NONE
@@ -4371,8 +4385,8 @@ C
 C
       IERR=0
       N2=2*N
-      LMFPN=HUGE(1.0_dp)
-      NTUR=EPSILON(1.0_dp)*N
+      LMFPN=HUGE(ONE)
+      NTUR=EPSILON(ONE)*N
       LENR=N*(N+1)/2
 C
 C  DELETE NEAR ZERO TERMS
@@ -4396,26 +4410,26 @@ C SKIP OVER THE GENERATION AND DECOMPOSITON OF MATRIX ALPHA IF MODE=1
       MODE0: IF (MODE .EQ. 0) THEN
 C
 C GENERATE THE MATRIX ALPHA
-      ALPHA(1:N,1:N) = 0.0
+      ALPHA(1:N,1:N) = ZERO
       DO S=1,N
-        ALPHA(S,S)=NNUMT(S)
+        ALPHA(S,S)=REAL(NNUMT(S), DP)
       END DO
       DO I=1,N
-        ALPHA(N+1:2*N,I) = SUM(DDEG(I,1:N,1:NNUMT(I)),DIM=2)
+        ALPHA(N+1:2*N,I) = REAL(SUM(DDEG(I,1:N,1:NNUMT(I)),DIM=2), DP)
       END DO
       DO S=1,N
         DO K=1,N
           TUM=0
           DO I=1,N
             DO J=1,NNUMT(I)
-              TUM=TUM+DDEG(I,S,J)*DDEG(I,K,J)
+              TUM = TUM + REAL(DDEG(I,S,J)*DDEG(I,K,J), DP)
             END DO
           END DO
           ALPHA(N+S,N+K)=TUM
         END DO
       END DO
       DO S=1,N
-        ALPHA(S,N+1:2*N) = SUM(DDEG(S,1:N,1:NNUMT(S)),DIM=2)
+        ALPHA(S,N+1:2*N) = REAL(SUM(DDEG(S,1:N,1:NNUMT(S)),DIM=2), DP)
       END DO
 C
 C COMPUTE QR FACTORIZATION OF MATRIX ALPHA
@@ -4452,7 +4466,7 @@ C GENERATE THE COLUMN BETA
         TUM=0
         DO I=1,N
           TUM = TUM + DOT_PRODUCT(COESCL(I,1:NNUMT(I)),
-     &      DDEG(I,S,1:NNUMT(I)))
+     &      REAL(DDEG(I,S,1:NNUMT(I)), DP))
         END DO
         BETA(N+S)=-TUM
       END DO
@@ -4468,12 +4482,12 @@ C GENERATE FACE, FACV, AND THE MATRIX COESCL
       DO I=1,N
         DO J=1,NUMT(I)
           DUM = ABS(COEF(I,J))
-          IF (DUM .EQ. 0.0) THEN
-            COESCL(I,J) = 0.0
+          IF (DUM .EQ. ZERO) THEN
+            COESCL(I,J) = ZERO
           ELSE
-            TUM = FACE(I) + LOG10( DUM ) + DOT_PRODUCT(FACV(1:N),
-     &        DEG(I,1:N,J))
-            COESCL(I,J) = SIGN(10.0**(TUM), COEF(I,J))
+            TUM = FACE(I) + LOG10( DUM ) 
+     &      + DOT_PRODUCT(FACV(1:N), REAL(DEG(I,1:N,J), DP))
+            COESCL(I,J) = SIGN(1E1_DP**(TUM), COEF(I,J))
           ENDIF
         END DO
       END DO
@@ -4543,6 +4557,7 @@ C                 1984.
 C***ROUTINES CALLED  (NONE) 
 C***END PROLOGUE  SINTRP
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       IMPLICIT NONE
 C
       REAL(DP):: ALP,ALPHA,C,G,GAMMA,GDI,GDIF,GI,GTEMP,
@@ -4561,14 +4576,14 @@ C
       HI = XOUT - XOLD
       H = X - XOLD
       XI = HI/H 
-      XIM1 = XI - 1.
+      XIM1 = XI - ONE
 C 
 C   INITIALIZE WTEMP(*) FOR COMPUTING GTEMP(*)
 C 
       XIQ = XI
       DO IQ = 1,KP1
         XIQ = XI*XIQ
-        TEMP1 = IQ*(IQ+1) 
+        TEMP1 = REAL(IQ*(IQ+1), DP) 
         WTEMP(IQ) = XIQ/TEMP1 
       END DO
 C 
@@ -4582,7 +4597,7 @@ C
           GDI = W(IW)
           M = KOLD - IW + 3 
         ELSE
-          GDI = 1.0/TEMP1 
+          GDI = ONE/TEMP1 
           M = 2 
         END IF
         IF (M .LE. KOLD) THEN
@@ -4595,13 +4610,13 @@ C
 C   COMPUTE GTEMP(*) AND C(*) 
 C 
       GTEMP(1) = XI 
-      GTEMP(2) = 0.5*XI*XI
-      C(1) = 1.0
+      GTEMP(2) = XI*XI/2
+      C(1) = ONE
       C(2) = XI 
       IF (KOLD .GE. 2) THEN
         DO I = 2,KOLD
           ALP = ALPHA(I)
-          GAMMA = 1.0 + XIM1*ALP
+          GAMMA = ONE + XIM1*ALP
           L = KP2 - I 
           DO JQ = 1,L
             WTEMP(JQ) = GAMMA*WTEMP(JQ) - ALP*WTEMP(JQ+1) 
@@ -4620,8 +4635,8 @@ C
 C   INTERPOLATE FOR THE SOLUTION -- YOUT
 C   AND FOR THE DERIVATIVE OF THE SOLUTION -- YPOUT 
 C 
-      YOUT = 0.0 
-      YPOUT = 0.0
+      YOUT = ZERO 
+      YPOUT = ZERO
       DO J = 1,KOLD 
         I = KP2 - J 
         GDIF = G(I) - G(I-1)
@@ -4630,11 +4645,11 @@ C
         YOUT = YOUT + TEMP2*PHI(:,I)
         YPOUT = YPOUT + TEMP3*PHI(:,I)
       END DO
-      YOUT = ((1.0 - SIGMA)*P + SIGMA*Y) +
+
+      YOUT = ((ONE - SIGMA)*P + SIGMA*Y) +
      &             H*(YOUT + (GTEMP(1) - SIGMA*G(1))*PHI(:,1))
       YPOUT = HMU*(P - Y) + (YPOUT + (C(1) + RMU*G(1))*PHI(:,1))
 C 
-      RETURN
       END SUBROUTINE SINTRP
 C
       SUBROUTINE SOLVDS(NN,A,NWK,MAXA,V)
@@ -4666,6 +4681,7 @@ C
 C
 C     No working storage is required by this routine.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO
       IMPLICIT NONE
 C
       INTEGER, INTENT(IN):: NN,MAXA(NN+1),NWK
@@ -4679,7 +4695,7 @@ C local variables.
          KU=MAXA(N+1)-1
          IF (KU-KL < 0) CYCLE
          K=N
-         C=0.0
+         C=ZERO
          DO KK=KL,KU
             K=K-1
             C=C+A(KK)*V(K)
@@ -4704,7 +4720,7 @@ C local variables.
          END IF
          N = N - 1
       END DO
-      RETURN
+C
       END SUBROUTINE SOLVDS
 C
       SUBROUTINE STEPDS(F,NEQN,Y,X,H,EPS,WT,START,HOLD,K,KOLD,
@@ -4852,6 +4868,7 @@ C***REFERENCES  SHAMPINE L.F., GORDON M.K., *SOLVING ORDINARY
 C                 DIFFERENTIAL EQUATIONS WITH ODE, STEP, AND INTRP*,
 C                 SLA-73-1060, SANDIA LABORATORIES, 1973. 
 C
+      USE HOMPACK_KINDS, ONLY: ONE, ZERO
       IMPLICIT NONE
 C 
       REAL(DP):: ABSH,EPS,ERK,ERKM1,ERKM2,ERKP1,ERR,FOURU,H,
@@ -4878,13 +4895,15 @@ C
         REAL(DP):: A(NDIMA),S,Y(N+1),YP(N+1),YPOLD(N+1)
         END SUBROUTINE F
       END INTERFACE
-C 
+C
       REAL(DP), DIMENSION(13)::
-     &  TWO=(/2.0,4.0,8.0,16.0,32.0,64.0,128.0,256.0,512.0,1024.0,
-     &  2048.0,4096.0,8192.0/),
-     &  GSTR=(/0.500,0.0833,0.0417,0.0264,0.0188,0.0143,0.0114,0.00936,
-     &  0.00789,0.00679,0.00592,0.00524,0.00468/)
-C 
+     &  TWO=(/2.0_DP, 4.0_DP, 8.0_DP, 16.0_DP, 32.0_DP, 64.0_DP,
+     &  128.0_DP, 256.0_DP, 512.0_DP, 1024.0_DP, 2048.0_DP,
+     &  4096.0_DP, 8192.0_DP/),
+     &  GSTR=(/0.500_DP, 0.0833_DP, 0.0417_DP, 0.0264_DP,
+     &  0.0188_DP, 0.0143_DP, 0.0114_DP, 0.00936_DP,
+     &  0.00789_DP, 0.00679_DP, 0.00592_DP, 0.00524_DP,
+     &  0.00468_DP/) 
 C 
 C       ***     BEGIN BLOCK 0     *** 
 C   CHECK IF STEP SIZE OR ERROR TOLERANCE IS TOO SMALL FOR MACHINE
@@ -4895,54 +4914,54 @@ C
 C   IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE
 C 
 C***FIRST EXECUTABLE STATEMENT
-      TWOU = 2.0 * EPSILON(1.0_dp)
+      TWOU = 2*EPSILON(ONE)
       FOURU = TWOU + TWOU
       CRASH = .TRUE.
       IF(ABS(H) .GE. FOURU*ABS(X)) GO TO 5
       H = SIGN(FOURU*ABS(X),H)
       RETURN
- 5    P5EPS = 0.5*EPS 
+ 5    P5EPS = EPS/2 
 C 
 C   IF ERROR TOLERANCE IS TOO SMALL, INCREASE IT TO AN ACCEPTABLE VALUE 
 C 
-      ROUND = 0.0 
+      ROUND = ZERO 
       DO L = 1,NEQN
         ROUND = ROUND + (Y(L)/WT(L))**2 
       END DO
       ROUND = TWOU*SQRT(ROUND)
       IF(P5EPS .GE. ROUND) GO TO 15 
-      EPS = 2.0*ROUND*(1.0 + FOURU) 
+      EPS = 2*ROUND*(ONE + FOURU) 
       RETURN
  15   CRASH = .FALSE. 
-      G(1) = 1.0
-      G(2) = 0.5
-      SIG(1) = 1.0
+      G(1) = ONE
+      G(2) = 0.5_DP
+      SIG(1) = ONE
       IF (.NOT.START) GO TO 99 
 C 
 C   INITIALIZE.  COMPUTE APPROPRIATE STEP SIZE FOR FIRST STEP 
 C 
       CALL F(X,Y,YP,NEQN-1,IFLAGC,YPOLD,A,NDIMA,LENQR,MODE,NFEC)
       IF (IFLAGC .GT. 0) RETURN
-      SUM = 0.0 
+      SUM = ZERO 
       DO L = 1,NEQN
         PHI(L,1) = YP(L)
-        PHI(L,2) = 0.0
+        PHI(L,2) = ZERO
         SUM = SUM + (YP(L)/WT(L))**2
       END DO
       SUM = SQRT(SUM) 
       ABSH = ABS(H) 
-      IF(EPS .LT. 16.0*SUM*H*H) ABSH = 0.25*SQRT(EPS/SUM) 
+      IF(EPS .LT. 16*SUM*H*H) ABSH = SQRT(EPS/SUM)/4 
       H = SIGN(MAX(ABSH,FOURU*ABS(X)),H)
-      HOLD = 0.0
+      HOLD = ZERO
       K = 1 
       KOLD = 0
       KPREV = 0 
       START = .FALSE. 
       PHASE1 = .TRUE. 
       NORND = .TRUE.
-      IF(P5EPS .GT. 100.0*ROUND) GO TO 99 
+      IF(P5EPS .GT. 100*ROUND) GO TO 99 
       NORND = .FALSE. 
-      PHI(1:NEQN,15) = 0.0 
+      PHI(1:NEQN,15) = ZERO 
  99   IFAIL = 0 
 C       ***     END BLOCK 0     *** 
 C 
@@ -4967,11 +4986,11 @@ C
 C   COMPUTE THOSE COMPONENTS OF ALPHA(*),BETA(*),PSI(*),SIG(*) WHICH
 C   ARE CHANGED 
 C 
-      BETA(NS) = 1.0
-      REALNS = NS 
-      ALPHA(NS) = 1.0/REALNS
+      BETA(NS) = ONE
+      REALNS = REAL(NS, DP) 
+      ALPHA(NS) = ONE/REALNS
       TEMP1 = H*REALNS
-      SIG(NSP1) = 1.0 
+      SIG(NSP1) = ONE 
       IF(K .LT. NSP1) GO TO 110 
       DO I = NSP1,K 
         IM1 = I-1 
@@ -4980,7 +4999,7 @@ C
         BETA(I) = BETA(IM1)*PSI(IM1)/TEMP2
         TEMP1 = TEMP2 + H 
         ALPHA(I) = H/TEMP1
-        REALI = I 
+        REALI = REAL(I, DP) 
         SIG(I+1) = REALI*ALPHA(I)*SIG(I)
       END DO
  110  PSI(K) = TEMP1
@@ -4991,8 +5010,8 @@ C   INITIALIZE V(*) AND SET W(*).
 C 
       IF(NS .GT. 1) GO TO 120 
       DO IQ = 1,K 
-        TEMP3 = IQ*(IQ+1) 
-        V(IQ) = 1.0/TEMP3 
+        TEMP3 = REAL(IQ*(IQ+1), DP) 
+        V(IQ) = ONE/TEMP3 
         W(IQ) = V(IQ) 
       END DO
       IVC = 0 
@@ -5010,8 +5029,8 @@ C
       IVC = IVC - 1 
       GO TO 123 
  122  JV = 1
-      TEMP4 = K*KP1 
-      V(K) = 1.0/TEMP4
+      TEMP4 = REAL(K*KP1, DP) 
+      V(K) = ONE/TEMP4
       W(K) = V(K) 
       IF (K .NE. 2) GO TO 123 
       KGI = 1 
@@ -5081,8 +5100,8 @@ C
 C   PREDICT SOLUTION AND DIFFERENCES
 C 
  215  PHI(1:NEQN,KP2) = PHI(1:NEQN,KP1) 
-      PHI(1:NEQN,KP1) = 0.0
-      P(1:NEQN) = 0.0
+      PHI(1:NEQN,KP1) = ZERO
+      P(1:NEQN) = ZERO
       DO J = 1,K
         I = KP1 - J 
         IP1 = I+1 
@@ -5106,11 +5125,11 @@ C
 C 
 C   ESTIMATE ERRORS AT ORDERS K,K-1,K-2 
 C 
-      ERKM2 = 0.0 
-      ERKM1 = 0.0 
-      ERK = 0.0 
+      ERKM2 = ZERO
+      ERKM1 = ZERO
+      ERK = ZERO
       DO L = 1,NEQN 
-        TEMP3 = 1.0/WT(L) 
+        TEMP3 = ONE/WT(L) 
         TEMP4 = YP(L) - PHI(L,1)
         IF (KM2 > 0) ERKM2 = ERKM2 + ((PHI(L,KM1)+TEMP4)*TEMP3)**2 
         IF (KM2 .GE. 0) ERKM1 = ERKM1 + ((PHI(L,K)+TEMP4)*TEMP3)**2 
@@ -5128,7 +5147,7 @@ C
       IF (KM2 > 0) THEN
         IF(MAX(ERKM1,ERKM2) .LE. ERK) KNEW = KM1
       ELSE IF (KM2 .EQ. 0) THEN
-        IF(ERKM1 .LE. 0.5*ERK) KNEW = KM1 
+        IF(ERKM1 .LE. ERK/2) KNEW = KM1 
       END IF
 C 
 C   TEST IF STEP SUCCESSFUL 
@@ -5149,7 +5168,7 @@ C
       PHASE1 = .FALSE.
       X = XOLD
       DO I = 1,K
-        TEMP1 = 1.0/BETA(I) 
+        TEMP1 = ONE/BETA(I) 
         IP1 = I+1 
         PHI(1:NEQN,I) = TEMP1*(PHI(1:NEQN,I) - PHI(1:NEQN,IP1))
       END DO
@@ -5163,9 +5182,9 @@ C   ON THIRD FAILURE, SET ORDER TO ONE.  THEREAFTER, USE OPTIMAL STEP
 C   SIZE
 C 
       IFAIL = IFAIL + 1 
-      TEMP2 = 0.5 
+      TEMP2 = 0.5_DP 
       IF (IFAIL > 3) THEN
-        IF (P5EPS .LT. 0.25*ERK) TEMP2 = SQRT(P5EPS/ERK) 
+        IF (P5EPS .LT. ERK/4) TEMP2 = SQRT(P5EPS/ERK) 
       ENDIF
       IF (IFAIL .GE. 3) KNEW = 1
       H = TEMP2*H 
@@ -5221,7 +5240,7 @@ C     IN FIRST PHASE WHEN ALWAYS RAISE ORDER,
 C     ALREADY DECIDED TO LOWER ORDER, 
 C     STEP SIZE NOT CONSTANT SO ESTIMATE UNRELIABLE 
 C 
-      ERKP1 = 0.0 
+      ERKP1 = ZERO
       IF(KNEW .EQ. KM1  .OR.  K .EQ. 12) PHASE1 = .FALSE. 
       IF(PHASE1) GO TO 450
       IF(KNEW .EQ. KM1) GO TO 455 
@@ -5235,7 +5254,7 @@ C   USING ESTIMATED ERROR AT ORDER K+1, DETERMINE APPROPRIATE ORDER
 C   FOR NEXT STEP 
 C 
       IF(K .GT. 1) GO TO 445
-      IF(ERKP1 .GE. 0.5*ERK) GO TO 460
+      IF(ERKP1 .GE. ERK/2) GO TO 460
       GO TO 450 
  445  IF(ERKM1 .LE. MIN(ERK,ERKP1)) GO TO 455 
       IF(ERKP1 .GE. ERK  .OR.  K .EQ. 12) GO TO 460 
@@ -5261,9 +5280,9 @@ C
       IF(P5EPS .GE. ERK*TWO(K+1)) GO TO 465 
       HNEW = H
       IF(P5EPS .GE. ERK) GO TO 465
-      TEMP2 = K+1 
-      R = (P5EPS/ERK)**(1.0/TEMP2)
-      HNEW = ABSH*MAX(0.5_dp,MIN(0.9_dp,R)) 
+      TEMP2 = REAL(K+1, DP) 
+      R = (P5EPS/ERK)**(ONE/TEMP2)
+      HNEW = ABSH*MAX(0.5_dp, MIN(0.9_dp,R)) 
       HNEW = SIGN(MAX(HNEW,FOURU*ABS(X)),H) 
  465  H = HNEW
       RETURN
@@ -5397,6 +5416,7 @@ C
 C
 C CALLS  DNRM2 , TANGNF .
 C
+      USE HOMPACK_KINDS, ONLY: ONE, ZERO
       USE BLAS_INTERFACES, ONLY: DNRM2
       IMPLICIT NONE
 C
@@ -5431,23 +5451,23 @@ C
      &   DD001(F0,FP0,F1,DELS))*S + FP0)*S + F0
 C
 C
-      TWOU=2.0*EPSILON(1.0_dp)
+      TWOU=2*EPSILON(ONE)
       FOURU=TWOU+TWOU
       NP1=N+1
       CRASH=.TRUE.
 C THE ARCLENGTH  S  MUST BE NONNEGATIVE.
-      IF (S .LT. 0.0) RETURN
+      IF (S .LT. ZERO) RETURN
 C IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE.
-      IF (H .LT. FOURU*(1.0+S)) THEN
-        H=FOURU*(1.0+S)
+      IF (H .LT. FOURU*(ONE+S)) THEN
+        H=FOURU*(ONE+S)
         RETURN
       ENDIF
 C IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE VALUES.
-      TEMP=DNRM2(NP1,Y,1)+1.0
-      IF (.5*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
-        IF (RELERR .NE. 0.0) THEN
-          RELERR=FOURU*(1.0+FOURU)
-          ABSERR=MAX(ABSERR,0.0_dp)
+      TEMP=DNRM2(NP1,Y,1) + ONE
+      IF (0.5_DP*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
+        IF (RELERR .NE. ZERO) THEN
+          RELERR=FOURU*(ONE+FOURU)
+          ABSERR=MAX(ABSERR,ZERO)
         ELSE
           ABSERR=FOURU*TEMP
         ENDIF
@@ -5461,17 +5481,17 @@ C
       FAIL=.FALSE.
       START=.FALSE.
 C DETERMINE SUITABLE INITIAL STEP SIZE.
-      H=MIN(H, .10_dp, SQRT(SQRT(RELERR*TEMP+ABSERR)))
+      H=MIN(H, 0.1_DP, SQRT(SQRT(RELERR*TEMP+ABSERR)))
 C USE LINEAR PREDICTOR ALONG TANGENT DIRECTION TO START NEWTON ITERATION.
-      YPOLD(1)=1.0
-      YPOLD(2:NP1)=0.0
+      YPOLD(1)=ONE
+      YPOLD(2:NP1)=ZERO
       CALL TANGNF(S,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,NFE,N,IFLAG)
       IF (IFLAG .GT. 0) RETURN
       LP: DO
       W=Y + H*YP
       Z0=W
       DO JUDY=1,LITFH
-        RHOLEN=-1.0
+        RHOLEN=-ONE
 C CALCULATE THE NEWTON STEP  TZ  AT THE CURRENT POINT  W .
         CALL TANGNF(RHOLEN,W,WP,YPOLD,A,QR,ALPHA,TZ,PIVOT,NFE,N,IFLAG)
         IF (IFLAG .GT. 0) RETURN
@@ -5495,11 +5515,11 @@ C
       END DO
 C
 C NO CONVERGENCE IN  LITFH  ITERATIONS.  REDUCE  H  AND TRY AGAIN.
-      IF (H .LE. FOURU*(1.0 + S)) THEN
+      IF (H .LE. FOURU*(ONE + S)) THEN
         IFLAG=6
         RETURN
       ENDIF
-      H=.5 * H
+      H = H/2
       END DO LP
       END IF STARTUP
 C
@@ -5521,7 +5541,7 @@ C
 C ***** CORRECTOR SECTION. *****
 C
       CORRECTOR: DO JUDY=1,LITFH
-        RHOLEN=-1.0
+        RHOLEN = - ONE
 C CALCULATE THE NEWTON STEP  TZ  AT THE CURRENT POINT  W .
         CALL TANGNF(RHOLEN,W,WP,YP,A,QR,ALPHA,TZ,PIVOT,NFE,N,IFLAG)
         IF (IFLAG .GT. 0) RETURN
@@ -5548,11 +5568,11 @@ C NO CONVERGENCE IN  LITFH  ITERATIONS.  RECORD FAILURE AT CALCULATED  H ,
 C SAVE THIS STEP SIZE, REDUCE  H  AND TRY AGAIN.
       FAIL=.TRUE.
       HFAIL=H
-      IF (H .LE. FOURU*(1.0 + S)) THEN
+      IF (H .LE. FOURU*(ONE + S)) THEN
         IFLAG=6
         RETURN
       ENDIF
-      H=.5 * H
+      H = H/2
       END DO HP
 C
 C ***** END OF CORRECTOR SECTION. *****
@@ -5580,7 +5600,7 @@ C CALCULATE THE DISTANCE FACTOR  DCALC .
       TZ=Z0 - Y
       W=Z1 - Y
       DCALC=DNRM2(NP1,TZ,1)
-      IF (DCALC .NE. 0.0) DCALC=DNRM2(NP1,W,1)/DCALC
+      IF (DCALC .NE. ZERO) DCALC=DNRM2(NP1,W,1)/DCALC
 C
 C THE OPTIMAL STEP SIZE HBAR IS DEFINED BY
 C
@@ -5590,13 +5610,13 @@ C     HBAR = MIN [ MAX(HT, BMIN*HOLD, HMIN), BMAX*HOLD, HMAX ]
 C
 C IF CONVERGENCE HAD OCCURRED AFTER 1 ITERATION, SET THE CONTRACTION
 C FACTOR  LCALC  TO ZERO.
-      IF (ITNUM .EQ. 1) LCALC = 0.0
+      IF (ITNUM .EQ. 1) LCALC = ZERO
 C FORMULA FOR OPTIMAL STEP SIZE.
-      IF (LCALC+RCALC+DCALC .EQ. 0.0) THEN
+      IF (LCALC+RCALC+DCALC .EQ. ZERO) THEN
         HT = SSPAR(7) * HOLD
       ELSE 
-        HT = (1.0/MAX(LCALC/SSPAR(1), RCALC/SSPAR(2), DCALC/SSPAR(3)))
-     &       **(1.0/SSPAR(8)) * HOLD
+        HT = (ONE/MAX(LCALC/SSPAR(1), RCALC/SSPAR(2), DCALC/SSPAR(3)))
+     &       **(ONE/SSPAR(8)) * HOLD
       ENDIF
 C  HT  CONTAINS THE ESTIMATED OPTIMAL STEP SIZE.  NOW PUT IT WITHIN
 C REASONABLE BOUNDS.
@@ -5745,6 +5765,7 @@ C    VECTORS FOUND ON THE ZERO CURVE OF THE HOMOTOPY MAP.
 C
 C
 C CALLS  DNRM2 , TANGNS .
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACES, ONLY: DNRM2
       IMPLICIT NONE
 C
@@ -5781,23 +5802,23 @@ C
 C ***** END OF SPECIFICATION INFORMATION. *****
 C
 C
-      TWOU=2.0*EPSILON(1.0_dp)
+      TWOU=2*EPSILON(ONE)
       FOURU=TWOU+TWOU
       NP1=N+1
       CRASH=.TRUE.
 C THE ARCLENGTH  S  MUST BE NONNEGATIVE.
-      IF (S .LT. 0.0) RETURN
+      IF (S .LT. ZERO) RETURN
 C IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE.
-      IF (H .LT. FOURU*(1.0+S)) THEN
-        H=FOURU*(1.0+S)
+      IF (H .LT. FOURU*(ONE+S)) THEN
+        H=FOURU*(ONE+S)
         RETURN
       ENDIF
 C IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE VALUES.
-      TEMP=DNRM2(NP1,Y,1)+1.0
-      IF (.5*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
-        IF (RELERR .NE. 0.0) THEN
-          RELERR=FOURU*(1.0+FOURU)
-          ABSERR=MAX(ABSERR,0.0_dp)
+      TEMP=DNRM2(NP1,Y,1)+ONE
+      IF (0.5_DP*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
+        IF (RELERR .NE. ZERO) THEN
+          RELERR=FOURU*(ONE+FOURU)
+          ABSERR=MAX(ABSERR,ZERO)
         ELSE
           ABSERR=FOURU*TEMP
         ENDIF
@@ -5813,15 +5834,15 @@ C
 C DETERMINE SUITABLE INITIAL STEP SIZE.
       H=MIN(H, .10_dp, SQRT(SQRT(RELERR*TEMP+ABSERR)))
 C USE LINEAR PREDICTOR ALONG TANGENT DIRECTION TO START NEWTON ITERATION.
-      YPOLD(NP1)=1.0
-      YPOLD(1:N)=0.0
+      YPOLD(NP1)=ONE
+      YPOLD(1:N)=ZERO
       CALL TANGNS(S,Y,YP,TZ,YPOLD,A,MODE,LENQR,NFE,N,IFLAG)
       IF (IFLAG .GT. 0) RETURN
       LP: DO
       W=Y + H*YP
       Z0=W
       DO JUDY=1,LITFH
-        RHOLEN=-1.0
+        RHOLEN = -ONE
 C CALCULATE THE NEWTON STEP  TZ  AT THE CURRENT POINT  W .
         CALL TANGNS(RHOLEN,W,WP,TZ,YPOLD,A,MODE,LENQR,NFE,N,IFLAG)
         IF (IFLAG .GT. 0) RETURN
@@ -5845,11 +5866,11 @@ C
       END DO
 C
 C NO CONVERGENCE IN  LITFH  ITERATIONS.  REDUCE  H  AND TRY AGAIN.
-      IF (H .LE. FOURU*(1.0 + S)) THEN
+      IF (H .LE. FOURU*(ONE + S)) THEN
         IFLAG=6
         RETURN
       ENDIF
-      H=.5 * H
+      H = H/2
       END DO LP
       END IF STARTUP
 C
@@ -5871,7 +5892,7 @@ C
 C ***** CORRECTOR SECTION. *****
 C
       CORRECTOR: DO JUDY=1,LITFH
-        RHOLEN=-1.0
+        RHOLEN = -ONE
 C CALCULATE THE NEWTON STEP  TZ  AT THE CURRENT POINT  W .
         CALL TANGNS(RHOLEN,W,WP,TZ,YP,A,MODE,LENQR,NFE,N,IFLAG)
         IF (IFLAG .GT. 0) RETURN
@@ -5898,11 +5919,11 @@ C NO CONVERGENCE IN  LITFH  ITERATIONS.  RECORD FAILURE AT CALCULATED  H ,
 C SAVE THIS STEP SIZE, REDUCE  H  AND TRY AGAIN.
       FAIL=.TRUE.
       HFAIL=H
-      IF (H .LE. FOURU*(1.0 + S)) THEN
+      IF (H .LE. FOURU*(ONE + S)) THEN
         IFLAG=6
         RETURN
       ENDIF
-      H=.5 * H
+      H = H/2
       END DO HP
 C
 C ***** END OF CORRECTOR SECTION. *****
@@ -5930,7 +5951,7 @@ C CALCULATE THE DISTANCE FACTOR  DCALC .
       TZ=Z0 - Y
       W=Z1 - Y
       DCALC=DNRM2(NP1,TZ,1)
-      IF (DCALC .NE. 0.0) DCALC=DNRM2(NP1,W,1)/DCALC
+      IF (DCALC .NE. ZERO) DCALC=DNRM2(NP1,W,1)/DCALC
 C
 C THE OPTIMAL STEP SIZE HBAR IS DEFINED BY
 C
@@ -5940,13 +5961,13 @@ C     HBAR = MIN [ MAX(HT, BMIN*HOLD, HMIN), BMAX*HOLD, HMAX ]
 C
 C IF CONVERGENCE HAD OCCURRED AFTER 1 ITERATION, SET THE CONTRACTION
 C FACTOR  LCALC  TO ZERO.
-      IF (ITNUM .EQ. 1) LCALC = 0.0
+      IF (ITNUM .EQ. 1) LCALC = ZERO
 C FORMULA FOR OPTIMAL STEP SIZE.
-      IF (LCALC+RCALC+DCALC .EQ. 0.0) THEN
+      IF (LCALC+RCALC+DCALC .EQ. ZERO) THEN
         HT = SSPAR(7) * HOLD
       ELSE 
-        HT = (1.0/MAX(LCALC/SSPAR(1), RCALC/SSPAR(2), DCALC/SSPAR(3)))
-     &       **(1.0/SSPAR(8)) * HOLD
+        HT = (ONE/MAX(LCALC/SSPAR(1), RCALC/SSPAR(2), DCALC/SSPAR(3)))
+     &       **(ONE/SSPAR(8)) * HOLD
       ENDIF
 C  HT  CONTAINS THE ESTIMATED OPTIMAL STEP SIZE.  NOW PUT IT WITHIN
 C REASONABLE BOUNDS.
@@ -6140,6 +6161,7 @@ C    estimation of the next step size  H .
 C
 C Calls  DNRM2 .
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACES, ONLY: DNRM2
       IMPLICIT NONE
 C
@@ -6198,22 +6220,22 @@ C
       IF (IFLAG < -2) THEN
         GO TO (50,100,400,700), MOD(ABS(IFLAG),100)/10
       ENDIF
-      TWOU=2.0*EPSILON(1.0_dp)
+      TWOU=2*EPSILON(ONE)
       FOURU=TWOU+TWOU
       CRASH=.TRUE.
 C THE ARCLENGTH  S  MUST BE NONNEGATIVE.
-      IF (S .LT. 0.0) RETURN
+      IF (S .LT. ZERO) RETURN
 C IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE.
-      IF (H .LT. FOURU*(1.0+S)) THEN
-        H=FOURU*(1.0+S)
+      IF (H .LT. FOURU*(ONE+S)) THEN
+        H=FOURU*(ONE+S)
         RETURN
       ENDIF
 C IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE VALUES.
-      TEMP=DNRM2(NP1,Y,1)+1.0
-      IF (.5*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
-        IF (RELERR .NE. 0.0) THEN
-          RELERR=FOURU*(1.0+FOURU)
-          ABSERR=MAX(ABSERR,0.0_dp)
+      TEMP=DNRM2(NP1,Y,1) + ONE
+      IF (0.5_DP*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
+        IF (RELERR .NE. ZERO) THEN
+          RELERR=FOURU*(ONE+FOURU)
+          ABSERR=MAX(ABSERR,ZERO)
         ELSE
           ABSERR=FOURU*TEMP
         ENDIF
@@ -6234,27 +6256,29 @@ C SET OPTIMAL STEP SIZE ESTIMATION PARAMETERS.
 C LET Z[K] DENOTE THE NEWTON ITERATES ALONG THE FLOW NORMAL TO THE
 C DAVIDENKO FLOW AND Y THEIR LIMIT.
 C IDEAL CONTRACTION FACTOR:  ||Z[2] - Z[1]|| / ||Z[1] - Z[0]||
-      IF (SSPAR(1) .LE. 0.0) SSPAR(1)= .5
+      IF (SSPAR(1) .LE. ZERO) SSPAR(1)= 0.5_DP
 C IDEAL RESIDUAL FACTOR:  ||RHO(A, Z[1])|| / ||RHO(A, Z[0])||
-      IF (SSPAR(2) .LE. 0.0) SSPAR(2)= .01
+      IF (SSPAR(2) .LE. ZERO) SSPAR(2)= 0.01_DP
 C IDEAL DISTANCE FACTOR:  ||Z[1] - Y|| / ||Z[0] - Y||
-      IF (SSPAR(3) .LE. 0.0) SSPAR(3)= .5
+      IF (SSPAR(3) .LE. ZERO) SSPAR(3)= 0.5_DP
 C MINIMUM STEP SIZE  HMIN .
-      IF (SSPAR(4) .LE. 0.0) SSPAR(4)=(SQRT(N+1.0)+4.0)*EPSILON(1.0_dp)
+      IF (SSPAR(4) .LE. ZERO) THEN
+        SSPAR(4) = (SQRT(REAL(N + 1, DP)) + 4.0_DP)*EPSILON(ONE)
+      END IF
 C MAXIMUM STEP SIZE  HMAX .
-      IF (SSPAR(5) .LE. 0.0) SSPAR(5)= 1.0
+      IF (SSPAR(5) .LE. ZERO) SSPAR(5)= ONE
 C MINIMUM STEP SIZE REDUCTION FACTOR  BMIN .
-      IF (SSPAR(6) .LE. 0.0) SSPAR(6)= .1_dp
+      IF (SSPAR(6) .LE. ZERO) SSPAR(6)= 0.1_DP
 C MAXIMUM STEP SIZE EXPANSION FACTOR  BMAX .
-      IF (SSPAR(7) .LE. 0.0) SSPAR(7)= 3.0
+      IF (SSPAR(7) .LE. ZERO) SSPAR(7)= 3.0_DP
 C ASSUMED OPERATING ORDER  P .
-      IF (SSPAR(8) .LE. 0.0) SSPAR(8)= 2.0
+      IF (SSPAR(8) .LE. ZERO) SSPAR(8)= 2.0_DP
 C
 C DETERMINE SUITABLE INITIAL STEP SIZE.
-      H=MIN(H, .10_dp, SQRT(SQRT(RELERR*TEMP+ABSERR)))
+      H=MIN(H, 0.10_dp, SQRT(SQRT(RELERR*TEMP+ABSERR)))
 C USE LINEAR PREDICTOR ALONG TANGENT DIRECTION TO START NEWTON ITERATION.
-      YPOLD(1)=1.0
-      YPOLD(2:NP1)=0.0
+      YPOLD(1)=ONE
+      YPOLD(2:NP1)=ZERO
 C REQUEST TANGENT VECTOR AT Y VIA REVERSE CALL.
       W=Y
       YP=YPOLD
@@ -6300,11 +6324,11 @@ C
       GO TO 80                                   ! END DO
 C
 C NO CONVERGENCE IN  LITFH  ITERATIONS.  REDUCE  H  AND TRY AGAIN.
-200   IF (H .LE. FOURU*(1.0 + S)) THEN
+200   IF (H .LE. FOURU*(ONE + S)) THEN
         IFLAG=6
         RETURN
       ENDIF
-      H=.5 * H
+      H = H/2
       GO TO 70
 C
 C ***** END OF STARTUP SECTION. *****
@@ -6356,11 +6380,11 @@ C NO CONVERGENCE IN  LITFH  ITERATIONS.  RECORD FAILURE AT CALCULATED  H ,
 C SAVE THIS STEP SIZE, REDUCE  H  AND TRY AGAIN.
 500   FAIL=.TRUE.
       HFAIL=H
-      IF (H .LE. FOURU*(1.0 + S)) THEN
+      IF (H .LE. FOURU*(ONE + S)) THEN
         IFLAG=6
         RETURN
       ENDIF
-      H=.5 * H
+      H = H/2
       GO TO 320
 C
 C ***** END OF CORRECTOR SECTION. *****
@@ -6388,7 +6412,7 @@ C CALCULATE THE DISTANCE FACTOR  DCALC .
       TZ=Z0 - Y
       W=Z1 - Y
       DCALC=DNRM2(NP1,TZ,1)
-      IF (DCALC .NE. 0.0) DCALC=DNRM2(NP1,W,1)/DCALC
+      IF (DCALC .NE. ZERO) DCALC=DNRM2(NP1,W,1)/DCALC
 C
 C THE OPTIMAL STEP SIZE HBAR IS DEFINED BY
 C
@@ -6398,13 +6422,13 @@ C     HBAR = MIN [ MAX(HT, BMIN*HOLD, HMIN), BMAX*HOLD, HMAX ]
 C
 C IF CONVERGENCE HAD OCCURRED AFTER 1 ITERATION, SET THE CONTRACTION
 C FACTOR  LCALC  TO ZERO.
-      IF (ITNUM .EQ. 1) LCALC = 0.0
+      IF (ITNUM .EQ. 1) LCALC = ZERO
 C FORMULA FOR OPTIMAL STEP SIZE.
-      IF (LCALC+RCALC+DCALC .EQ. 0.0) THEN
+      IF (LCALC+RCALC+DCALC .EQ. ZERO) THEN
         HT = SSPAR(7) * HOLD
       ELSE 
-        HT = (1.0/MAX(LCALC/SSPAR(1), RCALC/SSPAR(2), DCALC/SSPAR(3)))
-     &       **(1.0/SSPAR(8)) * HOLD
+        HT = (ONE/MAX(LCALC/SSPAR(1), RCALC/SSPAR(2), DCALC/SSPAR(3)))
+     &       **(ONE/SSPAR(8)) * HOLD
       ENDIF
 C  HT  CONTAINS THE ESTIMATED OPTIMAL STEP SIZE.  NOW PUT IT WITHIN
 C REASONABLE BOUNDS.
@@ -6575,6 +6599,7 @@ C CALLS  DGEMV, DGEQRF, DNRM2, DORGQR, DTPSV, F (OR RHO),
 C     FJAC (OR RHOJAC), TANGQF, UPQRQF.
 C
 C ***** DECLARATIONS *****
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE HOMPACK_INTERFACES, ONLY: F, FJAC, RHO, RHOJAC
       USE BLAS_INTERFACES, ONLY: DNRM2, DGEMV, DTPSV
       USE LAPACK_INTERFACES, ONLY: DGEQRF, DORGQR
@@ -6586,7 +6611,7 @@ C
 C     LOCAL VARIABLES
 C
       REAL(DP):: ALPHA, DELS, ETA, FOURU, GAMMA, HFAIL, HTEMP,
-     &  IDLERR, ONE, P0, P1, PP0, PP1, TEMP, TWOU, WKOLD, ZERO         
+     &  IDLERR, P0, P1, PP0, PP1, TEMP, TWOU, WKOLD      
       INTEGER:: I, ITCNT, LITFH, J, JP1, NP1
       LOGICAL:: FAILED
 C
@@ -6624,37 +6649,35 @@ C
 C ETA = PARAMETER FOR BROYDEN'S UPDATE.
 C LITFH = MAXIMUM NUMBER OF QUASI-NEWTON ITERATIONS ALLOWED.
 C
-      ONE = 1.0
-      ZERO = 0.0
-      TWOU = 2.0*EPSILON(1.0_dp)
+      TWOU = 2*EPSILON(ONE)
       FOURU = TWOU + TWOU
       NP1 = N+1
       FAILED = .FALSE.
       CRASH = .TRUE.
-      ETA = 50.0*TWOU
+      ETA = 50*TWOU
       LITFH = 2*(INT(ABS(LOG10(ABSERR+RELERR)))+1)
 C
 C CHECK THAT ALL INPUT PARAMETERS ARE CORRECT.
 C
 C     THE ARCLENGTH  S MUST BE NONNEGATIVE.
 C
-      IF (S .LT. 0.0) RETURN
+      IF (S .LT. ZERO) RETURN
 C
 C     IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE.
 C   
-      IF (H .LT. FOURU*(1.0+S)) THEN
-        H=FOURU*(1.0 + S)
+      IF (H .LT. FOURU*(ONE+S)) THEN
+        H=FOURU*(ONE + S)
         RETURN
       END IF
 C
 C     IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE 
 C     VALUES.
 C
-      TEMP=DNRM2(NP1,Y,1) + 1.0
-      IF (.5*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
-        IF (RELERR .NE. 0.0) THEN
-          RELERR = FOURU*(1.0+FOURU)
-          TEMP = 0.0
+      TEMP=DNRM2(NP1,Y,1) + ONE
+      IF (0.5_DP*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
+        IF (RELERR .NE. ZERO) THEN
+          RELERR = FOURU*(ONE + FOURU)
+          TEMP = ZERO
           ABSERR = MAX(ABSERR,TEMP)
         ELSE
           ABSERR=FOURU*TEMP
@@ -6686,7 +6709,7 @@ C
 C ZERO FINDING PROBLEM.
 C
         CALL F(Y(2:NP1),F0(1:N))
-        F0(1:N) = Y(1)*F0(1:N) + (1.0-Y(1))*(Y(2:NP1)-A(1:N))
+        F0(1:N) = Y(1)*F0(1:N) + (ONE-Y(1))*(Y(2:NP1)-A(1:N))
       ELSE
 C
 C FIXED POINT PROBLEM.
@@ -6726,7 +6749,7 @@ C
         CALL RHO(A,Z0(1),Z0(2:NP1),F1(1:N))
       ELSE IF (IFLAG .EQ. -1) THEN
         CALL F(Z0(2:NP1),F1(1:N))
-        F1(1:N) = Z0(1)*F1(1:N) + (1.0-Z0(1))*(Z0(2:NP1)-A(1:N))
+        F1(1:N) = Z0(1)*F1(1:N) + (ONE-Z0(1))*(Z0(2:NP1)-A(1:N))
       ELSE
         CALL F(Z0(2:NP1),F1(1:N))
         F1(1:N) = Z0(1)*(A(1:N)-F1(1:N))+Z0(2:NP1)-A(1:N)
@@ -6760,7 +6783,7 @@ C
             JP1 = J+1
             CALL FJAC(Z0(2:NP1),Q(1:N,JP1),J)
             Q(1:N,JP1) = Z0(1)*Q(1:N,JP1)
-            Q(J,JP1) = 1.0 - Z0(1) + Q(J,JP1)
+            Q(J,JP1) = ONE - Z0(1) + Q(J,JP1)
           END DO
         ELSE 
 C 
@@ -6773,7 +6796,7 @@ C
             JP1 = J+1
             CALL FJAC(Z0(2:NP1),Q(1:N,JP1),J)
             Q(1:N,JP1) = -Z0(1)*Q(1:N,JP1)
-            Q(J,JP1) = 1.0 + Q(J,JP1)
+            Q(J,JP1) = ONE + Q(J,JP1)
           END DO
         END IF
 C
@@ -6815,7 +6838,7 @@ C
 C COMPUTE NEWTON STEP.
 C
         T(1:N) = -F1(1:N)
-        T(NP1) = 0.0
+        T(NP1) = ZERO
         CALL DGEMV('T',NP1,NP1,ONE,Q,NP1,T,1,ZERO,DZ,1)
         CALL DTPSV('U', 'N', 'N', NP1, R, DZ, 1)
 C
@@ -6830,7 +6853,7 @@ C
           CALL RHO(A,Z0(1),Z0(2:NP1),F1(1:N))
         ELSE IF (IFLAG .EQ. -1) THEN
           CALL F(Z0(2:NP1),F1(1:N))
-          F1(1:N) = Z0(1)*F1(1:N) + (1.0-Z0(1))*(Z0(2:NP1)-A(1:N))
+          F1(1:N) = Z0(1)*F1(1:N) + (ONE-Z0(1))*(Z0(2:NP1)-A(1:N))
         ELSE
           CALL F(Z0(2:NP1),F1(1:N))
           F1(1:N) = Z0(1)*(A(1:N)-F1(1:N))+Z0(2:NP1)-A(1:N)
@@ -6855,7 +6878,7 @@ C
 C COMPUTE NEXT NEWTON STEP.
 C
         T(1:N) = -F1(1:N)
-        T(NP1) = 0.0
+        T(NP1) = ZERO
         CALL DGEMV('T',NP1,NP1,ONE,Q,NP1,T,1,ZERO,DZ,1)
         CALL DTPSV('U', 'N', 'N', NP1, R, DZ, 1)
 C
@@ -6879,7 +6902,7 @@ C
           CALL RHO(A,Z0(1),Z0(2:NP1),F1(1:N))
         ELSE IF (IFLAG .EQ. -1) THEN
           CALL F(Z0(2:NP1),F1(1:N))
-          F1(1:N) = Z0(1)*F1(1:N) + (1.0-Z0(1))*(Z0(2:NP1)-A(1:N))
+          F1(1:N) = Z0(1)*F1(1:N) + (ONE-Z0(1))*(Z0(2:NP1)-A(1:N))
         ELSE
           CALL F(Z0(2:NP1),F1(1:N))
           F1(1:N) = Z0(1)*(A(1:N)-F1(1:N))+Z0(2:NP1)-A(1:N)
@@ -6893,11 +6916,11 @@ C       AN ACUTE ANGLE WITH YPOLD -- TRY AGAIN WITH A SMALLER H *****
 C      
  170  FAILED = .TRUE.
       HFAIL = H
-      IF (H .LE. FOURU*(1.0 + S)) THEN
+      IF (H .LE. FOURU*(ONE + S)) THEN
         IFLAG = 6
         RETURN
       ELSE
-        H = .5 * H
+        H = H/2
       END IF
       GO TO 20
 C
@@ -6917,7 +6940,7 @@ C IF NOT, STEP SIZE WAS TOO LARGE, SO THROW AWAY Z0, AND TRY
 C AGAIN WITH A SMALLER STEP.
 C
       ALPHA = DOT_PRODUCT(T,YP)
-      IF (ALPHA .LT. 0.5) GOTO 170
+      IF (ALPHA .LT. 0.5_DP) GOTO 170
       ALPHA = ACOS(ALPHA)
 C
 C SET UP VARIABLES FOR NEXT CALL.
@@ -6948,15 +6971,15 @@ C
 C
 C     IDLERR SHOULD BE NO BIGGER THAN 1/2 PREVIOUS STEP.
 C
-      IDLERR = MIN(.5*HOLD,IDLERR)
-      WK = 2.0*ABS(SIN(.5*ALPHA))/HOLD
+      IDLERR = MIN(0.5_DP*HOLD,IDLERR)
+      WK = 2*ABS(SIN(0.5_DP*ALPHA))/HOLD
       IF (START) THEN
          GAMMA = WK
       ELSE 
          GAMMA = WK + HOLD/(HOLD+HTEMP)*(WK-WKOLD)
       END IF
-      GAMMA = MAX(GAMMA, 0.01*ONE)
-      H = SQRT(2.0*IDLERR/GAMMA)
+      GAMMA = MAX(GAMMA, 0.01_DP*ONE)
+      H = SQRT(2*IDLERR/GAMMA)
 C
 C     ENFORCE RESTRICTIONS ON STEP SIZE SO AS TO ENSURE STABILITY.
 C        HMIN <= H <= HMAX, BMIN*HOLD <= H <= BMAX*HOLD.
@@ -7112,6 +7135,7 @@ C
 C
 C CALLS  DNRM2, TANGNS.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACES, ONLY: DNRM2
       IMPLICIT NONE
 C
@@ -7161,7 +7185,7 @@ C ***** END OF SPECIFICATION SECTION. *****
 C
 C ***** INITIALIZATION. *****
 C
-      TWOU = 2.0*EPSILON(1.0_dp)
+      TWOU = 2*EPSILON(ONE)
       FOURU = TWOU + TWOU
       NP1 = N+1
       FAILED = .FALSE.
@@ -7171,23 +7195,23 @@ C CHECK THAT ALL INPUT PARAMETERS ARE CORRECT.
 C
 C     THE ARCLENGTH  S  MUST BE NONNEGATIVE.
 C
-      IF (S .LT. 0.0) RETURN
+      IF (S .LT. ZERO) RETURN
 C
 C     IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE.
 C   
-      IF (H .LT. FOURU*(1.0+S)) THEN
-          H=FOURU*(1.0 + S)
+      IF (H .LT. FOURU*(ONE+S)) THEN
+          H=FOURU*(ONE + S)
           RETURN
       END IF
 C
 C     IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE 
 C     VALUES.
 C
-      TEMP=DNRM2(NP1,Y,1) + 1.0
-      IF (.5*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
-          IF (RELERR .NE. 0.0) THEN
-            RELERR = FOURU*(1.0+FOURU)
-            TEMP = 0.0
+      TEMP=DNRM2(NP1,Y,1) + ONE
+      IF (0.5_DP*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
+          IF (RELERR .NE. ZERO) THEN
+            RELERR = FOURU*(ONE+FOURU)
+            TEMP = ZERO
             ABSERR = MAX(ABSERR,TEMP)
           ELSE
             ABSERR=FOURU*TEMP
@@ -7236,7 +7260,7 @@ C
 C COMPUTE TANGENT  T  AND MINIMUM NORM NEWTON STEP  DZ  AT THE
 C CURRENT POINT  Z0 .
 C
-          TEMP = -1.0
+          TEMP = -ONE
           CALL TANGNS(TEMP,Z0,T,DZ,YP,A,MODE,LENQR,NFE,N,IFLAG)
           IF (IFLAG .GT. 0) RETURN
 C
@@ -7246,7 +7270,7 @@ C IF NOT, STEP SIZE WAS TOO LARGE, SO THROW AWAY Z0, AND TRY
 C AGAIN WITH A SMALLER STEP.
 C
           ALPHA = DOT_PRODUCT(T,YP)
-          IF (ALPHA < 0.5) EXIT NEWTON
+          IF (ALPHA < 0.5_DP) EXIT NEWTON
 C
 C MAKE  DZ  ORTHOGONAL TO TANGENT DIRECTION  YP .
 C
@@ -7270,11 +7294,11 @@ C TRY AGAIN WITH A SMALLER H.
 C      
         FAILED = .TRUE.
         HFAIL = H
-        IF (H .LE. FOURU*(1.0 + S)) THEN
+        IF (H .LE. FOURU*(ONE + S)) THEN
           IFLAG = 6
           RETURN
         ELSE
-          H = .5 * H
+          H = H/2
         END IF
 C
 C END OF CONVERGENCE FAILURE SECTION.
@@ -7319,31 +7343,31 @@ C
 C COMPUTE IDEAL ERROR FOR STEP SIZE ESTIMATION.
 C
       IF (ITCNT .LE. 1) THEN
-          THETA = 8.0
+          THETA = 8.0_DP
       ELSE IF (ITCNT .EQ. 4) THEN
-          THETA = 1.0
+          THETA = ONE
       ELSE
           OMEGA=XSTEP/CORDIS
           IF (ITCNT .LT. 4) THEN
             LK = 4*ITCNT-7
             IF (OMEGA .GE. WRGE(LK)) THEN
-              THETA = 1.0
+              THETA = ONE
             ELSE IF (OMEGA .GE. WRGE(LK+1)) THEN
               THETA = ACOF(LK) + ACOF(LK+1)*LOG(OMEGA)
             ELSE IF (OMEGA .GE. WRGE(LK+2)) THEN
               THETA = ACOF(LK+2) + ACOF(LK+3)*LOG(OMEGA)
             ELSE 
-              THETA = 8.0
+              THETA = 8.0_DP
             END IF
           ELSE IF (ITCNT .GE. 7) THEN
-            THETA = 0.125
+            THETA = 0.125_DP
           ELSE
             LK = 4*ITCNT - 16
             IF (OMEGA .GT. WRGE(LK)) THEN
               LST = 2*ITCNT - 1
               THETA = ACOF(LST) + ACOF(LST+1)*LOG(OMEGA)
             ELSE
-              THETA = 0.125
+              THETA = 0.125_DP
             END IF
           END IF
       END IF
@@ -7351,7 +7375,7 @@ C
 C
 C IDLERR SHOULD BE NO BIGGER THAN 1/2 PREVIOUS STEP.
 C
-      IDLERR = MIN(.5*HOLD,IDLERR)
+      IDLERR = MIN(0.5_DP*HOLD,IDLERR)
 C
 C COMPUTE OPTIMAL STEP SIZE. 
 C   WK = APPROXIMATE CURVATURE = 2*SIN(ALPHA/2)/HOLD  WHERE 
@@ -7362,14 +7386,14 @@ C        CURVATURE  WKOLD.  GAMMA  IS FURTHER REQUIRED TO BE
 C        POSITIVE.
 C
       IF (.NOT. START) WKOLD = WK
-      WK = 2.0*ABS(SIN(.5*ALPHA))/HOLD
+      WK = 2*ABS(SIN(0.5_DP*ALPHA))/HOLD
       IF (START) THEN
         GAMMA = WK
       ELSE 
         GAMMA = WK + HOLD/(HOLD+HTEMP)*(WK-WKOLD)
       END IF
-      GAMMA = MAX(GAMMA, 0.01_dp)
-      H = SQRT(2.0*IDLERR/GAMMA)
+      GAMMA = MAX(GAMMA, 0.01_DP)
+      H = SQRT(2*IDLERR/GAMMA)
 C
 C     ENFORCE RESTRICTIONS ON STEP SIZE SO AS TO ENSURE STABILITY.
 C        HMIN <= H <= HMAX, BMIN*HOLD <= H <= BMAX*HOLD.
@@ -7380,7 +7404,6 @@ C
 C
 C ***** END OF MOP UP SECTION. *****
 C
-      RETURN
       END SUBROUTINE STEPQS
 C
       SUBROUTINE STEPS(FODE,NEQN,Y,X,H,EPS,WT,START,HOLD,K,KOLD,CRASH,
@@ -7529,6 +7552,7 @@ C***REFERENCES  SHAMPINE L.F., GORDON M.K., *SOLVING ORDINARY
 C                 DIFFERENTIAL EQUATIONS WITH ODE, STEP, AND INTRP*,
 C                 SLA-73-1060, SANDIA LABORATORIES, 1973.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       IMPLICIT NONE
 C 
       REAL(DP):: ABSH,ALPHA,BETA,EPS,ERK,ERKM1,ERKM2,
@@ -7580,28 +7604,28 @@ C
 C   IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE
 C 
 C***FIRST EXECUTABLE STATEMENT
-      TWOU = 2.0 * EPSILON(1.0_dp)
+      TWOU = 2*EPSILON(ONE)
       FOURU = TWOU + TWOU
       CRASH = .TRUE.
       IF(ABS(H) .GE. FOURU*ABS(X)) GO TO 5
       H = SIGN(FOURU*ABS(X),H)
       RETURN
- 5    P5EPS = 0.5*EPS 
+ 5    P5EPS = 0.5_DP*EPS 
 C 
 C   IF ERROR TOLERANCE IS TOO SMALL, INCREASE IT TO AN ACCEPTABLE VALUE 
 C 
-      ROUND = 0.0 
+      ROUND = ZERO 
       DO L = 1,NEQN
         ROUND = ROUND + (Y(L)/WT(L))**2 
       END DO
       ROUND = TWOU*SQRT(ROUND)
       IF(P5EPS .GE. ROUND) GO TO 15 
-      EPS = 2.0*ROUND*(1.0 + FOURU) 
+      EPS = 2*ROUND*(ONE + FOURU) 
       RETURN
  15   CRASH = .FALSE. 
-      G(1) = 1.0
-      G(2) = 0.5
-      SIG(1) = 1.0
+      G(1) = ONE
+      G(2) = 0.5_DP
+      SIG(1) = ONE
       IF(.NOT.START) GO TO 99 
 C 
 C   INITIALIZE.  COMPUTE APPROPRIATE STEP SIZE FOR FIRST STEP 
@@ -7609,15 +7633,15 @@ C
       CALL FODE(X,Y,YP,FPWA1,FPWA2,FPWA3,FPWA4,FPWA5,IFPWA1,
      &       IFPC1,NEQN-1,IFPC2)
       IF (IFPC2 .GT. 0) RETURN
-      SUM = 0.0 
+      SUM = ZERO 
       DO L = 1,NEQN
         PHI(L,1) = YP(L)
-        PHI(L,2) = 0.0
+        PHI(L,2) = ZERO
         SUM = SUM + (YP(L)/WT(L))**2
       END DO
       SUM = SQRT(SUM) 
       ABSH = ABS(H) 
-      IF(EPS .LT. 16.0*SUM*H*H) ABSH = 0.25*SQRT(EPS/SUM) 
+      IF (EPS .LT. 16*SUM*H*H) ABSH = SQRT(EPS/SUM)/4 
       H = SIGN(MAX(ABSH,FOURU*ABS(X)),H)
 C 
 C*      U = D1MACH(3) 
@@ -7625,17 +7649,17 @@ C*      BIG = SQRT(D1MACH(2))
 C*      CALL HSTART (F,NEQN,X,X+H,Y,YP,WT,1,U,BIG,
 C*     1             PHI(1,3),PHI(1,4),PHI(1,5),PHI(1,6),RPAR,IPAR,H) 
 C 
-      HOLD = 0.0
+      HOLD = ZERO
       K = 1 
       KOLD = 0
       KPREV = 0 
       START = .FALSE. 
       PHASE1 = .TRUE. 
       NORND = .TRUE.
-      IF(P5EPS .GT. 100.0*ROUND) GO TO 99 
+      IF (P5EPS .GT. 100*ROUND) GO TO 99 
       NORND = .FALSE. 
       DO L = 1,NEQN
-        PHI(L,15) = 0.0 
+        PHI(L,15) = ZERO 
       END DO
  99   IFAIL = 0 
 C       ***     END BLOCK 0     *** 
@@ -7661,11 +7685,11 @@ C
 C   COMPUTE THOSE COMPONENTS OF ALPHA(*),BETA(*),PSI(*),SIG(*) WHICH
 C   ARE CHANGED 
 C 
-      BETA(NS) = 1.0
-      REALNS = NS 
-      ALPHA(NS) = 1.0/REALNS
+      BETA(NS) = ONE
+      REALNS = REAL(NS, DP) 
+      ALPHA(NS) = ONE/REALNS
       TEMP1 = H*REALNS
-      SIG(NSP1) = 1.0 
+      SIG(NSP1) = ONE 
       IF(K .LT. NSP1) GO TO 110 
       DO I = NSP1,K 
         IM1 = I-1 
@@ -7674,7 +7698,7 @@ C
         BETA(I) = BETA(IM1)*PSI(IM1)/TEMP2
         TEMP1 = TEMP2 + H 
         ALPHA(I) = H/TEMP1
-        REALI = I 
+        REALI = REAL(I, DP) 
         SIG(I+1) = REALI*ALPHA(I)*SIG(I)
       END DO
  110  PSI(K) = TEMP1
@@ -7685,8 +7709,8 @@ C   INITIALIZE V(*) AND SET W(*).
 C 
       IF(NS .GT. 1) GO TO 120 
       DO IQ = 1,K 
-        TEMP3 = IQ*(IQ+1) 
-        V(IQ) = 1.0/TEMP3 
+        TEMP3 = REAL(IQ*(IQ+1), DP) 
+        V(IQ) = ONE/TEMP3 
         W(IQ) = V(IQ) 
       END DO
       IVC = 0 
@@ -7704,8 +7728,8 @@ C
       IVC = IVC - 1 
       GO TO 123 
  122  JV = 1
-      TEMP4 = K*KP1 
-      V(K) = 1.0/TEMP4
+      TEMP4 = REAL(K*KP1, DP) 
+      V(K) = ONE/TEMP4
       W(K) = V(K) 
       IF (K .NE. 2) GO TO 123 
       KGI = 1 
@@ -7778,8 +7802,8 @@ C   PREDICT SOLUTION AND DIFFERENCES
 C 
  215  DO L = 1,NEQN 
         PHI(L,KP2) = PHI(L,KP1) 
-        PHI(L,KP1) = 0.0
-        P(L) = 0.0
+        PHI(L,KP1) = ZERO
+        P(L) = ZERO
       END DO
       DO J = 1,K
         I = KP1 - J 
@@ -7809,11 +7833,11 @@ C
 C 
 C   ESTIMATE ERRORS AT ORDERS K,K-1,K-2 
 C 
-      ERKM2 = 0.0 
-      ERKM1 = 0.0 
-      ERK = 0.0 
+      ERKM2 = ZERO 
+      ERKM1 = ZERO
+      ERK = ZERO
       DO L = 1,NEQN 
-        TEMP3 = 1.0/WT(L) 
+        TEMP3 = ONE/WT(L) 
         TEMP4 = YP(L) - PHI(L,1)
         IF (KM2 .GT. 0) ERKM2 = ERKM2 + ((PHI(L,KM1)+TEMP4)*TEMP3)**2
         IF (KM2 .GE. 0) ERKM1 = ERKM1 + ((PHI(L,K)+TEMP4)*TEMP3)**2 
@@ -7831,7 +7855,7 @@ C
       IF (KM2 > 0) THEN
         IF(MAX(ERKM1,ERKM2) .LE. ERK) KNEW = KM1
       ELSE IF (KM2 == 0) THEN
-        IF(ERKM1 .LE. 0.5*ERK) KNEW = KM1 
+        IF(ERKM1 .LE. ERK/2) KNEW = KM1 
       ENDIF
 C 
 C   TEST IF STEP SUCCESSFUL 
@@ -7852,7 +7876,7 @@ C
       PHASE1 = .FALSE.
       X = XOLD
       DO I = 1,K
-        TEMP1 = 1.0/BETA(I) 
+        TEMP1 = ONE/BETA(I) 
         IP1 = I+1 
         DO L = 1,NEQN 
           PHI(L,I) = TEMP1*(PHI(L,I) - PHI(L,IP1))
@@ -7867,9 +7891,9 @@ C   ON THIRD FAILURE, SET ORDER TO ONE.  THEREAFTER, USE OPTIMAL STEP
 C   SIZE
 C 
  320  IFAIL = IFAIL + 1 
-      TEMP2 = 0.5 
+      TEMP2 = 0.5_DP 
       IF (IFAIL-3 .GT. 0) THEN
-        IF(P5EPS .LT. 0.25*ERK) TEMP2 = SQRT(P5EPS/ERK) 
+        IF(P5EPS .LT. ERK/4) TEMP2 = SQRT(P5EPS/ERK) 
       ENDIF
       IF (IFAIL-3 .GE. 0) KNEW = 1
       H = TEMP2*H 
@@ -7930,7 +7954,7 @@ C     IN FIRST PHASE WHEN ALWAYS RAISE ORDER,
 C     ALREADY DECIDED TO LOWER ORDER, 
 C     STEP SIZE NOT CONSTANT SO ESTIMATE UNRELIABLE 
 C 
-      ERKP1 = 0.0 
+      ERKP1 = ZERO 
       IF(KNEW .EQ. KM1  .OR.  K .EQ. 12) PHASE1 = .FALSE. 
       IF(PHASE1) GO TO 450
       IF(KNEW .EQ. KM1) GO TO 455 
@@ -7944,7 +7968,7 @@ C   USING ESTIMATED ERROR AT ORDER K+1, DETERMINE APPROPRIATE ORDER
 C   FOR NEXT STEP 
 C 
       IF(K .GT. 1) GO TO 445
-      IF(ERKP1 .GE. 0.5*ERK) GO TO 460
+      IF(ERKP1 .GE. ERK/2) GO TO 460
       GO TO 450 
  445  IF(ERKM1 .LE. MIN(ERK,ERKP1)) GO TO 455 
       IF(ERKP1 .GE. ERK  .OR.  K .EQ. 12) GO TO 460 
@@ -7970,9 +7994,9 @@ C
       IF(P5EPS .GE. ERK*TWO(K+1)) GO TO 465 
       HNEW = H
       IF(P5EPS .GE. ERK) GO TO 465
-      TEMP2 = K+1 
-      R = (P5EPS/ERK)**(1.0/TEMP2)
-      HNEW = ABSH*MAX(0.5_dp,MIN(0.9_dp,R)) 
+      TEMP2 = REAL(K+1, DP) 
+      R = (P5EPS/ERK)**(ONE/TEMP2)
+      HNEW = ABSH*MAX(0.5_dp, MIN(0.9_dp,R)) 
       HNEW = SIGN(MAX(HNEW,FOURU*ABS(X)),H) 
  465  H = HNEW
       RETURN
@@ -8005,6 +8029,7 @@ C   J-TH VARIABLE, RESPECTIVELY.
 C
 C FUNCTIONS USED:  ATAN, COS, SIN.
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE, PI
       IMPLICIT NONE
 C
 C DECLARATION OF INPUT AND OUTPUT:
@@ -8024,15 +8049,15 @@ C
           EXIT
         END IF
       END DO
-      TWOPI = 8.0_dp*ATAN(1.0_dp)
+      TWOPI = 2*PI
       DO J=1,N
-        ANGLE = ( TWOPI/IDEG(J) )*ICOUNT(J)
+        ANGLE = TWOPI / REAL(IDEG(J), DP) * REAL(ICOUNT(J), DP)
         XXXX = CMPLX(COS(ANGLE),SIN(ANGLE),kind=dp)*
-     &        CMPLX(R(1,J),R(2,J),kind=dp)
+     &         CMPLX(R(1,J),R(2,J),kind=dp)
         X(2*J-1) = REAL(XXXX)
         X(2*J) = AIMAG(XXXX)
       END DO
-      RETURN
+C
       END SUBROUTINE STRPTP
 C
       SUBROUTINE TANGNF(RHOLEN,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,
@@ -8104,6 +8129,7 @@ C
 C
 C CALLS  DGEQPF , DNRM2 , DORMQR , F (OR  RHO ), FJAC (OR  RHOJAC ).
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE HOMPACK_INTERFACES, ONLY: F, FJAC, RHO, RHOJAC
       USE BLAS_INTERFACES, ONLY: DNRM2
       USE LAPACK_INTERFACES, ONLY: DGEQPF, DORMQR
@@ -8154,7 +8180,7 @@ C
             CALL FJAC(Y(2:NP1),TZ(1:N),K)
             KP1=K+1
             QR(:,KP1)=-LAMBDA*TZ(1:N)
-            QR(K,KP1)=1.0+QR(K,KP1)
+            QR(K,KP1)=ONE+QR(K,KP1)
           END DO
         ELSE
 C
@@ -8167,14 +8193,14 @@ C
             CALL FJAC(Y(2:NP1),TZ(1:N),K)
             KP1=K+1
             QR(:,KP1)=LAMBDA*TZ(1:N)
-            QR(K,KP1)=1.0-LAMBDA+QR(K,KP1)
+            QR(K,KP1)=ONE-LAMBDA+QR(K,KP1)
           END DO
         ENDIF
       ENDIF
 C
 C   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *
 C COMPUTE THE NORM OF THE HOMOTOPY MAP IF IT WAS REQUESTED.
-      IF (RHOLEN .LT. 0.0) RHOLEN=DNRM2(N,QR(:,NP2),1)
+      IF (RHOLEN .LT. ZERO) RHOLEN=DNRM2(N,QR(:,NP2),1)
 C
 C REDUCE THE JACOBIAN MATRIX TO UPPER TRIANGULAR FORM.
 C
@@ -8182,7 +8208,7 @@ C
 C
       CALL DGEQPF(N,NP1,QR,N,PIVOT,YP,ALPHA,K)
 C
-      IF (ABS(QR(N,N)) .LE. ABS(QR(1,1))*EPSILON(1.0_dp)) THEN 
+      IF (ABS(QR(N,N)) .LE. ABS(QR(1,1))*EPSILON(ONE)) THEN 
         IFLAG=4
         RETURN
       ENDIF
@@ -8195,21 +8221,21 @@ C
       END DO
 C
 C COMPUTE KERNEL OF JACOBIAN, WHICH SPECIFIES YP=DY/DS.
-      TZ(NP1)=1.0
+      TZ(NP1)=ONE
       DO I=N,1,-1
         J=I+1
         TZ(I)=-DOT_PRODUCT(QR(I,J:NP1),TZ(J:NP1))/ALPHA(I)
       END DO
       YPNORM=DNRM2(NP1,TZ,1)
       YP(PIVOT)=TZ/YPNORM
-      IF (DOT_PRODUCT(YP,YPOLD) .LT. 0.0) YP = -YP
+      IF (DOT_PRODUCT(YP,YPOLD) .LT. ZERO) YP = -YP
 C YP  IS THE UNIT TANGENT VECTOR IN THE CORRECT DIRECTION.
 C
 C COMPUTE THE MINIMUM NORM SOLUTION OF [D RHO(Y(S))] V = -RHO(Y(S)).
 C V IS GIVEN BY  P - (P,Q)Q  , WHERE P IS ANY SOLUTION OF
 C [D RHO] V = -RHO  AND Q IS A UNIT VECTOR IN THE KERNEL OF [D RHO].
 C
-      ALPHA(NP1)=1.0
+      ALPHA(NP1)=ONE
       DO I=N,1,-1
         J=I+1
         ALPHA(I)=-(DOT_PRODUCT(QR(I,J:NP1),ALPHA(J:NP1)) + QR(I,NP2))
@@ -8221,7 +8247,7 @@ C IN THE KERNEL(THE TANGENT).
       SIGMA=DOT_PRODUCT(TZ,YP)
       TZ=TZ - SIGMA*YP
 C TZ IS THE NEWTON STEP FROM THE CURRENT POINT Y(S) = (LAMBDA(S), X(S)).
-      RETURN
+
       END SUBROUTINE TANGNF
 C
       SUBROUTINE TANGNS(RHOLEN,Y,YP,TZ,YPOLD,A,MODE,LENQR,NFE,N,IFLAG)
@@ -8298,16 +8324,17 @@ C
 C CALLS  F (OR  RHO ), FJACS (OR  RHOJS ), PCGDS , GMRILUDS , AND THE
 C    BLAS ROUTINE  DNRM2 .
 C
-        USE HOMPACK_INTERFACES, ONLY: F, FJACS, RHO, RHOJS
-        USE HOMPACK_GLOBAL, ONLY: QR => QRSPARSE, ROWPOS, PP, COLPOS
-        USE BLAS_INTERFACES, ONLY: DNRM2
-        IMPLICIT NONE
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE HOMPACK_INTERFACES, ONLY: F, FJACS, RHO, RHOJS
+      USE HOMPACK_GLOBAL, ONLY: QR => QRSPARSE, ROWPOS, PP, COLPOS
+      USE BLAS_INTERFACES, ONLY: DNRM2
+      IMPLICIT NONE
 C
-        REAL(DP), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
-        REAL(DP), INTENT(IN OUT):: RHOLEN
-        REAL(DP), INTENT(OUT), DIMENSION(:):: TZ,YP
-        INTEGER, INTENT(IN):: LENQR,MODE,N
-        INTEGER, INTENT(IN OUT):: IFLAG,NFE
+      REAL(DP), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
+      REAL(DP), INTENT(IN OUT):: RHOLEN
+      REAL(DP), INTENT(OUT), DIMENSION(:):: TZ,YP
+      INTEGER, INTENT(IN):: LENQR,MODE,N
+      INTEGER, INTENT(IN OUT):: IFLAG,NFE
 C
 C ***** LOCAL VARIABLES AND AUTOMATIC WORK ARRAYS. *****
 C
@@ -8348,7 +8375,7 @@ C
           IF (RHOLEN < 0) RHOVEC = Y(1:N) - A(1:N) - LAMBDA*PP
           CALL FJACS(Y(1:N))
           QR = (-LAMBDA)*QR
-          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + 1.0
+          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + ONE
         ELSE
 C
 C   [QR | -PP] = [ LAMBDA*DF(X) + (1 - LAMBDA)*I | F(X) - X + A ] .
@@ -8358,7 +8385,7 @@ C
           IF (RHOLEN < 0) RHOVEC = Y(1:N) - A(1:N) - LAMBDA*PP
           CALL FJACS(Y(1:N))
           QR = LAMBDA*QR
-          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + 1.0 - LAMBDA
+          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + ONE - LAMBDA
         ENDIF
       ENDIF
       ELSE
@@ -8395,7 +8422,7 @@ C FIND INDEX JPOS OF DIAGONAL ELEMENT IN JTH ROW OF QR.
               IFLAG=4
               RETURN
             END DO
-            QR(JPOS) = QR(JPOS) + 1.0
+            QR(JPOS) = QR(JPOS) + ONE
           END DO
         ELSE
 C
@@ -8416,7 +8443,7 @@ C FIND INDEX JPOS OF DIAGONAL ELEMENT IN JTH ROW OF QR.
               IFLAG=4
               RETURN
             END DO
-            QR(JPOS) = QR(JPOS) + 1.0 - LAMBDA
+            QR(JPOS) = QR(JPOS) + ONE - LAMBDA
           END DO
         ENDIF
       ENDIF
@@ -8436,14 +8463,14 @@ C PRECONDITIONED CONJUGATE GRADIENT ALGORITHM.
 C
 C NORMALIZE TANGENT VECTOR YP.
       YPNORM=DNRM2(NP1,YP,1)
-      YP = (1.0/YPNORM)*YP
+      YP = (ONE/YPNORM)*YP
 C
 C CHOOSE UNIT TANGENT VECTOR DIRECTION TO MAINTAIN CONTINUITY.
-      IF (DOT_PRODUCT(YP,YPOLD) .LT. 0.0) YP = -YP
+      IF (DOT_PRODUCT(YP,YPOLD) .LT. ZERO) YP = -YP
 C
 C COMPUTE THE NORM OF THE HOMOTOPY MAP AND THE NEWTON STEP
 C IF IT WAS REQUESTED.
-      IF (RHOLEN < 0.0) THEN
+      IF (RHOLEN < ZERO) THEN
         RHOLEN=DNRM2(N,RHOVEC,1)
 C COMPUTE THE MINIMUM NORM SOLUTION OF [D RHO(Y(S))] V = -RHO(Y(S)).
 C V IS GIVEN BY  P - (P,Q)Q  , WHERE P IS ANY SOLUTION OF
@@ -8463,7 +8490,6 @@ C IN THE KERNEL(THE TANGENT).
 C TZ IS THE NEWTON STEP FROM THE CURRENT POINT Y(S) = (X(S), LAMBDA(S)).
       END IF
 C
-      RETURN
       END SUBROUTINE TANGNS
 C
       SUBROUTINE TANGQF(Y,YP,YPOLD,A,Q,R,W,S,T,N,IFLAG,NFE)
@@ -8547,7 +8573,8 @@ C FJAC (OR RHOJAC, IF IFLAG = -2),
 C R1UPQF (WHICH IS AN ENTRY POINT OF UPQRQF).
 C        
 C ***** DECLARATIONS *****
-      use HOMPACK_INTERFACES, ONLY: FJAC, RHOJAC, F
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE HOMPACK_INTERFACES, ONLY: FJAC, RHOJAC, F
       USE BLAS_INTERFACES, ONLY: DNRM2, DTPSV
       USE LAPACK_INTERFACES, ONLY: DGEQRF, DORGQR
       IMPLICIT NONE
@@ -8597,7 +8624,7 @@ C
           JP1 = J+1
           CALL FJAC(Y(2:NP1),Q(1:N,JP1),J)
           Q(1:N,JP1) = LAMBDA*Q(1:N,JP1)
-          Q(J,JP1) = 1.0 - LAMBDA + Q(J,JP1)
+          Q(J,JP1) = ONE - LAMBDA + Q(J,JP1)
         END DO
       ELSE 
 C
@@ -8610,7 +8637,7 @@ C
           JP1 = J+1
           CALL FJAC(Y(2:NP1),Q(1:N,JP1),J)
           Q(1:N,JP1) = -LAMBDA*Q(1:N,JP1)
-          Q(J,JP1) = 1.0 + Q(J,JP1)
+          Q(J,JP1) = ONE + Q(J,JP1)
         END DO
       END IF
 C
@@ -8641,7 +8668,7 @@ C CHECK FOR SINGULARITY.
 C
       J = 1
       DO I = 1, N
-        IF( R( J+I-1 ).EQ. 0.0 ) THEN
+        IF( R( J+I-1 ).EQ. ZERO ) THEN
           IFLAG = 4
           RETURN
         END IF
@@ -8657,7 +8684,7 @@ C
 C
 C COMPUTE UNIT VECTOR.
 C
-      YPNRM = 1.0/DNRM2(NP1,YP,1)
+      YPNRM = ONE/DNRM2(NP1,YP,1)
       YP = YPNRM*YP
 C
 C ***** SYSTEM SOLVED *****
@@ -8669,8 +8696,6 @@ C
       S = YP - YPOLD
       T = Q(NP1,:)
       CALL R1UPQF(NP1,S,T,Q,R,W)        
-C
-      RETURN
 C
       END SUBROUTINE TANGQF
 C
@@ -8729,12 +8754,13 @@ C ***** DECLARATIONS *****
 C
 C FUNCTION DECLARATIONS 
 C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
       USE BLAS_INTERFACES, ONLY: DNRM2, DTPMV, DGEMV
       IMPLICIT NONE
 C
 C LOCAL VARIABLES 
 C
-      REAL(DP):: C, DEN, ONE, SS, WW, YY, ZERO
+      REAL(DP):: C, DEN, SS, WW, YY
       INTEGER:: I, INDEXC, INDEXD, INDXC2, J, K
       LOGICAL:: SKIPUP
 C
@@ -8752,8 +8778,6 @@ C ***** END OF DECLARATIONS *****
 C
 C ***** FIRST EXECUTABLE STATEMENT *****
 C
-      ONE = 1.0
-      ZERO = 0.0
       SKIPUP = .TRUE.
 C
 C ***** DEFINE T AND S SUCH THAT *****
@@ -8772,7 +8796,7 @@ C
 C IF W(I) IS NOT SMALL, THEN UPDATE MUST BE PERFORMED,
 C OTHERWISE SET W(I) TO 0.
 C
-      WHERE (ABS(W) .LE. ETA*(ABS(F1) + ABS(F0))) W = 0.0
+      WHERE (ABS(W) .LE. ETA*(ABS(F1) + ABS(F0))) W = ZERO
       IF (ANY(ABS(W) .GT. ETA*(ABS(F1) + ABS(F0)))) SKIPUP = .FALSE.
 C
 C IF NO UPDATE IS NECESSARY, THEN RETURN.
@@ -8785,7 +8809,7 @@ C
 C
 C S = S/(ST*S).
 C
-      S = (1.0/DOT_PRODUCT(S,S))*S
+      S = (ONE/DOT_PRODUCT(S,S))*S
 C
 C ***** END OF COMPUTATION OF  T & S      *****
 C       AT THIS POINT,  A+ = Q*(R + T*ST). 
@@ -8799,7 +8823,7 @@ C FIND THE LARGEST  K  SUCH THAT  T(K) .NE. 0.
 C
       K = N
       DO
-        IF (T(K) .NE. 0.0 .OR. K .LE. 1) EXIT
+        IF (T(K) .NE. ZERO .OR. K .LE. 1) EXIT
         K=K-1
       END DO
 C
@@ -8824,8 +8848,8 @@ C
 C         DETERMINE THE JACOBI ROTATION WHICH WILL ZERO OUT
 C         ROW  I+1  OF THE  T*ST  MATRIX.
 C
-        IF (T(I) .EQ. 0.0) THEN
-          C = 0.0
+        IF (T(I) .EQ. ZERO) THEN
+          C = ZERO
 C         SS = SIGN(-T(I+1))= -T(I+1)/|T(I+1)|
           SS = -SIGN(ONE,T(I+1))
         ELSE
@@ -8837,7 +8861,7 @@ C
 C         PREMULTIPLY  R  BY THE JACOBI ROTATION.
 C
         YY = R(INDEXD)
-        WW = 0.0
+        WW = ZERO
         R(INDEXD) = C*YY - SS*WW
         W(I+1) = SS*YY + C*WW
         DO J= I+1,N
@@ -8866,7 +8890,7 @@ C         UPDATE  T(I)  SO THAT  T(I)*ST(J)  IS THE  (I,J)TH  COMPONENT
 C         OF  T*ST, PREMULTIPLIED BY ALL OF THE JACOBI ROTATIONS SO
 C         FAR.
 C
-        IF (T(I) .EQ. 0.0) THEN
+        IF (T(I) .EQ. ZERO) THEN
           T(I) = ABS(T(I+1))
         ELSE
           T(I) = DNRM2(2,T(I),1)
@@ -8901,8 +8925,8 @@ C
 C         DETERMINE APPROPRIATE JACOBI ROTATION TO ZERO OUT
 C         R(I+1,I).
 C
-        IF (R(INDEXD) .EQ. 0.0) THEN
-          C = 0.0
+        IF (R(INDEXD) .EQ. ZERO) THEN
+          C = ZERO
           SS = -SIGN(ONE,W(I+1))
         ELSE
           TT(1) = R(INDEXD)
@@ -8917,7 +8941,7 @@ C
         YY = R(INDEXD)
         WW = W(I+1)
         R(INDEXD) = C*YY - SS*WW
-        W(I+1) = 0.0
+        W(I+1) = ZERO
         DO J= I+1,N
 C           YY = R(I,J)
 C           WW = R(I+1,J)  
