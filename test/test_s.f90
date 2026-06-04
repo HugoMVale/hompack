@@ -6,7 +6,7 @@ module switch
 end module switch
 
 program test_s
-!! Main program to test `fixpqs`, `fixpns`, and `fixpds.
+!! Main program to test `fixpqs`, `fixpns`, and `fixpds`.
 !!
 !! The output from this routine should be as follows, with the execution times
 !! corresponding to a DEC AXP 3000/600.
