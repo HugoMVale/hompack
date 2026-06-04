@@ -117,12 +117,13 @@ endif
 
 # Sources
 hompack_source = files(
-  'src/HOMPACK90.f',
   'src/blas_interfaces.f90',
   'src/lapack_interfaces.f90',
   'src/hompack_kinds.f90',
   'src/hompack_global.f90',
   'src/hompack_interfaces.f90',
+  'src/hompack.f',
+  'src/hompack_core.f',
 )
 
 all_sources = hompack_source + blas_source
