@@ -13,7 +13,7 @@ jobs:
         uses: gha3mi/setup-fortran-conda@latest
         with:
           compiler: gfortran
-          compiler-version: 12
+          compiler-version: 14
           platform: ubuntu-latest
           extra-packages: "openblas pkg-config"
       
@@ -21,7 +21,8 @@ jobs:
         run: |
           gcov --version
           pip install gcovr coverage
-          fpm test --profile debug --flag "-Wno-compare-reals -Wno-unused-dummy-argument --coverage -fprofile-abs-path"
+          fpm --version
+          fpm test --profile debug --flag "-Wno-compare-reals -Wno-unused-dummy-argument --coverage -fprofile-abs-path" --verbose
           gcovr --filter src --cobertura-pretty --output coverage.xml
     
       - name: Upload coverage to Codecov
