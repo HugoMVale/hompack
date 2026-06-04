@@ -1,7 +1,7 @@
 tests = [
-	'TESTF.f',
-	'TESTP.f',
-	'TESTS.f',
+	'TEST_F.f',
+	'TEST_P.f',
+	'TEST_S.f',
 ]
 
 foreach t : tests
