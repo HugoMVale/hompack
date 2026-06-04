@@ -1,13 +1,12 @@
 program test_f
-!! Main program to test `fixpqf`, `fixpnf`, `fixpdf`, `stepnx`, and `rootnx`.
-!! brown's function, zero finding.
+!! Main program to test `fixpqf`, `fixpnf`, `fixpdf`, `stepnx`, `stepnx`, and `rootnx`.
 !!
-!! This program tests the hompack routines `fixpqf`, `fixpnf`, `fixpdf`,
-!! `stepnx`, and `rootnx`.
+!! Brown's function, zero finding.
 !!
 !! The output from this routine should be as follows, with the execution times
 !! corresponding to a DEC AXP 3000/600.
 !!
+!! ```
 !!       TESTING FIXPQF
 !!
 !! LAMBDA = 1.00000000  FLAG = 1       6 JACOBIAN EVALUATIONS
@@ -38,6 +37,7 @@ program test_f
 !! EXECUTION TIME(SECS) =     0.020    ARCLEN =     2.711
 !!   1.00000000E+00  1.00000000E+00  1.00000000E+00  1.00000000E+00
 !!   1.00000000E+00
+!! ```
 
    use hompack_kinds, only: dp
    use hompack, only: fixpdf, fixpnf, fixpqf
