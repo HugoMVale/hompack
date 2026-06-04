@@ -2,7 +2,6 @@ module hompack_interfaces
 ! Interfaces for user written subroutines.
 
    use hompack_kinds, only: dp
-   use hompack90_global
    implicit none
 
    interface
@@ -125,7 +124,7 @@ module hompack_interfaces
          ! qrsparse, and colpos (of length lenqr) contains the column indices of
          ! the corresponding elements in qrsparse.  even if zero, the diagonal
          ! elements of the jacobian matrix must be stored in qrsparse.
-         use hompack90_global, only: qrsparse, rowpos, colpos
+         use hompack_global, only: qrsparse, rowpos, colpos
          import :: dp
          real(dp), dimension(:), intent(in) :: x
       end subroutine fjacs
@@ -152,7 +151,7 @@ module hompack_interfaces
          ! even if zero, the diagonal elements of the jacobian matrix must be
          ! stored in qrsparse.  the allocatable array pp is not used in this
          ! storage format.
-         use hompack90_global, only: qrsparse, rowpos, colpos
+         use hompack_global, only: qrsparse, rowpos, colpos
          import :: dp
          real(dp), intent(in) :: a(:), lambda, x(:)
       end subroutine rhojs

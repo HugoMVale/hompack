@@ -213,14 +213,16 @@ C THIS TEST CODE HAS DIMENSIONS SET AS FOLLOWS:
 C
 C NN=10, MMAXT=30, TTOTDG=1024
 C
-      PROGRAM TESTP
-      use hompack_kinds, only: dp
-      USE HOMPACK90, ONLY : POLSYS1H
+      PROGRAM TEST_P
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK, ONLY: POLSYS1H
+      IMPLICIT NONE
+C
       INTEGER, PARAMETER:: NN=10,MMAXT=30,TTOTDG=1024
       INTEGER:: IFLG1,IFLG2(TTOTDG),IFLGHM,IFLGSC,ITOTIT,J,K,
      &  KDEG(NN,NN+1,MMAXT),L,M,MAXT,N,NFE(TTOTDG),NP1,NT,
      &  NUMRR,NUMT(NN),TOTDG
-      REAL (dp):: ARCLEN(TTOTDG),COEF(NN,MMAXT),EPSBIG,EPSSML,
+      REAL(DP):: ARCLEN(TTOTDG),COEF(NN,MMAXT),EPSBIG,EPSSML,
      &  LAMBDA(TTOTDG),ROOTS(2,NN+1,TTOTDG),SSPAR(8)
       CHARACTER (LEN=72):: TITLE
 ! If using a subroutine library of the HOMPACK90 subroutines rather than
@@ -229,13 +231,13 @@ C
 !     INTERFACE
 !       SUBROUTINE POLSYS1H(N,NUMT,COEF,KDEG,IFLG1,IFLG2,EPSBIG,EPSSML,
 !    &     SSPAR,NUMRR,LAMBDA,ROOTS,ARCLEN,NFE)
-!       USE HOMOTOPY
+!       use hompack_interfaces
 !       USE REAL_PRECISION
 !       INTEGER, INTENT(IN):: N,NUMT(:),KDEG(:,:,:),NUMRR
-!       REAL (dp), INTENT(IN):: COEF(:,:),EPSBIG,EPSSML
+!       REAL(DP), INTENT(IN):: COEF(:,:),EPSBIG,EPSSML
 !       INTEGER, INTENT(IN OUT):: IFLG1,IFLG2(:)
-!       REAL (dp), INTENT(IN OUT):: SSPAR(8)
-!       REAL (dp), INTENT(OUT):: LAMBDA(:),ROOTS(:,:,:),ARCLEN(:)
+!       REAL(DP), INTENT(IN OUT):: SSPAR(8)
+!       REAL(DP), INTENT(OUT):: LAMBDA(:),ROOTS(:,:,:),ARCLEN(:)
 !       INTEGER, INTENT(OUT):: NFE(:)
 !       END SUBROUTINE POLSYS1H
 !     END INTERFACE
@@ -361,13 +363,14 @@ C
       STOP
  1000 FORMAT(I5)
  2000 FORMAT(ES22.14)
-      END PROGRAM TESTP
+C
+      END PROGRAM TEST_P
 !
 ! HOMOTOPY subroutines for the polynomial system driver POLSYS1H.
 ! These subroutines should be used verbatim with POLSYS1H for solving
 ! polynomial systems of equations.  The polynomial coefficients, defined
 ! as input to POLSYS1H, are accessed by the routines here via the global
-! arrays in HOMPACK90_GLOBAL.
+! arrays in HOMPACK_GLOBAL.
 !
 C ###################################################################
 C ONLY THE SUBROUTINES RHO AND RHOJAC ARE USED BY THE POLYNOMIAL
@@ -376,35 +379,42 @@ C SIMPLY AS TEMPLATES.
 C ###################################################################
 !
       SUBROUTINE F(X,V)
-      use hompack_kinds, only: dp
-      REAL (dp), INTENT(IN):: X(:)
-      REAL (dp), INTENT(OUT):: V(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: X(:)
+      REAL(DP), INTENT(OUT):: V(:)
 C
 C EVALUATE  F(X)  AND RETURN IN THE VECTOR  V .
 C
       V(1)=X(1) ! INTENT(OUT) VARIABLE MUST BE DEFINED.
-      RETURN
+C
       END SUBROUTINE F
-
+C
       SUBROUTINE FJAC(X,V,K)
-      use hompack_kinds, only: dp
-      REAL (dp), INTENT(IN):: X(:)
-      REAL (dp), INTENT(OUT):: V(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: X(:)
+      REAL(DP), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
 C
 C RETURN IN  V  THE KTH COLUMN OF THE JACOBIAN MATRIX OF
 C F(X) EVALUATED AT  X .
 C
       V(1)=X(1) ! INTENT(OUT) VARIABLE MUST BE DEFINED.
-      RETURN
+C
       END SUBROUTINE FJAC
-
+C
       SUBROUTINE RHO(A,LAMBDA,X,V)
-      use hompack_kinds, only: dp
-      USE HOMPACK90_GLOBAL, ONLY: IPAR, PAR
-      REAL (dp), INTENT(IN):: A(:),X(:)
-      REAL (dp), INTENT(IN OUT):: LAMBDA
-      REAL (dp), INTENT(OUT):: V(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_CORE, ONLY: HFUNP
+      USE HOMPACK_GLOBAL, ONLY: IPAR, PAR
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: A(:),X(:)
+      REAL(DP), INTENT(IN OUT):: LAMBDA
+      REAL(DP), INTENT(OUT):: V(:)
 C
 C EVALUATE  RHO(A,LAMBDA,X)  AND RETURN IN THE VECTOR  V .
 C
@@ -412,13 +422,6 @@ C THE FOLLOWING CODE IS SPECIFICALLY FOR THE POLYNOMIAL SYSTEM DRIVER
 C  POLSYS1H , AND SHOULD BE USED VERBATIM WITH  POLSYS1H .  IF THE USER IS
 C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
-      INTERFACE
-        SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        use hompack_kinds, only: dp
-        INTEGER, INTENT(IN):: N
-        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
-        END SUBROUTINE HFUNP
-      END INTERFACE
       INTEGER:: J,NPOL
 C FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
       IF (LAMBDA .LT. 0.0) LAMBDA=0.0
@@ -428,27 +431,31 @@ C FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
         V(J)=PAR(IPAR(3 + (4-1)) + (J-1))
       END DO
 C
-      RETURN
       END SUBROUTINE RHO
-
+C
       SUBROUTINE RHOA(A,LAMBDA,X)
-      use hompack_kinds, only: dp
-      REAL (dp), INTENT(OUT):: A(:)
-      REAL (dp), INTENT(IN):: LAMBDA,X(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(OUT):: A(:)
+      REAL(DP), INTENT(IN):: LAMBDA,X(:)
 C
 C CALCULATE AND RETURN IN  A  THE VECTOR Z SUCH THAT
 C  RHO(Z,LAMBDA,X) = 0 .
 C
       A(1)=LAMBDA ! INTENT(OUT) VARIABLE MUST BE DEFINED.
-      RETURN
+C
       END SUBROUTINE RHOA
 
       SUBROUTINE RHOJAC(A,LAMBDA,X,V,K)
-      use hompack_kinds, only: dp
-      USE HOMPACK90_GLOBAL, ONLY: IPAR, PAR
-      REAL (dp), INTENT(IN):: A(:),X(:)
-      REAL (dp), INTENT(IN OUT):: LAMBDA
-      REAL (dp), INTENT(OUT):: V(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_CORE, ONLY: HFUNP
+      USE HOMPACK_GLOBAL, ONLY: IPAR, PAR
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: A(:),X(:)
+      REAL(DP), INTENT(IN OUT):: LAMBDA
+      REAL(DP), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
 C
 C RETURN IN THE VECTOR  V  THE KTH COLUMN OF THE JACOBIAN
@@ -459,13 +466,6 @@ C THE FOLLOWING CODE IS SPECIFICALLY FOR THE POLYNOMIAL SYSTEM DRIVER
 C  POLSYS1H , AND SHOULD BE USED VERBATIM WITH  POLSYS1H .  IF THE USER IS
 C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
-      INTERFACE
-        SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        use hompack_kinds, only: dp
-        INTEGER, INTENT(IN):: N
-        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
-        END SUBROUTINE HFUNP
-      END INTERFACE
       INTEGER:: J,NPOL,N2
       NPOL=IPAR(1)
       N2=2*NPOL
@@ -483,13 +483,14 @@ C FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
         END DO
       ENDIF
 C
-      RETURN
       END SUBROUTINE RHOJAC
-
+C
       SUBROUTINE FJACS(X)
-      use hompack_kinds, only: dp
-      USE HOMPACK90_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
-      REAL (dp), INTENT(IN):: X(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
@@ -507,13 +508,14 @@ C QRSPARSE, and COLPOS (of length LENQR) contains the column indices of
 C the corresponding elements in QRSPARSE.  Even if zero, the diagonal
 C elements of the Jacobian matrix must be stored in QRSPARSE.
 C
-      RETURN
       END SUBROUTINE FJACS
 
       SUBROUTINE RHOJS(A,LAMBDA,X)
-      use hompack_kinds, only: dp
-      USE HOMPACK90_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
-      REAL (dp), INTENT(IN):: A(:),LAMBDA,X(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_GLOBAL, ONLY: QRSPARSE, ROWPOS, COLPOS
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: A(:),LAMBDA,X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
@@ -531,5 +533,4 @@ C QRSPARSE, and COLPOS (of length LENQR) contains the column indices of
 C the corresponding elements in QRSPARSE.  Even if zero, the diagonal
 C elements of the Jacobian matrix must be stored in QRSPARSE.
 C
-      RETURN
       END SUBROUTINE RHOJS

@@ -39,55 +39,21 @@ C   1.00000000E+00  1.00000000E+00  1.00000000E+00  1.00000000E+00
 C   1.00000000E+00
 C
 C
-      PROGRAM TESTF
-      use hompack_kinds, only: dp
-      USE HOMPACK90, ONLY : FIXPDF, FIXPNF, FIXPQF
+      PROGRAM TEST_F
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK, ONLY: FIXPDF, FIXPNF, FIXPQF
       IMPLICIT NONE
+C
       INTEGER, PARAMETER:: N=5, NDIMA=5
-      REAL (dp):: A(N),ANSAE,ANSRE,ARCAE,ARCRE,
+      REAL(DP):: A(N),ANSAE,ANSRE,ARCAE,ARCRE,
      &  ARCLEN,DTIME,SSPAR(8),Y(N+1)
       INTEGER:: IFLAG,II,J,NFE,NP1,TIMENEW(8),TIMEOLD(8),TRACE
       CHARACTER (LEN=6) NAME
-! If using a subroutine library of the HOMPACK90 subroutines rather than
-! the MODULE HOMPACK90 (as above), then the following INTERFACE
-! statements are necessary.
-!     INTERFACE
-!       SUBROUTINE FIXPDF(N,Y,IFLAG,ARCTOL,EPS,TRACE,A,NDIMA,
-!    &    NFE,ARCLEN)
-!       USE REAL_PRECISION
-!       INTEGER, INTENT(IN)::N,NDIMA,TRACE
-!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
-!       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (dp), INTENT(IN OUT)::ARCTOL,EPS
-!       INTEGER, INTENT(OUT)::NFE
-!       REAL (dp), INTENT(OUT)::ARCLEN
-!       END SUBROUTINE FIXPDF
 C
-!       SUBROUTINE FIXPNF(N,Y,IFLAG,ARCRE,ARCAE,ANSRE,ANSAE,TRACE,A,
-!    &    SSPAR,NFE,ARCLEN,POLY_SWITCH)
-!       USE REAL_PRECISION
-!       INTEGER, INTENT(IN)::N,TRACE
-!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
-!       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
-!    &    SSPAR(8)
-!       INTEGER, INTENT(OUT)::NFE
-!       REAL (dp), INTENT(OUT)::ARCLEN
-!       LOGICAL, INTENT(IN), OPTIONAL::POLY_SWITCH
-!      END SUBROUTINE FIXPNF
-C
-!       SUBROUTINE FIXPQF(N,Y,IFLAG,ARCRE,ARCAE,ANSRE,ANSAE,TRACE,A,
-!    &    SSPAR,NFE,ARCLEN)
-!       USE REAL_PRECISION
-!       INTEGER, INTENT(IN)::N,TRACE
-!       REAL (dp), DIMENSION(:), INTENT(IN OUT)::A,Y
-!       INTEGER, INTENT(IN OUT)::IFLAG
-!       REAL (dp), INTENT(IN OUT)::ANSAE,ANSRE,ARCAE,ARCRE,
-!    &    SSPAR(4)
-!       INTEGER, INTENT(OUT)::NFE
-!       REAL (dp), INTENT(OUT)::ARCLEN
-!      END SUBROUTINE FIXPQF
-!     END INTERFACE
+      INTERFACE
+        SUBROUTINE MAINX
+        END SUBROUTINE MAINX 
+      END INTERFACE
 C
 C TEST EACH OF THE THREE ALGORITHMS.
 C
@@ -156,7 +122,7 @@ C PROBLEM.
 C
       CALL MAINX
       STOP
-      END PROGRAM TESTF
+      END PROGRAM TEST_F
 !
 ! SAMPLE USER WRITTEN HOMOTOPY SUBROUTINES FOR TESTING FIXP*F.
 !
@@ -167,16 +133,18 @@ C      SUBROUTINE F(X,V) -- EVALUATES BROWN'S FUNCTION AT THE POINT
 C         X, AND RETURNS THE VALUE IN V.
 C
 C********************************************************************
-      use hompack_kinds, only: dp
+      USE HOMPACK_KINDS, ONLY: DP
       IMPLICIT NONE
-      REAL (dp), INTENT(IN):: X(:)
-      REAL (dp), INTENT(OUT):: V(:)
+C
+      REAL(DP), INTENT(IN):: X(:)
+      REAL(DP), INTENT(OUT):: V(:)
       INTEGER:: N
       N=SIZE(X)
       V(1)=PRODUCT(X) - 1.0
       V(2:N)=SUM(X) - (N+1) + X(2:N)
-      RETURN
+C
       END SUBROUTINE F
+C
       SUBROUTINE FJAC(X,V,K)
 C********************************************************************
 C
@@ -185,12 +153,14 @@ C         THE JACOBIAN MATRIX FOR BROWN'S FUNCTION EVALUATED AT
 C         THE POINT X, RETURNING THE VALUE IN V.
 C
 C********************************************************************
-      use hompack_kinds, only: dp
-      REAL (dp), INTENT(IN):: X(:)
-      REAL (dp), INTENT(OUT):: V(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: X(:)
+      REAL(DP), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
       INTEGER:: J,N
-      REAL (dp):: PROD
+      REAL(DP):: PROD
 C
       N=SIZE(X)
       PROD=1.0
@@ -203,19 +173,22 @@ C
       V(1)=PROD
       V(2:N)=1.0
       IF (K .GT. 1) V(K)=V(K)+1.0
-      RETURN
+C
       END SUBROUTINE FJAC
 C **********************************************************************
 C
-C THE REST OF THESE SUBROUTINES ARE NOT USED BY PROGRAM TESTF, AND ARE
+C THE REST OF THESE SUBROUTINES ARE NOT USED BY PROGRAM TEST_F, AND ARE
 C INCLUDED HERE SIMPLY FOR COMPLETENESS AND AS TEMPLATES FOR THEIR USE.
 C
       SUBROUTINE RHO(A,LAMBDA,X,V)
-      use hompack_kinds, only: dp
-      USE HOMPACK90_GLOBAL
-      REAL (dp), INTENT(IN):: A(:),X(:)
-      REAL (dp), INTENT(IN OUT):: LAMBDA
-      REAL (dp), INTENT(OUT):: V(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_CORE, ONLY: HFUNP
+      USE HOMPACK_GLOBAL, ONLY: PAR, IPAR
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: A(:),X(:)
+      REAL(DP), INTENT(IN OUT):: LAMBDA
+      REAL(DP), INTENT(OUT):: V(:)
 C
 C EVALUATE  RHO(A,LAMBDA,X)  AND RETURN IN THE VECTOR  V .
 C
@@ -223,13 +196,7 @@ C THE FOLLOWING CODE IS SPECIFICALLY FOR THE POLYNOMIAL SYSTEM DRIVER
 C  POLSYS1H , AND SHOULD BE USED VERBATIM WITH  POLSYS1H .  IF THE USER IS
 C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
-      INTERFACE
-        SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        use hompack_kinds, only: dp
-        INTEGER, INTENT(IN):: N
-        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
-        END SUBROUTINE HFUNP
-      END INTERFACE
+C
       INTEGER:: J,NPOL
 C FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
       IF (LAMBDA .LT. 0.0) LAMBDA=0.0
@@ -239,27 +206,31 @@ C FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
         V(J)=PAR(IPAR(3 + (4-1)) + (J-1))
       END DO
 C
-      RETURN
       END SUBROUTINE RHO
 
       SUBROUTINE RHOA(A,LAMBDA,X)
-      use hompack_kinds, only: dp
-      REAL (dp), INTENT(OUT):: A(:)
-      REAL (dp), INTENT(IN):: LAMBDA,X(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(OUT):: A(:)
+      REAL(DP), INTENT(IN):: LAMBDA,X(:)
 C
 C CALCULATE AND RETURN IN  A  THE VECTOR Z SUCH THAT
 C  RHO(Z,LAMBDA,X) = 0 .
 C
       A(1)=LAMBDA ! INTENT(OUT) VARIABLE MUST BE DEFINED.
-      RETURN
+C
       END SUBROUTINE RHOA
 
       SUBROUTINE RHOJAC(A,LAMBDA,X,V,K)
-      use hompack_kinds, only: dp
-      USE HOMPACK90_GLOBAL
-      REAL (dp), INTENT(IN):: A(:),X(:)
-      REAL (dp), INTENT(IN OUT):: LAMBDA
-      REAL (dp), INTENT(OUT):: V(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_CORE, ONLY: HFUNP
+      USE HOMPACK_GLOBAL, ONLY: PAR, IPAR
+      IMPLICIT NONE 
+C
+      REAL(DP), INTENT(IN):: A(:),X(:)
+      REAL(DP), INTENT(IN OUT):: LAMBDA
+      REAL(DP), INTENT(OUT):: V(:)
       INTEGER, INTENT(IN):: K
 C
 C RETURN IN THE VECTOR  V  THE KTH COLUMN OF THE JACOBIAN
@@ -270,13 +241,7 @@ C THE FOLLOWING CODE IS SPECIFICALLY FOR THE POLYNOMIAL SYSTEM DRIVER
 C  POLSYS1H , AND SHOULD BE USED VERBATIM WITH  POLSYS1H .  IF THE USER IS
 C CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
 C REPLACEMENT CODE HERE.
-      INTERFACE
-        SUBROUTINE HFUNP(N,A,LAMBDA,X)
-        use hompack_kinds, only: dp
-        INTEGER, INTENT(IN):: N
-        REAL (dp), INTENT(IN):: A(2*N),LAMBDA,X(2*N)
-        END SUBROUTINE HFUNP
-      END INTERFACE
+C
       INTEGER:: J,NPOL,N2
       NPOL=IPAR(1)
       N2=2*NPOL
@@ -294,13 +259,14 @@ C FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
         END DO
       ENDIF
 C
-      RETURN
       END SUBROUTINE RHOJAC
 
       SUBROUTINE FJACS(X)
-      use hompack_kinds, only: dp
-      USE HOMPACK90_GLOBAL
-      REAL (dp), INTENT(IN):: X(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_GLOBAL
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
@@ -318,13 +284,14 @@ C QRSPARSE, and COLPOS (of length LENQR) contains the column indices of
 C the corresponding elements in QRSPARSE.  Even if zero, the diagonal
 C elements of the Jacobian matrix must be stored in QRSPARSE.
 C
-      RETURN
       END SUBROUTINE FJACS
 
       SUBROUTINE RHOJS(A,LAMBDA,X)
-      use hompack_kinds, only: dp
-      USE HOMPACK90_GLOBAL
-      REAL (dp), INTENT(IN):: A(:),LAMBDA,X(:)
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_GLOBAL
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN):: A(:),LAMBDA,X(:)
 C
 C If MODE = 1,
 C evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
@@ -342,7 +309,6 @@ C QRSPARSE, and COLPOS (of length LENQR) contains the column indices of
 C the corresponding elements in QRSPARSE.  Even if zero, the diagonal
 C elements of the Jacobian matrix must be stored in QRSPARSE.
 C
-      RETURN
       END SUBROUTINE RHOJS
 C **********************************************************************
 C
@@ -353,55 +319,18 @@ C  MORE JACOBIAN EVALUATIONS SINCE THE UNDEFINED FUNCTION OPTION OF
 C  STEPNX  IS USED TO FORCE SMALLER STEPS.
 C
       SUBROUTINE MAINX
-      use hompack_kinds, only: dp
-      USE HOMOTOPY
+      USE HOMPACK_KINDS, ONLY: DP
+      USE HOMPACK_CORE, ONLY: ROOTNX, STEPNX, TANGNF
       IMPLICIT NONE
+C
       INTEGER, PARAMETER:: N=5, NDIMA=5
-      REAL (dp):: A(NDIMA),ABSERR,ALPHA(3*N+3),
+      REAL(DP):: A(NDIMA),ABSERR,ALPHA(3*N+3),
      &  ANSAE,ANSRE,ARCAE,ARCRE,ARCLEN,DTIME,GOFW,H,HOLD,
      &  QR(N,N+2),RELERR,RHOLEN,S,SSPAR(8),TZ(N+1),W(N+1),
      &  WP(N+1),Y(N+1),YOLD(N+1),YOLDS(N+1),YP(N+1),YPOLD(N+1)
       INTEGER:: IFLAG,ITER=0,J,NFE,NFEC=0,NP1,PIVOT(N+1),
      &  TIMENEW(8),TIMEOLD(8),TRACE
       LOGICAL:: CRASH, START
-C
-      INTERFACE
-        SUBROUTINE ROOTNX(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,
-     &   YPOLD,A,GOFW,TZ,W,WP)
-        USE HOMOTOPY
-        use hompack_kinds, only: dp
-        INTEGER, INTENT(IN):: N
-        INTEGER, INTENT(IN OUT):: NFE,IFLAG
-        REAL (dp), INTENT(IN):: RELERR,ABSERR
-        REAL (dp), DIMENSION(:), INTENT(IN):: A
-        REAL (dp), INTENT(IN OUT):: GOFW
-        REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
-     &    TZ,W,WP
-        END SUBROUTINE ROOTNX
-        SUBROUTINE STEPNX(N,NFE,IFLAG,START,CRASH,HOLD,H,RELERR,
-     &    ABSERR,S,Y,YP,YOLD,YPOLD,A,TZ,W,WP,RHOLEN,SSPAR)
-        USE HOMOTOPY
-        use hompack_kinds, only: dp
-        INTEGER, INTENT(IN):: N
-        INTEGER, INTENT(IN OUT):: NFE,IFLAG
-        LOGICAL, INTENT(IN OUT):: START,CRASH
-        REAL (dp), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
-     &    SSPAR(8)
-        REAL (dp), DIMENSION(:), INTENT(IN):: A
-        REAL (dp), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
-     &    TZ,W,WP
-        REAL (dp), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
-        END SUBROUTINE STEPNX
-        SUBROUTINE TANGNF(RHOLEN,Y,YP,YPOLD,A,QR,ALPHA,TZ,PIVOT,
-     &    NFE,N,IFLAG)
-        use hompack_kinds, only: dp
-        REAL (dp):: RHOLEN
-        INTEGER:: IFLAG,N,NFE
-        REAL (dp):: A(:),Y(:),YP(N+1),YPOLD(N+1)
-        REAL (dp):: ALPHA(3*N+3),QR(N,N+2),TZ(N+1)
-        INTEGER:: PIVOT(N+1)
-        END SUBROUTINE TANGNF
-      END INTERFACE
 C
 C DEFINE ARGUMENTS FOR CALL TO HOMPACK PROCEDURE.
 C
@@ -523,5 +452,5 @@ C
 50    FORMAT(/' LAMBDA =',F11.8,'  FLAG =',I3,I8,' JACOBIAN ',
      &   'EVALUATIONS',/,1X,'EXECUTION TIME(SECS) =',F10.3,4X,
      &   'ARCLEN =',F10.3/(1X,4ES16.8))
-      RETURN
+C
       END SUBROUTINE MAINX

@@ -16,6 +16,6 @@ link = ["openblas"]
 library = false
 
 [fortran]
-implicit-typing = true
-implicit-external = true
+implicit-typing = false
+implicit-external = false
 source-form = "default"
