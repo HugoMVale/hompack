@@ -22,7 +22,7 @@ jobs:
           gcov --version
           pip install gcovr coverage
           fpm --version
-          fpm test --profile debug --flag "-Wno-compare-reals -Wno-unused-dummy-argument --coverage -fprofile-abs-path" --verbose
+          fpm test --profile debug --flag "-Wno-compare-reals -Wno-unused-dummy-argument --coverage -fprofile-abs-path -Wno-coverage-invalid-line-number" --verbose
           gcovr --filter src --cobertura-pretty --output coverage.xml
     
       - name: Upload coverage to Codecov
