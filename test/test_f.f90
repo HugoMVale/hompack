@@ -1,3 +1,37 @@
+module test_f_mod
+!! Module to hold the user-supplied function and Jacobian evaluation subroutines
+
+   use iso_c_binding, only: c_ptr
+   use hompack_kinds, only: dp
+   implicit none
+
+contains
+
+   subroutine f2(x, v, data)
+
+      use hompack_interfaces, only: f ! # TEMPORARY
+      real(dp), intent(in) :: x(:)
+      real(dp), intent(out) :: v(:)
+      type(c_ptr), value :: data
+
+      call f(x, v)
+
+   end subroutine f2
+
+   subroutine fjac2(x, v, k, data)
+
+      use hompack_interfaces, only: fjac ! # TEMPORARY
+      real(dp), intent(in) :: x(:)
+      real(dp), intent(out) :: v(:)
+      integer, intent(in) :: k
+      type(c_ptr), value :: data
+
+      call fjac(x, v, k)
+
+   end subroutine fjac2
+
+end module test_f_mod
+
 program test_f
 !! Main program to test `fixpqf`, `fixpnf`, `fixpdf`, `stepnx`, `stepnx`, and `rootnx`.
 !!
@@ -40,7 +74,10 @@ program test_f
 !! ```
 
    use hompack_kinds, only: dp
-   use hompack, only: fixpdf, fixpnf, fixpqf
+   use hompack, only: fixpdf, fixpqf
+   use hompack_nf, only: fixpnf, hompack_callbacks
+   use hompack_interfaces, only: f, fjac
+   use test_f_mod, only: f2, fjac2
    implicit none
 
    integer, parameter :: n = 5, ndima = 5
@@ -48,6 +85,7 @@ program test_f
                arclen, dtime, sspar(8), y(n + 1)
    integer :: iflag, ii, j, nfe, np1, timenew(8), timeold(8), trace
    character(len=6) :: name
+   type(hompack_callbacks) :: callbacks
 
    interface
       subroutine mainx
@@ -78,8 +116,10 @@ program test_f
                      sspar, nfe, arclen)
       else if (ii .eq. 2) then
          name = 'FIXPNF'
-         call fixpnf(n, y, iflag, arcre, arcae, ansre, ansae, trace, a, &
-                     sspar, nfe, arclen)
+         callbacks%f => f2
+         callbacks%fjac => fjac2
+         call fixpnf(callbacks, &
+                     n, y, iflag, arcre, arcae, ansre, ansae, trace, a, sspar, nfe, arclen)
       else
          name = 'FIXPDF'
          call fixpdf(n, y, iflag, arcre, ansre, trace, a, ndima, nfe, arclen)
@@ -123,12 +163,7 @@ end program test_f
 ! SAMPLE USER WRITTEN HOMOTOPY SUBROUTINES FOR TESTING FIXP*F.
 
 subroutine f(x, v)
-!********************************************************************
-!
-!      SUBROUTINE F(X,V) -- EVALUATES BROWN'S FUNCTION AT THE POINT
-!         X, AND RETURNS THE VALUE IN V.
-!
-!********************************************************************
+
    use hompack_kinds, only: dp
    implicit none
 
@@ -143,13 +178,7 @@ subroutine f(x, v)
 end subroutine f
 
 subroutine fjac(x, v, k)
-!********************************************************************
-!
-!      SUBROUTINE FJAC(X,V,K)  --  EVALUATES THE K-TH COLUMN OF
-!         THE JACOBIAN MATRIX FOR BROWN'S FUNCTION EVALUATED AT
-!         THE POINT X, RETURNING THE VALUE IN V.
-!
-!********************************************************************
+
    use hompack_kinds, only: dp
    implicit none
 
@@ -173,42 +202,22 @@ subroutine fjac(x, v, k)
 
 end subroutine fjac
 
-! **********************************************************************
-! THE REST OF THESE SUBROUTINES ARE NOT USED BY PROGRAM TEST_F, AND ARE
-! INCLUDED HERE SIMPLY FOR COMPLETENESS AND AS TEMPLATES FOR THEIR USE.
-! *********************************************************************
+! *************************************************************
+! THE REST OF THESE SUBROUTINES ARE NOT USED BY PROGRAM TEST_F
+! *************************************************************
 
 subroutine rho(a, lambda, x, v)
-!! Evaluate `rho(a,lambda,x)` and return in the vector `v`.
 
-   use hompack_kinds, only: dp, zero
-   use hompack_core, only: hfunp
-   use hompack_global, only: par, ipar
+   use hompack_kinds, only: dp
    implicit none
 
    real(dp), intent(in) :: a(:), x(:)
    real(dp), intent(inout) :: lambda
    real(dp), intent(out) :: v(:)
 
-   integer:: j, npol
-
-   ! THE FOLLOWING CODE IS SPECIFICALLY FOR THE POLYNOMIAL SYSTEM DRIVER
-   !  POLSYS1H , AND SHOULD BE USED VERBATIM WITH  POLSYS1H .  IF THE USER
-   ! CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
-   ! REPLACEMENT CODE HERE.
-
-   ! FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0
-   if (lambda .lt. zero) lambda = zero
-   npol = ipar(1)
-   ! CALL HFUNP(NPOL,A,LAMBDA,X)
-   do j = 1, 2*npol
-      v(j) = par(ipar(3 + (4 - 1)) + (j - 1))
-   end do
-
 end subroutine rho
 
 subroutine rhoa(a, lambda, x)
-!! Calculate and return in `a` the vector `z` such that `rho(z,lambda,x) = 0`.
 
    use hompack_kinds, only: dp
    implicit none
@@ -221,12 +230,8 @@ subroutine rhoa(a, lambda, x)
 end subroutine rhoa
 
 subroutine rhojac(a, lambda, x, v, k)
-!! Return in the vector `v` the `k`-th column of the jacobian matrix
-!! `[d rho / d lambda, d rho / d x]` evaluated at the point `(a, lambda, x)`.
 
-   use hompack_kinds, only: dp, zero
-   use hompack_core, only: hfunp
-   use hompack_global, only: par, ipar
+   use hompack_kinds, only: dp
    implicit none
 
    real(dp), intent(in) :: a(:), x(:)
@@ -234,47 +239,9 @@ subroutine rhojac(a, lambda, x, v, k)
    real(dp), intent(out) :: v(:)
    integer, intent(in) :: k
 
-   integer:: j, npol, n2
-
-   ! THE FOLLOWING CODE IS SPECIFICALLY FOR THE POLYNOMIAL SYSTEM DRIVER
-   !  POLSYS1H , AND SHOULD BE USED VERBATIM WITH  POLSYS1H .  IF THE USER
-   ! CALLING  FIXP??  OR   STEP??  DIRECTLY, HE MUST SUPPLY APPROPRIATE
-   ! REPLACEMENT CODE HERE.
-
-   npol = ipar(1)
-   n2 = 2*npol
-   if (k .eq. 1) then
-      ! FORCE PREDICTED POINT TO HAVE  LAMBDA .GE. 0  .
-      if (lambda .lt. zero) lambda = zero
-      ! CALL HFUNP(NPOL,A,LAMBDA,X)
-      do j = 1, n2
-         v(j) = par(ipar(3 + (6 - 1)) + (j - 1))
-      end do
-      return
-   else
-      do j = 1, n2
-         v(j) = par(ipar(3 + (5 - 1)) + (j - 1) + n2*(k - 2))
-      end do
-   end if
-
 end subroutine rhojac
 
 subroutine fjacs(x)
-! If MODE = 1,
-! evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
-! the result in packed skyline storage format in QRSPARSE.  LENQR is the
-! length of QRSPARSE, and ROWPOS contains the indices of the diagonal
-! elements of the Jacobian matrix within QRSPARSE.  ROWPOS(N+1) and
-! ROWPOS(N+2) are set by subroutine FODEDS.  The allocatable array COLPO
-! is not used by this storage format.
-!
-! If MODE = 2,
-! evaluate the N x N Jacobian matrix of F(X) at X, and return the result
-! in sparse row storage format in QRSPARSE.  LENQR is the length of
-! QRSPARSE, ROWPOS contains the indices of where each row begins within
-! QRSPARSE, and COLPOS (of length LENQR) contains the column indices of
-! the corresponding elements in QRSPARSE.  Even if zero, the diagonal
-! elements of the Jacobian matrix must be stored in QRSPARSE.
 
    use hompack_kinds, only: dp
    use hompack_global
@@ -285,21 +252,6 @@ subroutine fjacs(x)
 end subroutine fjacs
 
 subroutine rhojs(a, lambda, x)
-! If MODE = 1,
-! evaluate the N x N symmetric Jacobian matrix of F(X) at X, and return
-! the result in packed skyline storage format in QRSPARSE.  LENQR is the
-! length of QRSPARSE, and ROWPOS contains the indices of the diagonal
-! elements of the Jacobian matrix within QRSPARSE.  ROWPOS(N+1) and
-! ROWPOS(N+2) are set by subroutine FODEDS.  The allocatable array COLPO
-! is not used by this storage format.
-!
-! If MODE = 2,
-! evaluate the N x N Jacobian matrix of F(X) at X, and return the result
-! in sparse row storage format in QRSPARSE.  LENQR is the length of
-! QRSPARSE, ROWPOS contains the indices of where each row begins within
-! QRSPARSE, and COLPOS (of length LENQR) contains the column indices of
-! the corresponding elements in QRSPARSE.  Even if zero, the diagonal
-! elements of the Jacobian matrix must be stored in QRSPARSE.
 
    use hompack_kinds, only: dp
    use hompack_global
@@ -316,7 +268,10 @@ subroutine mainx
 !!  option of `stepnx`  is used to force smaller steps.
 
    use hompack_kinds, only: dp, zero, one
-   use hompack_core, only: rootnx, stepnx, tangnf
+   use hompack_core, only: rootnx, stepnx
+   use hompack_nf, only: hompack_callbacks, tangnf
+   use hompack_interfaces, only: f, fjac
+   use test_f_mod, only: f2, fjac2
    implicit none
 
    integer, parameter :: n = 5, ndima = 5
@@ -327,6 +282,7 @@ subroutine mainx
    integer :: iflag, iter = 0, j, nfe, nfec = 0, np1, pivot(n + 1), &
               timenew(8), timeold(8), trace
    logical :: crash, start
+   type(hompack_callbacks) :: callbacks
 
    ! DEFINE ARGUMENTS FOR CALL TO HOMPACK PROCEDURE
    np1 = n + 1
@@ -348,6 +304,10 @@ subroutine mainx
    hold = one
    h = 0.1_dp
    s = zero
+
+   ! CALLBACKS
+   callbacks%f => f2
+   callbacks%fjac => fjac2
 
    ! GET CURRENT DATE AND TIME
    call date_and_time(values=timeold)
@@ -372,16 +332,16 @@ subroutine mainx
             cycle track
          end if
          rholen = 0d0
-         call tangnf(rholen, w, wp, ypold, a, qr, alpha, tz, pivot, &
-                     nfec, n, iflag)
+         call tangnf(callbacks, &
+                     rholen, w, wp, ypold, a, qr, alpha, tz, pivot, nfec, n, iflag)
       case (-32:-20)   ! TANGENT VECTOR AND NEWTON STEP
          if (h > .1_dp) then
             iflag = iflag - 100
             cycle track
          end if
          rholen = -1d0
-         call tangnf(rholen, w, wp, ypold, a, qr, alpha, tz, pivot, &
-                     nfec, n, iflag)
+         call tangnf(callbacks, &
+                     rholen, w, wp, ypold, a, qr, alpha, tz, pivot, nfec, n, iflag)
       case (4, 6, 7)
          write (6, 13) iflag
 13       format(/' FATAL ERROR OCCURRED DURING TRACKING WITH', &
@@ -409,8 +369,8 @@ subroutine mainx
          gofw = w(1) - 1d0
       case (-52:-50)   ! TANGENT VECTOR AND NEWTON STEP
          rholen = -1d0
-         call tangnf(rholen, w, wp, ypold, a, qr, alpha, tz, pivot, &
-                     nfec, n, iflag)
+         call tangnf(callbacks, &
+                     rholen, w, wp, ypold, a, qr, alpha, tz, pivot, nfec, n, iflag)
       case (-2:0, 4, 6, 7)
          exit end_game
       end select

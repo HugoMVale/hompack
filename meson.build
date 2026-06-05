@@ -124,6 +124,7 @@ hompack_source = files(
   'src/hompack_interfaces.f90',
   'src/hompack.f',
   'src/hompack_core.f',
+   'src/hompack_nf.f90',
 )
 
 all_sources = hompack_source + blas_source
