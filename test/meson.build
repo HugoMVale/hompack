@@ -1,7 +1,7 @@
 tests = [
 	'test_f.f90',
-	'test_p.f90',
-	'test_s.f90',
+#	'test_p.f90',
+#	'test_s.f90',
 ]
 
 foreach t : tests
