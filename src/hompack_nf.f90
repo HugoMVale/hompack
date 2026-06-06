@@ -488,8 +488,7 @@ contains
 
             ! Save 'yold' for arc length calculation later
             z0 = state%yold
-            call rootnf(callbacks, state%n, state%nfe, state%iflag, ansre, ansae, y, state%yp, state%yold, state%ypold, &
-                        a, qr, alpha, tz, pivot, w, wp)
+            call rootnf(callbacks, state, ansre, ansae, y, a, qr, alpha, tz, pivot, w, wp)
             nfe = state%nfe
             iflag = 1
 
@@ -526,9 +525,7 @@ contains
    end subroutine fixpnf
 
    subroutine rootnf( &
-      callbacks, &
-      n, nfe, iflag, relerr, abserr, y, yp, yold, &
-      ypold, a, qr, alpha, tz, pivot, w, wp)
+      callbacks, state, relerr, abserr, y, a, qr, alpha, tz, pivot, w, wp)
    !! This subroutine finds the point `ybar = (1, xbar)` on the zero curve of the homotopy
    !! map. It starts with two points `yold = (lambdaold, xold)` and `y = (lambda, x)` such
    !! that `lambdaold < 1 <= lambda` , and alternates between secant estimates of `ybar`
@@ -541,24 +538,8 @@ contains
 
       type(hompack_callbacks) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
-      integer, intent(in) :: n
-         !! Problem dimension.
-      integer, intent(inout) :: nfe
-         !! Number of homotopy/Jacobian evaluations performed.
-         !! On input, contains the current count.
-         !! Updated on output to include evaluations performed by `rootnf`.
-      integer, intent(inout) :: iflag
-         !! Problem type and return status flag.
-         !!
-         !! On input:
-         !! * `0`  : fixed-point problem, `F(x) = x`.
-         !! * `-1` : zero-finding problem, `F(x) = 0`.
-         !! * `-2` : general homotopy curve-tracking problem.
-         !!
-         !! On output:
-         !! * unchanged (`0`, `-1`, or `-2`) on normal return.
-         !! * `4` : Jacobian matrix lost full rank (`rank < n`); iteration not completed.
-         !! * `6` : iteration failed to converge.
+      type(fixnpf_state), intent(inout) :: state
+         !! State variables for 'fixpnf'.
       real(dp), intent(in) :: relerr
          !! Relative convergence tolerance.
          !! Iteration is considered converged when `|y(1)-1| <= relerr + abserr` and the
@@ -571,14 +552,6 @@ contains
          !! Contains `(lambda, x)` on input.
          !! On successful return, contains the point on the zero curve of the homotopy map
          !! at `lambda = 1`.
-      real(dp), intent(inout) :: yp(:)
-         !! Unit tangent vector to the zero curve at `y`. `Shape: (n+1)`.
-      real(dp), intent(inout) :: yold(:)
-         !! Previous point on the zero curve distinct from `y`. `Shape: (n+1)`.
-         !! If convergence fails (`iflag=6`), `y` and `yold` contain the last
-         !! two points computed on the zero curve.
-      real(dp), intent(inout) :: ypold(:)
-         !! Unit tangent vector to the zero curve at `yold`. `Shape: (n+1)`.
       real(dp), intent(in) :: a(:)
          !! Parameter vector used in the homotopy map.
       real(dp), intent(inout) :: qr(:, :)
@@ -622,13 +595,13 @@ contains
       u = epsilon(one)
       rerr = max(relerr, u)
       aerr = max(abserr, zero)
-      np1 = n + 1
+      np1 = state%n + 1
 
       ! The limit on the number of iterations allowed may be changed by changing the
       ! following parameter statement
       limit = 2*(int(abs(log10(aerr + rerr))) + 1)
 
-      tz = y - yold
+      tz = y - state%yold
       dels = dnrm2(np1, tz, 1)
 
       ! Using two points and tangents on the homotopy zero curve, construct the Hermite
@@ -640,25 +613,25 @@ contains
       lcode = 1
 130   call root(sout, qsout, sa, sb, rerr, aerr, lcode)
       if (lcode > 0) go to 140
-      qsout = qofs(yold(1), ypold(1), y(1), yp(1), dels, sout) - one
+      qsout = qofs(state%yold(1), state%ypold(1), y(1), state%yp(1), dels, sout) - one
       go to 130
 
       ! If lambda=1 were bracketed, root cannot fail
 140   if (lcode > 2) then
-         iflag = 6
+         state%iflag = 6
          return
       end if
 
       ! Calculate q(sa) as the initial point for a Newton iteration
       do jw = 1, np1
-         w(jw) = qofs(yold(jw), ypold(jw), y(jw), yp(jw), dels, sa)
+         w(jw) = qofs(state%yold(jw), state%ypold(jw), y(jw), state%yp(jw), dels, sa)
       end do
 
       ! Tangent information 'yp' is no longer needed. Hereafter, 'yp' represents the most
       ! recent point which is on the opposite side of the hyperplane 'lambda=1' from 'y'
 
       ! Prepare for main loop
-      yp = yold
+      state%yp = state%yold
 
       ! Initialize bracket to indicate that the points 'y' and 'yold' bracket 'lambda=1',
       ! thus 'yold = yp'
@@ -668,46 +641,48 @@ contains
       do judy = 1, limit
 
          ! Calculate Newton step at current estimate 'w'
-         call tangnf(callbacks, sa, w, wp, ypold, a, qr, alpha, tz, pivot, nfe, n, iflag)
-         if (iflag > 0) return
+         call tangnf(callbacks, &
+                     sa, w, wp, state%ypold, a, qr, alpha, tz, pivot, &
+                     state%nfe, state%n, state%iflag)
+         if (state%iflag > 0) return
 
          ! Next point = current point + Newton step
          w = w + tz
 
          ! Check for convergence
          if ((abs(w(1) - one) <= rerr + aerr) .and. &
-             (dnrm2(np1, tz, 1) <= rerr*dnrm2(n, w(2:np1), 1) + aerr)) then
+             (dnrm2(np1, tz, 1) <= rerr*dnrm2(state%n, w(2:np1), 1) + aerr)) then
             y = w
             return
          end if
 
          ! Prepare for next iteration
          if (abs(w(1) - one) <= rerr + aerr) then
-            ypold = wp
+            state%ypold = wp
             cycle
          end if
 
          ! Update 'y' and 'yold'
-         yold = y
+         state%yold = y
          y = w
 
          ! Update 'yp' such that 'yp' is the most recent point opposite of 'lambda=1'
          ! from 'y'. Set bracket=.true. iff 'y' and 'yold' bracket 'lambda=1' so that
          ! yp = yold .
-         if ((y(1) - one)*(yold(1) - one) > 0) then
+         if ((y(1) - one)*(state%yold(1) - one) > 0) then
             bracket = .false.
          else
             bracket = .true.
-            yp = yold
+            state%yp = state%yold
          end if
 
          ! Compute dels=||y-yp||
-         tz = y - yp
+         tz = y - state%yp
          dels = dnrm2(np1, tz, 1)
 
          ! Compute tz for the linear predictor w = y + tz, where tz = sa*(yold-y).
-         sa = (one - y(1))/(yold(1) - y(1))
-         tz = sa*(yold - y)
+         sa = (one - y(1))/(state%yold(1) - y(1))
+         tz = sa*(state%yold - y)
 
          ! To insure stability, the linear prediction must be no farther from y than yp is.
          ! This is guaranteed if bracket=true. If linear prediction is too far away, use
@@ -715,20 +690,20 @@ contains
          if (.not. bracket) then
             if (dnrm2(np1, tz, 1) > dels) then
                ! Compute tz = sa*(yp-y)
-               sa = (one - y(1))/(yp(1) - y(1))
-               tz = sa*(yp - y)
+               sa = (one - y(1))/(state%yp(1) - y(1))
+               tz = sa*(state%yp - y)
             end if
          end if
 
          ! Compute estimate  w = y + tz  and save old tangent vector.
          w = w + tz
-         ypold = wp
+         state%ypold = wp
 
       end do
 
       ! The alternating secant estimation and Newton iteration has not converged in limit
       ! steps. Error return.
-      iflag = 6
+      state%iflag = 6
 
    end subroutine rootnf
 
@@ -841,7 +816,10 @@ contains
          ! Use linear predictor along tangent direction to start Newton iteration
          state%ypold(1) = one
          state%ypold(2:np1) = zero
-         call tangnf(callbacks, state%s, y, state%yp, state%ypold, a, qr, alpha, tz, pivot, state%nfe, state%n, state%iflag)
+         call tangnf(callbacks, &
+                     state%s, y, state%yp, state%ypold, a, qr, alpha, tz, pivot, &
+                     state%nfe, state%n, state%iflag)
+
          if (state%iflag > 0) return
 
          lp: do
@@ -852,7 +830,8 @@ contains
 
                ! Calculate the Newton step 'tz' at the current point 'w'
                call tangnf(callbacks, &
-                           rholen, w, wp, state%ypold, a, qr, alpha, tz, pivot, state%nfe, state%n, state%iflag)
+                           rholen, w, wp, state%ypold, a, qr, alpha, tz, pivot, &
+                           state%nfe, state%n, state%iflag)
                if (state%iflag > 0) return
 
                ! Take Newton step and check convergence
@@ -901,7 +880,8 @@ contains
             ! Calculate the Newton step 'tz' at the current point 'w'
             rholen = -one
             call tangnf(callbacks, &
-                        rholen, w, wp, state%yp, a, qr, alpha, tz, pivot, state%nfe, state%n, state%iflag)
+                        rholen, w, wp, state%yp, a, qr, alpha, tz, pivot, &
+                        state%nfe, state%n, state%iflag)
             if (state%iflag > 0) return
 
             ! Take Newton step and check convergence
