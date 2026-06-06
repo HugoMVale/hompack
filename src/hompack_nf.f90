@@ -350,8 +350,8 @@ contains
       end if
 
       if (n <= 0 .or. ansre <= zero .or. ansae < zero &
-          .or. (n + 1) .ne. size(y) .or. &
-          ((iflag == -1 .or. iflag == 0) .and. n .ne. size(a))) &
+          .or. (n + 1) /= size(y) .or. &
+          ((iflag == -1 .or. iflag == 0) .and. n /= size(a))) &
          iflag = 7
       if (iflag >= -2 .and. iflag <= 0) go to 20
       if (iflag == 2) go to 120
@@ -763,7 +763,7 @@ contains
       ! If error tolerances are too small, increase them to acceptable values
       temp = norm2(y) + one
       if (0.5_dp*(state%relerr*temp + state%abserr) < twou*temp) then
-         if (state%relerr .ne. zero) then
+         if (state%relerr /= zero) then
             state%relerr = fouru*(one + fouru)
             state%abserr = max(state%abserr, zero)
          else
@@ -905,7 +905,7 @@ contains
       tz = z0 - y
       w = z1 - y
       dcalc = norm2(tz)
-      if (dcalc .ne. zero) dcalc = norm2(w)/dcalc
+      if (dcalc /= zero) dcalc = norm2(w)/dcalc
 
       ! The optimal step size hbar is defined by
       !
