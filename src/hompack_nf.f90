@@ -49,6 +49,20 @@ module hompack_nf
       type(c_ptr) :: data = c_null_ptr
    end type hompack_callbacks
 
+   type fixnpf_workspace
+   !! Workspace for 'fixpnf'.
+      real(dp), allocatable :: alpha(:)
+      real(dp), allocatable :: qr(:, :)
+      real(dp), allocatable :: tz(:)
+      real(dp), allocatable :: w(:)
+      real(dp), allocatable :: wp(:)
+      real(dp), allocatable :: z0(:)
+      real(dp), allocatable :: z1(:)
+      integer, allocatable :: pivot(:)
+   contains
+      procedure :: alloc => allocate_workspace
+   end type fixnpf_workspace
+
    type fixnpf_state
    !! State variables for 'fixpnf'.
       real(dp) :: abserr
@@ -67,6 +81,9 @@ module hompack_nf
       real(dp), allocatable :: yold(:)
       real(dp), allocatable :: yp(:)
       real(dp), allocatable :: ypold(:)
+      type(fixnpf_workspace) :: workspace
+   contains
+      procedure :: alloc => allocate_state
    end type fixnpf_state
 
 contains
@@ -324,10 +341,6 @@ contains
 
       type(fixnpf_state) :: state
 
-      real(dp) :: alpha(3*n + 3), qr(n, n + 2), tz(n + 1), w(n + 1), wp(n + 1), z0(n + 1), z1(n + 1)
-      integer :: pivot(n + 1)
-      integer :: info, iter, np1
-
       ! Upper bound on the number of steps
       integer, parameter :: limitd = 1000
 
@@ -335,30 +348,42 @@ contains
       ! of any component of y exceeds cursw
       real(dp), parameter :: cursw = 10.0_dp
 
+      integer :: info, iter, np1
+
+      real(dp) :: alpha(3*n + 3), qr(n, n + 2), tz(n + 1), w(n + 1), wp(n + 1), z0(n + 1), z1(n + 1)
+      integer :: pivot(n + 1)
+
       np1 = n + 1
 
-      ! Assume state object is present
-      if (present(istate)) then
-         state = istate
-      end if
-
-      ! Test logical switch to reflect intended usage of 'fixpnf'
-      if (present(ispoly)) then
-         state%ispoly = ispoly
-      else
-         state%ispoly = .false.
-      end if
-
-      if (n <= 0 .or. ansre <= zero .or. ansae < zero &
-          .or. (n + 1) /= size(y) .or. &
-          ((iflag == -1 .or. iflag == 0) .and. n /= size(a))) &
+      ! Check for illegal input parameters
+      if (n <= 0 .or. ansre <= zero .or. ansae < zero .or. size(y) /= (n + 1) .or. &
+          ((iflag == -1 .or. iflag == 0) .and. n /= size(a))) then
          iflag = 7
-      if (iflag >= -2 .and. iflag <= 0) go to 20
-      if (iflag == 2) go to 120
-      if (iflag == 3) go to 90
+         return
+      end if
 
-      ! Check callbacks are present
-      if (iflag == 0 .or. iflag == -1) then
+      ! Problem type
+      if (iflag >= -2 .and. iflag <= 0) then
+         ! First run
+         go to 20
+      else if (iflag == 2) then
+         ! Restart after error tolerances were increased
+         state = istate
+         go to 120
+      else if (iflag == 3) then
+         state = istate
+         ! Restart after iteration limit was reached
+         go to 90
+      else
+         ! Illegal input for 'iflag'. Valid values are: -2, -1, 0, 2, 3.
+         iflag = 7
+         return
+      end if
+
+      ! INITIALIZATION (FIRST CALL ONLY)
+
+      ! Ensure the right callbacks are present
+20    if (iflag == 0 .or. iflag == -1) then
          if (.not. associated(callbacks%f) .or. .not. associated(callbacks%fjac)) then
             iflag = 7
             return
@@ -368,41 +393,37 @@ contains
             iflag = 7
             return
          end if
+      else
+         error stop "This should never happen."
       end if
 
-      ! Only valid input for 'iflag' is -2, -1, 0, 2, 3.
-      iflag = 7
-      return
-
-      ! Initialization block
-20    arclen = zero
-      if (arcre <= zero) arcre = sqrt(ansre)/2
-      if (arcae <= zero) arcae = sqrt(ansae)/2
-
-      state%n = n
-      state%nfe = 0
-      state%iflag = iflag
-      np1 = n + 1
-
-      allocate (state%yp(np1), state%yold(np1), state%ypold(np1), stat=info)
+      ! Allocate internal arrays
+      call state%alloc(n, info)
 
       if (info /= 0) then
          iflag = 8
          return
       end if
 
-      ! Set initial conditions for first call to 'stepnf'
+      ! Initialize state variables
+      state%nfe = 0
+      state%iflag = iflag
       state%start = .true.
       state%crash = .false.
       state%hold = one
       state%h = 0.1_dp
       state%s = zero
-      state%ypold(1) = one
       state%yp(1) = one
-      state%ypold(2:np1) = zero
       state%yp(2:np1) = zero
+      state%ypold(1) = one
+      state%ypold(2:np1) = zero
 
       y(1) = zero
+
+      ! Default arc tolerances
+      arclen = zero
+      if (arcre <= zero) arcre = sqrt(ansre)/2
+      if (arcae <= zero) arcae = sqrt(ansae)/2
 
       ! Set optimal step size estimation parameters
       ! Let z[k] denote the Newton iterates along the flow normal to the Davidenko flow
@@ -425,15 +446,26 @@ contains
       if (sspar(8) <= zero) sspar(8) = 2.0_dp
 
       ! Load 'a' for the fixed point and zero finding problems
-      if (state%iflag >= -1) then
+      if (state%iflag == 0 .or. state%iflag == -1) then
          a = y(2:np1)
       end if
 
+      ! Special mode for 'polsys1h'
+      if (present(ispoly)) then
+         state%ispoly = ispoly
+      else
+         state%ispoly = .false.
+      end if
+
+      ! COMMON PART FOR FIRST CALL AND RESTARTS
+
+      ! Set default iteration limit
 90    state%limit = limitd
 
       ! Main loop
-120   main_loop: do iter = 1, state%limit
+120   do iter = 1, state%limit
 
+         ! Tracking algorithm lost the zero curve
          if (y(1) < zero) then
             arclen = state%s
             iflag = 5
@@ -502,9 +534,8 @@ contains
 
          end if
 
-         ! For polynomial systems and the POLSYS1H homotopy map, D LAMBDA/DS >= 0
-         ! necessarily; this condition is forced here if the 'poly_switch' variable is
-         ! present
+         ! For polynomial systems and the 'polsys1h' homotopy map, d lambda/ds>= 0
+         ! necessarily; this condition is enforced here
          if (state%ispoly) then
             if (state%yp(1) < zero) then
                ! Reverse tangent direction so D LAMBDA/DS = YP(1) > 0
@@ -515,7 +546,7 @@ contains
             end if
          end if
 
-      end do main_loop
+      end do
 
       ! Lambda has not reached 1 in 'limitd' steps
       iflag = 3
@@ -1131,5 +1162,79 @@ contains
       tz = tz - sigma*yp
 
    end subroutine tangnf
+
+   pure subroutine allocate_workspace(self, n, stat)
+   !! Allocates workspace arrays in the [[fixnpf_workspace]] type.
+      class(fixnpf_workspace), intent(inout) :: self
+         !! Workspace.
+      integer, intent(in) :: n
+         !! Problem dimension.
+      integer, intent(out), optional :: stat
+         !! Error status of the allocation.
+
+      integer :: ierr
+
+      if (present(stat)) stat = 0
+
+      allocate ( &
+         self%alpha(3*n + 3), &
+         self%qr(n, n + 2), &
+         self%tz(n + 1), &
+         self%w(n + 1), &
+         self%wp(n + 1), &
+         self%z0(n + 1), &
+         self%z1(n + 1), &
+         self%pivot(n + 1), &
+         stat=ierr &
+         )
+
+      if (ierr /= 0) then
+         if (present(stat)) then
+            stat = ierr
+         else
+            error stop "Error: Allocation failed in fixnpf_workspace%init()."
+         end if
+      end if
+
+   end subroutine allocate_workspace
+
+   !! Initializes scalar options, flags, and allocates state vectors and internal workspace.
+   pure subroutine allocate_state(self, n, stat)
+
+      class(fixnpf_state), intent(inout) :: self
+         !! State.
+      integer, intent(in)  :: n
+         !! Problem dimension.
+      integer, intent(out), optional   :: stat
+         !! Error status of the allocation.
+
+      integer :: ierr
+
+      if (present(stat)) stat = 0
+
+      ! Assign problem structural dimensions and input specifications
+      self%n = n
+
+      ! Allocate state components
+      allocate ( &
+         self%yold(n + 1), &
+         self%yp(n + 1), &
+         self%ypold(n + 1), &
+         stat=ierr &
+         )
+
+      if (ierr /= 0) then
+         if (present(stat)) then
+            stat = ierr
+            return
+         else
+            error stop "Error: Allocation of vectors failed in fixnpf_state%init()."
+         end if
+      end if
+
+      ! Deep-allocate the internal workspace
+      call self%workspace%alloc(n)
+
+   end subroutine allocate_state
 
 end module hompack_nf
