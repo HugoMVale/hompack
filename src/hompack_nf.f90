@@ -573,24 +573,9 @@ contains
          !! Workspace array used for interpolation and Newton-step calculations.
          !! `Shape: (n+1)`.
 
-      real(dp) :: dd001, dd0011, dd01, dd011, dels, f0, f1, fp0, fp1, qofs, qsout, aerr, &
-                  rerr, s, sa, sb, sout, u
+      real(dp) :: dels, qsout, aerr, rerr, sa, sb, sout, u
       integer :: judy, jw, lcode, limit, np1
       logical :: bracket
-
-      ! Definition of hermite cubic interpolant via divided differences
-      ! Note: these weird things are fortran statement functions
-      dd01(f0, f1, dels) = &
-         (f1 - f0)/dels
-      dd001(f0, fp0, f1, dels) = &
-         (dd01(f0, f1, dels) - fp0)/dels
-      dd011(f0, f1, fp1, dels) = &
-         (fp1 - dd01(f0, f1, dels))/dels
-      dd0011(f0, fp0, f1, fp1, dels) = &
-         (dd011(f0, f1, fp1, dels) - dd001(f0, fp0, f1, dels))/dels
-      qofs(f0, fp0, f1, fp1, dels, s) = &
-         ((dd0011(f0, fp0, f1, fp1, dels)*(s - dels) + &
-           dd001(f0, fp0, f1, dels))*s + fp0)*s + f0
 
       u = epsilon(one)
       rerr = max(relerr, u)
@@ -756,27 +741,13 @@ contains
          !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
          !! Controls the adaptive continuation step-size strategy.
 
-      real(dp) :: dcalc, dd001, dd0011, dd01, dd011, dels, f0, f1, fouru, fp0, fp1, &
-                  hfail, ht, lcalc, qofs, rcalc, rholen, temp, twou, s
+      real(dp) :: dcalc, fouru, hfail, ht, lcalc, rcalc, rholen, temp, twou
       integer :: itnum, j, judy, np1
       logical :: fail
 
       ! The limit on the number of Newton iterations allowed before reducing the step
       ! size 'h' may be changed by changing the following parameter
       integer, parameter:: litfh = 4
-
-      ! Definition of Hermite cubic interpolant via divided differences
-      dd01(f0, f1, dels) = &
-         (f1 - f0)/dels
-      dd001(f0, fp0, f1, dels) = &
-         (dd01(f0, f1, dels) - fp0)/dels
-      dd011(f0, f1, fp1, dels) = &
-         (fp1 - dd01(f0, f1, dels))/dels
-      dd0011(f0, fp0, f1, fp1, dels) = &
-         (dd011(f0, f1, fp1, dels) - dd001(f0, fp0, f1, dels))/dels
-      qofs(f0, fp0, f1, fp1, dels, s) = &
-         ((dd0011(f0, fp0, f1, fp1, dels)*(s - dels) + &
-           dd001(f0, fp0, f1, dels))*s + fp0)*s + f0
 
       twou = 2*epsilon(one)
       fouru = 2*twou
@@ -870,7 +841,8 @@ contains
          ! Compute point predicted by Hermite interpolant. Use step size 'h' computed on
          ! last call to 'stepnf'.
          do j = 1, np1
-            w(j) = qofs(state%yold(j), state%ypold(j), y(j), state%yp(j), state%hold, state%hold + state%h)
+            w(j) = qofs(state%yold(j), state%ypold(j), y(j), state%yp(j), &
+                        state%hold, state%hold + state%h)
          end do
          z0 = w
 
@@ -972,6 +944,35 @@ contains
       if (fail) state%h = min(state%h, hfail)
 
    end subroutine stepnf
+
+   elemental pure function qofs(f0, fp0, f1, fp1, dels, s) result(res)
+   !! Computes the Hermite cubic interpolant at a point s.
+      real(dp), intent(in) :: f0
+         !! Function value at the start of the interval.
+      real(dp), intent(in) :: fp0
+         !! Derivative value at the start of the interval.
+      real(dp), intent(in) :: f1
+         !! Function value at the end of the interval.
+      real(dp), intent(in) :: fp1
+         !! Derivative value at the end of the interval.
+      real(dp), intent(in) :: dels
+         !! Width of the interpolation interval.
+      real(dp), intent(in) :: s
+         !! Local coordinate of the interpolation point to the start.
+      real(dp) :: res
+
+      real(8) :: dd01, dd001, dd011, dd0011
+
+      ! Calculate divided differences sequentially
+      dd01 = (f1 - f0)/dels
+      dd001 = (dd01 - fp0)/dels
+      dd011 = (fp1 - dd01)/dels
+      dd0011 = (dd011 - dd001)/dels
+
+      ! Evaluate the cubic polynomial using Horner's method
+      res = ((dd0011*(s - dels) + dd001)*s + fp0)*s + f0
+
+   end function qofs
 
    subroutine tangnf( &
       callbacks, &
