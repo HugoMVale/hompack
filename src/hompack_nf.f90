@@ -50,15 +50,23 @@ module hompack_nf
    end type hompack_callbacks
 
    type fixnpf_workspace
-   !! Workspace for 'fixpnf'.
+   !! Linear-algebra workspace for 'fixpnf'.
       real(dp), allocatable :: alpha(:)
+         !! Array used during interpolation and Newton-step calculations.
       real(dp), allocatable :: qr(:, :)
+         !! Matrix for QR factorizations used in Newton-step calculations.
       real(dp), allocatable :: tz(:)
+         !! Array used in QR-factorization and Newton-step computations.
       real(dp), allocatable :: w(:)
+         !! Array used during interpolation and Newton-step calculations.
       real(dp), allocatable :: wp(:)
+         !! Array used during interpolation and Newton-step calculations.
       real(dp), allocatable :: z0(:)
+         !! Array used for estimating the optimal next step size.
       real(dp), allocatable :: z1(:)
+         !! Array used for estimating the optimal next step size.
       integer, allocatable :: pivot(:)
+         !! Pivot indices used by the QR factorization.
    contains
       procedure :: alloc => allocate_workspace
    end type fixnpf_workspace
@@ -81,7 +89,7 @@ module hompack_nf
       real(dp), allocatable :: yold(:)
       real(dp), allocatable :: yp(:)
       real(dp), allocatable :: ypold(:)
-      type(fixnpf_workspace) :: workspace
+      type(fixnpf_workspace) :: ws
    contains
       procedure :: alloc => allocate_state
    end type fixnpf_state
@@ -350,9 +358,6 @@ contains
 
       integer :: info, iter, np1
 
-      real(dp) :: alpha(3*n + 3), qr(n, n + 2), tz(n + 1), w(n + 1), wp(n + 1), z0(n + 1), z1(n + 1)
-      integer :: pivot(n + 1)
-
       np1 = n + 1
 
       ! Check for illegal input parameters
@@ -483,7 +488,7 @@ contains
          end if
 
          ! Take a step along the curve
-         call stepnf(callbacks, state, y, a, qr, alpha, tz, pivot, w, wp, z0, z1, sspar)
+         call stepnf(callbacks, state, y, a, sspar)
 
          ! Print latest point on curve if requested
          if (trace > 0) then
@@ -518,8 +523,8 @@ contains
          if (y(1) >= one) then
 
             ! Save 'yold' for arc length calculation later
-            z0 = state%yold
-            call rootnf(callbacks, state, ansre, ansae, y, a, qr, alpha, tz, pivot, w, wp)
+            state%ws%z0 = state%yold
+            call rootnf(callbacks, state, ansre, ansae, y, a)
             nfe = state%nfe
             iflag = 1
 
@@ -528,8 +533,8 @@ contains
             if (state%iflag > 0) iflag = state%iflag
 
             ! Calculate final arc length
-            w = y - z0
-            arclen = state%s - state%hold + norm2(w)
+            state%ws%w = y - state%ws%z0
+            arclen = state%s - state%hold + norm2(state%ws%w)
             return
 
          end if
@@ -554,8 +559,7 @@ contains
 
    end subroutine fixpnf
 
-   subroutine rootnf( &
-      callbacks, state, relerr, abserr, y, a, qr, alpha, tz, pivot, w, wp)
+   subroutine rootnf(callbacks, state, relerr, abserr, y, a)
    !! This subroutine finds the point `ybar = (1, xbar)` on the zero curve of the homotopy
    !! map. It starts with two points `yold = (lambdaold, xold)` and `y = (lambda, x)` such
    !! that `lambdaold < 1 <= lambda` , and alternates between secant estimates of `ybar`
@@ -583,24 +587,6 @@ contains
          !! at `lambda = 1`.
       real(dp), intent(in) :: a(:)
          !! Parameter vector used in the homotopy map.
-      real(dp), intent(inout) :: qr(:, :)
-         !! Workspace for QR factorizations used in Newton-step computations.
-         !! `Shape: (n, n+2)`.
-      real(dp), intent(inout) :: alpha(:)
-         !! Workspace used during interpolation and Newton iteration.
-         !! `Shape: (3*n+3)`.
-      real(dp), intent(inout) :: tz(:)
-         !! Workspace array used in QR-factorization and Newton-step calculations.
-         !! `Shape: (n+1)`.
-      integer, intent(inout) :: pivot(:)
-         !! Pivot indices used by the QR factorization.
-         !! `Shape: (n+1)`.
-      real(dp), intent(inout) :: w(:)
-         !! Workspace array used for interpolation and Newton-step calculations.
-         !! `Shape: (n+1)`.
-      real(dp), intent(inout) :: wp(:)
-         !! Workspace array used for interpolation and Newton-step calculations.
-         !! `Shape: (n+1)`.
 
       real(dp) :: dels, qsout, aerr, rerr, sa, sb, sout, u
       integer :: judy, jw, lcode, limit, np1
@@ -615,8 +601,8 @@ contains
       ! following parameter statement
       limit = 2*(int(abs(log10(aerr + rerr))) + 1)
 
-      tz = y - state%yold
-      dels = norm2(tz)
+      state%ws%tz = y - state%yold
+      dels = norm2(state%ws%tz)
 
       ! Using two points and tangents on the homotopy zero curve, construct the Hermite
       ! cubic interpolant q(s). Then use 'root' to find the 's' corresponding to
@@ -638,7 +624,7 @@ contains
 
       ! Calculate q(sa) as the initial point for a Newton iteration
       do jw = 1, np1
-         w(jw) = qofs(state%yold(jw), state%ypold(jw), y(jw), state%yp(jw), dels, sa)
+         state%ws%w(jw) = qofs(state%yold(jw), state%ypold(jw), y(jw), state%yp(jw), dels, sa)
       end do
 
       ! Tangent information 'yp' is no longer needed. Hereafter, 'yp' represents the most
@@ -656,29 +642,29 @@ contains
 
          ! Calculate Newton step at current estimate 'w'
          call tangnf(callbacks, &
-                     sa, w, wp, state%ypold, a, qr, alpha, tz, pivot, &
+                     sa, state%ws%w, state%ws%wp, state%ypold, a, state%ws%qr, state%ws%alpha, state%ws%tz, state%ws%pivot, &
                      state%nfe, state%n, state%iflag)
          if (state%iflag > 0) return
 
          ! Next point = current point + Newton step
-         w = w + tz
+         state%ws%w = state%ws%w + state%ws%tz
 
          ! Check for convergence
-         if ((abs(w(1) - one) <= rerr + aerr) .and. &
-             (norm2(tz) <= rerr*norm2(w(2:np1)) + aerr)) then
-            y = w
+         if ((abs(state%ws%w(1) - one) <= rerr + aerr) .and. &
+             (norm2(state%ws%tz) <= rerr*norm2(state%ws%w(2:np1)) + aerr)) then
+            y = state%ws%w
             return
          end if
 
          ! Prepare for next iteration
-         if (abs(w(1) - one) <= rerr + aerr) then
-            state%ypold = wp
+         if (abs(state%ws%w(1) - one) <= rerr + aerr) then
+            state%ypold = state%ws%wp
             cycle
          end if
 
          ! Update 'y' and 'yold'
          state%yold = y
-         y = w
+         y = state%ws%w
 
          ! Update 'yp' such that 'yp' is the most recent point opposite of 'lambda=1'
          ! from 'y'. Set bracket=.true. iff 'y' and 'yold' bracket 'lambda=1' so that
@@ -691,27 +677,27 @@ contains
          end if
 
          ! Compute dels=||y-yp||
-         tz = y - state%yp
-         dels = norm2(tz)
+         state%ws%tz = y - state%yp
+         dels = norm2(state%ws%tz)
 
          ! Compute tz for the linear predictor w = y + tz, where tz = sa*(yold-y).
          sa = (one - y(1))/(state%yold(1) - y(1))
-         tz = sa*(state%yold - y)
+         state%ws%tz = sa*(state%yold - y)
 
          ! To insure stability, the linear prediction must be no farther from y than yp is.
          ! This is guaranteed if bracket=true. If linear prediction is too far away, use
          ! bracketing points to compute linear prediction.
          if (.not. bracket) then
-            if (norm2(tz) > dels) then
+            if (norm2(state%ws%tz) > dels) then
                ! Compute tz = sa*(yp-y)
                sa = (one - y(1))/(state%yp(1) - y(1))
-               tz = sa*(state%yp - y)
+               state%ws%tz = sa*(state%yp - y)
             end if
          end if
 
          ! Compute estimate w = y + tz  and save old tangent vector.
-         w = w + tz
-         state%ypold = wp
+         state%ws%w = state%ws%w + state%ws%tz
+         state%ypold = state%ws%wp
 
       end do
 
@@ -721,8 +707,7 @@ contains
 
    end subroutine rootnf
 
-   subroutine stepnf( &
-      callbacks, state, y, a, qr, alpha, tz, pivot, w, wp, z0, z1, sspar)
+   subroutine stepnf(callbacks, state, y, a, sspar)
    !! This subroutine takes one step along the zero curve of the homotopy map using a
    !! predictor-corrector algorithm. The predictor uses a Hermite cubic interpolant, and
    !! the corrector returns to the zero curve along the flow normal to the Davidenko flow.
@@ -743,27 +728,6 @@ contains
          !! On output, updated to the latest point found by the continuation algorithm.
       real(dp), intent(in) :: a(:)
          !! Parameter vector used in the homotopy map.
-      real(dp), intent(inout) :: qr(:, :)
-         !! Workspace for QR factorizations used in Newton-step calculations.
-         !! `Shape: (n, n+2)`.
-      real(dp), intent(inout) :: alpha(:)
-         !! Workspace array used during interpolation and Newton-step calculations.
-         !! `Shape: (3*n+3)`.
-      real(dp), intent(inout) :: tz(:)
-         !! Workspace array used in QR-factorization and Newton-step computations.
-         !! `Shape: (n+1)`.
-      integer, intent(inout) :: pivot(:)
-         !! Pivot indices used by the QR factorization. `Shape: (n+1)`.
-      real(dp), intent(inout) :: w(:)
-         !! Workspace array used during interpolation and Newton-step calculations.
-         !! `Shape: (n+1)`.
-      real(dp), intent(inout) :: wp(:)
-         !! Workspace array used during interpolation and Newton-step calculations.
-         !! `Shape: (n+1)`.
-      real(dp), intent(inout) :: z0(:)
-         !! Workspace array used for estimating the optimal next step size. `Shape: (n+1)`.
-      real(dp), intent(inout) :: z1(:)
-         !! Workspace array used for estimating the optimal next step size. `Shape: (n+1)`.
       real(dp), intent(in) :: sspar(8)
          !! Step-size estimation parameters:
          !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
@@ -804,6 +768,7 @@ contains
       end if
 
       ! STARTUP SECTION (FIRST STEP ALONG ZERO CURVE)
+
       state%crash = .false.
       startup: if (state%start) then
          fail = .false.
@@ -815,40 +780,40 @@ contains
          ! Use linear predictor along tangent direction to start Newton iteration
          state%ypold(1) = one
          state%ypold(2:np1) = zero
-         call tangnf(callbacks, &
-                     state%s, y, state%yp, state%ypold, a, qr, alpha, tz, pivot, &
+         call tangnf(callbacks, state%s, y, state%yp, state%ypold, a, &
+                     state%ws%qr, state%ws%alpha, state%ws%tz, state%ws%pivot, &
                      state%nfe, state%n, state%iflag)
 
          if (state%iflag > 0) return
 
          lp: do
-            w = y + state%h*state%yp
-            z0 = w
+            state%ws%w = y + state%h*state%yp
+            state%ws%z0 = state%ws%w
             do judy = 1, litfh
                rholen = -one
 
                ! Calculate the Newton step 'tz' at the current point 'w'
                call tangnf(callbacks, &
-                           rholen, w, wp, state%ypold, a, qr, alpha, tz, pivot, &
+                        rholen, state%ws%w, state%ws%wp, state%ypold, a, state%ws%qr, state%ws%alpha, state%ws%tz, state%ws%pivot, &
                            state%nfe, state%n, state%iflag)
                if (state%iflag > 0) return
 
                ! Take Newton step and check convergence
-               w = w + tz
+               state%ws%w = state%ws%w + state%ws%tz
                itnum = judy
 
                ! Compute quantities used for optimal step size estimation
                if (judy == 1) then
-                  lcalc = norm2(tz)
+                  lcalc = norm2(state%ws%tz)
                   rcalc = rholen
-                  z1 = w
+                  state%ws%z1 = state%ws%w
                else if (judy == 2) then
-                  lcalc = norm2(tz)/lcalc
+                  lcalc = norm2(state%ws%tz)/lcalc
                   rcalc = rholen/rcalc
                end if
 
                ! Go to mop-up section after convergence
-               if (norm2(tz) <= state%relerr*norm2(w) + state%abserr) go to 600
+               if (norm2(state%ws%tz) <= state%relerr*norm2(state%ws%w) + state%abserr) go to 600
 
             end do
 
@@ -863,16 +828,17 @@ contains
       end if startup
 
       ! PREDICTOR SECTION
+
       fail = .false.
       hp: do
 
          ! Compute point predicted by Hermite interpolant. Use step size 'h' computed on
          ! last call to 'stepnf'.
          do j = 1, np1
-            w(j) = qofs(state%yold(j), state%ypold(j), y(j), state%yp(j), &
-                        state%hold, state%hold + state%h)
+            state%ws%w(j) = qofs(state%yold(j), state%ypold(j), y(j), state%yp(j), &
+                                 state%hold, state%hold + state%h)
          end do
-         z0 = w
+         state%ws%z0 = state%ws%w
 
          ! CORRECTOR SECTION
          corrector: do judy = 1, litfh
@@ -880,26 +846,26 @@ contains
             ! Calculate the Newton step 'tz' at the current point 'w'
             rholen = -one
             call tangnf(callbacks, &
-                        rholen, w, wp, state%yp, a, qr, alpha, tz, pivot, &
+                        rholen, state%ws%w, state%ws%wp, state%yp, a, state%ws%qr, state%ws%alpha, state%ws%tz, state%ws%pivot, &
                         state%nfe, state%n, state%iflag)
             if (state%iflag > 0) return
 
             ! Take Newton step and check convergence
-            w = w + tz
+            state%ws%w = state%ws%w + state%ws%tz
             itnum = judy
 
             ! Compute quantities used for optimal step size estimation.
             if (judy == 1) then
-               lcalc = norm2(tz)
+               lcalc = norm2(state%ws%tz)
                rcalc = rholen
-               z1 = w
+               state%ws%z1 = state%ws%w
             else if (judy == 2) then
-               lcalc = norm2(tz)/lcalc
+               lcalc = norm2(state%ws%tz)/lcalc
                rcalc = rholen/rcalc
             end if
 
             ! Go to mop-up section after convergence.
-            if (norm2(tz) <= state%relerr*norm2(w) + state%abserr) go to 600
+            if (norm2(state%ws%tz) <= state%relerr*norm2(state%ws%w) + state%abserr) go to 600
 
          end do corrector
 
@@ -922,21 +888,21 @@ contains
       ! at  'yold'  and  'y' , respectively.
 600   state%ypold = state%yp
       state%yold = y
-      y = w
-      state%yp = wp
-      w = y - state%yold
+      y = state%ws%w
+      state%yp = state%ws%wp
+      state%ws%w = y - state%yold
 
       ! Update arc length
-      state%hold = norm2(w)
+      state%hold = norm2(state%ws%w)
       state%s = state%s + state%hold
 
       ! OPTIMAL STEP SIZE ESTIMATION SECTION
 
       ! Calculate the distance factor 'dcalc'
-      tz = z0 - y
-      w = z1 - y
-      dcalc = norm2(tz)
-      if (dcalc /= zero) dcalc = norm2(w)/dcalc
+      state%ws%tz = state%ws%z0 - y
+      state%ws%w = state%ws%z1 - y
+      dcalc = norm2(state%ws%tz)
+      if (dcalc /= zero) dcalc = norm2(state%ws%w)/dcalc
 
       ! The optimal step size hbar is defined by
       !
@@ -1233,7 +1199,7 @@ contains
       end if
 
       ! Deep-allocate the internal workspace
-      call self%workspace%alloc(n)
+      call self%ws%alloc(n)
 
    end subroutine allocate_state
 
