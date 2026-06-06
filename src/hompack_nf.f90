@@ -250,7 +250,6 @@ contains
       !    STEPNF  to calculate the tangent vectors and Newton steps.
 
       use hompack_kinds, only: zero, one
-      use blas_interfaces, only: dnrm2
       implicit none
 
       type(hompack_callbacks), intent(in) :: callbacks
@@ -498,7 +497,7 @@ contains
 
             ! Calculate final arc length
             w = y - z0
-            arclen = state%s - state%hold + dnrm2(np1, w, 1)
+            arclen = state%s - state%hold + norm2(w)
             return
 
          end if
@@ -533,7 +532,6 @@ contains
 
       use hompack_kinds, only: zero, one
       use hompack_core, only: root
-      use blas_interfaces, only: dnrm2
       implicit none
 
       type(hompack_callbacks) :: callbacks
@@ -587,7 +585,7 @@ contains
       limit = 2*(int(abs(log10(aerr + rerr))) + 1)
 
       tz = y - state%yold
-      dels = dnrm2(np1, tz, 1)
+      dels = norm2(tz)
 
       ! Using two points and tangents on the homotopy zero curve, construct the Hermite
       ! cubic interpolant q(s). Then use 'root' to find the 's' corresponding to
@@ -636,7 +634,7 @@ contains
 
          ! Check for convergence
          if ((abs(w(1) - one) <= rerr + aerr) .and. &
-             (dnrm2(np1, tz, 1) <= rerr*dnrm2(state%n, w(2:np1), 1) + aerr)) then
+             (norm2(tz) <= rerr*norm2(w(2:np1)) + aerr)) then
             y = w
             return
          end if
@@ -663,7 +661,7 @@ contains
 
          ! Compute dels=||y-yp||
          tz = y - state%yp
-         dels = dnrm2(np1, tz, 1)
+         dels = norm2(tz)
 
          ! Compute tz for the linear predictor w = y + tz, where tz = sa*(yold-y).
          sa = (one - y(1))/(state%yold(1) - y(1))
@@ -673,14 +671,14 @@ contains
          ! This is guaranteed if bracket=true. If linear prediction is too far away, use
          ! bracketing points to compute linear prediction.
          if (.not. bracket) then
-            if (dnrm2(np1, tz, 1) > dels) then
+            if (norm2(tz) > dels) then
                ! Compute tz = sa*(yp-y)
                sa = (one - y(1))/(state%yp(1) - y(1))
                tz = sa*(state%yp - y)
             end if
          end if
 
-         ! Compute estimate  w = y + tz  and save old tangent vector.
+         ! Compute estimate w = y + tz  and save old tangent vector.
          w = w + tz
          state%ypold = wp
 
@@ -702,7 +700,6 @@ contains
    !! directly only if it is necessary to modify the stepping algorithm's parameters.
 
       use hompack_kinds, only: one, zero
-      use blas_interfaces, only: dnrm2
       implicit none
 
       type(hompack_callbacks), intent(in) :: callbacks
@@ -764,7 +761,7 @@ contains
       end if
 
       ! If error tolerances are too small, increase them to acceptable values
-      temp = dnrm2(np1, y, 1) + one
+      temp = norm2(y) + one
       if (0.5_dp*(state%relerr*temp + state%abserr) < twou*temp) then
          if (state%relerr .ne. zero) then
             state%relerr = fouru*(one + fouru)
@@ -811,16 +808,16 @@ contains
 
                ! Compute quantities used for optimal step size estimation
                if (judy == 1) then
-                  lcalc = dnrm2(np1, tz, 1)
+                  lcalc = norm2(tz)
                   rcalc = rholen
                   z1 = w
                else if (judy == 2) then
-                  lcalc = dnrm2(np1, tz, 1)/lcalc
+                  lcalc = norm2(tz)/lcalc
                   rcalc = rholen/rcalc
                end if
 
                ! Go to mop-up section after convergence
-               if (dnrm2(np1, tz, 1) <= state%relerr*dnrm2(np1, w, 1) + state%abserr) go to 600
+               if (norm2(tz) <= state%relerr*norm2(w) + state%abserr) go to 600
 
             end do
 
@@ -862,16 +859,16 @@ contains
 
             ! Compute quantities used for optimal step size estimation.
             if (judy == 1) then
-               lcalc = dnrm2(np1, tz, 1)
+               lcalc = norm2(tz)
                rcalc = rholen
                z1 = w
             else if (judy == 2) then
-               lcalc = dnrm2(np1, tz, 1)/lcalc
+               lcalc = norm2(tz)/lcalc
                rcalc = rholen/rcalc
             end if
 
             ! Go to mop-up section after convergence.
-            if (dnrm2(np1, tz, 1) <= state%relerr*dnrm2(np1, w, 1) + state%abserr) go to 600
+            if (norm2(tz) <= state%relerr*norm2(w) + state%abserr) go to 600
 
          end do corrector
 
@@ -899,7 +896,7 @@ contains
       w = y - state%yold
 
       ! Update arc length
-      state%hold = dnrm2(np1, w, 1)
+      state%hold = norm2(w)
       state%s = state%s + state%hold
 
       ! OPTIMAL STEP SIZE ESTIMATION SECTION
@@ -907,8 +904,8 @@ contains
       ! Calculate the distance factor 'dcalc'
       tz = z0 - y
       w = z1 - y
-      dcalc = dnrm2(np1, tz, 1)
-      if (dcalc .ne. zero) dcalc = dnrm2(np1, w, 1)/dcalc
+      dcalc = norm2(tz)
+      if (dcalc .ne. zero) dcalc = norm2(w)/dcalc
 
       ! The optimal step size hbar is defined by
       !
@@ -982,7 +979,6 @@ contains
    !! Newton step.
 
       use hompack_kinds, only: zero, one
-      use blas_interfaces, only: dnrm2
       use lapack_interfaces, only: dgeqpf, dormqr
       implicit none
 
@@ -1088,7 +1084,7 @@ contains
       end if
 
       ! Compute the norm of the homotopy map if it was requested
-      if (rholen < zero) rholen = dnrm2(n, qr(:, np2), 1)
+      if (rholen < zero) rholen = norm2(qr(:, np2))
 
       ! Reduce the Jacobian matrix to upper triangular form
       pivot = 0
@@ -1111,7 +1107,7 @@ contains
          j = i + 1
          tz(i) = -dot_product(qr(i, j:np1), tz(j:np1))/alpha(i)
       end do
-      ypnorm = dnrm2(np1, tz, 1)
+      ypnorm = norm2(tz)
       yp(pivot) = tz/ypnorm
       if (dot_product(yp, ypold) < zero) yp = -yp
 
