@@ -317,6 +317,19 @@ contains
       ! of any component of y exceeds cursw
       real(dp), parameter :: cursw = 10.0_dp
 
+      ! Check callbacks are present
+      if (iflag == 0 .or. iflag == -1) then
+         if (.not. associated(callbacks%f) .or. .not. associated(callbacks%fjac)) then
+            iflag = 7
+            return
+         end if
+      else if (iflag == -2) then
+         if (.not. associated(callbacks%rho) .or. .not. associated(callbacks%rhojac)) then
+            iflag = 7
+            return
+         end if
+      end if
+
       ! Test logical switch to reflect intended usage of 'fixpnf'
       if (present(poly_switch)) then
          polsys = poly_switch
