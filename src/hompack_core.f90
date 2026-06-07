@@ -16,63 +16,86 @@ module hompack_core
 contains
 
    subroutine root(t, ft, b, c, relerr, abserr, iflag)
-!
-!  ROOT COMPUTES A ROOT OF THE NONLINEAR EQUATION F(X)=0
-!  WHERE F(X) IS A CONTINOUS REAL FUNCTION OF A SINGLE REAL
-!  VARIABLE X.  THE METHOD USED IS A COMBINATION OF BISECTION
-!  AND THE SECANT RULE.
-!
-!  NORMAL INPUT CONSISTS OF A CONTINUOS FUNCTION F AND AN
-!  INTERVAL (B,C) SUCH THAT F(B)*F(C).LE.0.0.  EACH ITERATION
-!  FINDS NEW VALUES OF B AND C SUCH THAT THE INTERVAL(B,C) IS
-!  SHRUNK AND F(B)*F(C).LE.0.0.  THE STOPPING CRITERION IS
-!
-!          DABS(B-C).LE.2.0*(RELERR*DABS(B)+ABSERR)
-!
-!  WHERE RELERR=RELATIVE ERROR AND ABSERR=ABSOLUTE ERROR ARE
-!  INPUT QUANTITIES.  SET THE FLAG, IFLAG, POSITIVE TO INITIALIZE
-!  THE COMPUTATION.  AS B,C AND IFLAG ARE USED FOR BOTH INPUT AND
-!  OUTPUT, THEY MUST BE VARIABLES IN THE CALLING PROGRAM.
-!
-!  IF 0 IS A POSSIBLE ROOT, ONE SHOULD NOT CHOOSE ABSERR=0.0.
-!
-!  THE OUTPUT VALUE OF B IS THE BETTER APPROXIMATION TO A ROOT
-!  AS B AND C ARE ALWAYS REDEFINED SO THAT DABS(F(B)).LE.DABS(F(C)).
-!
-!  TO SOLVE THE EQUATION, ROOT MUST EVALUATE F(X) REPEATEDLY. THIS
-!  IS DONE IN THE CALLING PROGRAM.  WHEN AN EVALUATION OF F IS
-!  NEEDED AT T, ROOT RETURNS WITH IFLAG NEGATIVE.  EVALUATE FT=F(T)
-!  AND CALL ROOT AGAIN.  DO NOT ALTER IFLAG.
-!
-!  WHEN THE COMPUTATION IS COMPLETE, ROOT RETURNS TO THE CALLING
-!  PROGRAM WITH IFLAG POSITIVE=
-!
-!     IFLAG=1  IF F(B)*F(C).LT.0 AND THE STOPPING CRITERION IS MET.
-!
-!          =2  IF A VALUE B IS FOUND SUCH THAT THE COMPUTED VALUE
-!              F(B) IS EXACTLY ZERO.  THE INTERVAL (B,C) MAY NOT
-!              SATISFY THE STOPPING CRITERION.
-!
-!          =3  IF DABS(F(B)) EXCEEDS THE INPUT VALUES DABS(F(B)),
-!              DABS(F(C)).  IN THIS CASE IT IS LIKELY THAT B IS CLOSE
-!              TO A POLE OF F.
-!
-!          =4  IF NO ODD ORDER ROOT WAS FOUND IN THE INTERVAL.  A
-!              LOCAL MINIMUM MAY HAVE BEEN OBTAINED.
-!
-!          =5  IF TOO MANY FUNCTION EVALUATIONS WERE MADE.
-!              (AS PROGRAMMED, 500 ARE ALLOWED.)
-!
-!  THIS CODE IS A MODIFICATION OF THE CODE ZEROIN WHICH IS COMPLETELY
-!  EXPLAINED AND DOCUMENTED IN THE TEXT  NUMERICAL COMPUTING:  AN
-!  INTRODUCTION,  BY L. F. SHAMPINE AND R. C. ALLEN.
-!
+   !! This subroutine computes a root of the nonlinear equation `f(x) = 0` where `f(x)`
+   !! is a continuous real function of a single real variable `x`. The method used is a
+   !! combination of bisection and the secant rule.
+   !!
+   !! Normal input consists of a continuous function `f` and an interval `(b, c)` such
+   !! that `f(b) * f(c) <= 0.0` . Each iteration finds new values of `b` and `c` such that
+   !! the interval `(b, c)` is shrunk and `f(b) * f(c) <= 0.0` . The stopping criterion is
+   !!
+   !!      `abs(b - c) <= 2.0 * (relerr * dabs(b) + abserr)`
+   !!
+   !! where `relerr` = relative error and `abserr` = absolute error are input quantities.
+   !! Set the flag, `iflag`, positive to initialize the computation. As `b`, `c` and
+   !! `iflag` are used for both input and output, they must be variables in the calling
+   !! program.
+   !!
+   !! If 0 is a possible root, one should not choose `abserr = 0.0` .
+   !!
+   !! The output value of `b` is the better approximation to a root as `b` and `c` are
+   !! always redefined so that `abs(f(b)) <= abs(f(c))` .
+   !!
+   !! To solve the equation, `root` must evaluate `f(x)` repeatedly. This is done in the
+   !! calling program. When an evaluation of `f` is needed at `t`, `root` returns with
+   !! `iflag` negative. Evaluate `ft = f(t)` and call `root` again. Do not alter `iflag`.
+   !! When the computation is complete, `root` returns to the calling program with `iflag`
+   !! positive.
+   !!
+   !! This code is a modification of the code `zeroin` which is completely explained and
+   !! documented in the text: "Numerical Computing: An Introduction", by L. F. Shampine and
+   !! R. C. Allen.
+
       use hompack_kinds, only: one, zero
       implicit none
-!
-      real(dp):: a, abserr, acbs, acmb, ae, b, c, cmb, fa, fb, &
-                 fc, ft, fx, p, q, re, relerr, t, tol, u
-      integer ic, iflag, kount
+
+      real(dp), intent(inout) :: t
+         !! Point at which the function is to be evaluated.
+         !! On output with `iflag < 0`, `t` contains the next point where the caller must
+         !! evaluate the function and set `ft = f(t)` before calling `root` again.
+         !! When the iteration terminates successfully, `t` contains the final evaluation
+         !! point associated with the computed root approximation.
+      real(dp), intent(inout) :: ft
+         !! Function value at `t`.
+         !! When `iflag < 0`, the caller must compute `ft = f(t)` and call `root` again
+         !! without modifying `iflag`.
+      real(dp), intent(inout) :: b
+         !! Lower endpoint of the current bracketing interval.
+         !! On input, together with `c`, defines an interval containing a root, typically
+         !! satisfying `f(b)*f(c) <= 0`.
+         !! On output, contains the best approximation to the root. The algorithm
+         !! maintains `abs(f(b)) <= abs(f(c))`.
+      real(dp), intent(inout) :: c
+         !! Upper endpoint of the current bracketing interval.
+         !! On output, contains the second endpoint of the final bracketing interval.
+      real(dp), intent(in) :: relerr
+         !! Relative error tolerance.
+         !! Convergence is declared when `abs(b-c) <= 2*(relerr*abs(b) + abserr)`.
+      real(dp), intent(in) :: abserr
+         !! Absolute error tolerance.
+         !! Used together with `relerr` in the convergence test.
+         !! A nonzero value is recommended when a root near zero is possible.
+      integer, intent(inout) :: iflag
+         !! Reverse-communication control and status flag.
+         !!
+         !! On input, set to a positive value to initialize the computation.
+         !! During iteration, negative values indicate that the caller must evaluate the
+         !! function at the point returned in `t` and then call `root` again without
+         !! changing `iflag`.
+         !!
+         !! On successful or terminating return:
+         !!
+         !! * `1` : root bracketed and convergence criterion satisfied.
+         !! * `2` : a point was found for which the computed function value is exactly
+         !!         zero.
+         !! * `3` : `abs(f(b))` increased relative to the initial values, suggesting
+         !!         proximity to a pole or singularity.
+         !! * `4` : no odd-order root was detected in the interval; a local minimum
+         !!         may have been encountered.
+         !! * `5` : maximum number of function evaluations (500) exceeded.
+
+      real(dp):: a, acbs, acmb, ae, cmb, fa, fb, fc, fx, p, q, re, tol, u
+      integer ic, kount
       save
 
       if (iflag .ge. 0) go to 100
