@@ -1,4 +1,5 @@
 module hompack_core
+!! Core routines used by two or more of the `hompack` solvers.
 
    use hompack_kinds, only: dp
    implicit none

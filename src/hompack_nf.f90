@@ -1,4 +1,6 @@
 module hompack_nf
+!! Specific routines for the `fixpnf` solver.
+
    use hompack_kinds, only: dp
    use iso_c_binding, only: c_ptr, c_null_ptr
    use hompack_core, only: root_state
