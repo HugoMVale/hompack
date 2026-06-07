@@ -1,0 +1,449 @@
+      MODULE HOMPACK
+!
+!  This MODULE is an encapsulation of the HOMPACK90 drivers, and uses
+!  the modules REAL_PRECISION (defines real precision for all
+!  routines), HOMPACK_GLOBAL_LEGACY (allocatable global data structures for
+!  sparse matrices), and HOMOTOPY (interfaces to user written routines
+!  defining the problem).
+!
+!  The intended usage is that the calling program would include a
+!  statement like, for example,
+!     USE HOMPACK90, ONLY: FIXPNF
+!
+      USE HOMPACK_KINDS, ONLY: DP
+      IMPLICIT NONE
+C
+      CONTAINS
+C
+      SUBROUTINE POLSYS1H(N,NUMT,COEF,KDEG,IFLG1,IFLG2,EPSBIG,EPSSML,
+     &     SSPAR,NUMRR,LAMBDA,ROOTS,ARCLEN,NFE)
+C
+C POLSYS1H finds all (complex) solutions to a system
+C F(X)=0 of N polynomial equations in N unknowns
+C with real coefficients. If IFLG=10 or IFLG=11, POLSYS1H
+C returns the solutions at infinity also.
+C
+C The system F(X)=0 is described via the coefficents,
+C "COEF", and the parameters "N, NUMT, KDEG", as follows.
+C
+C
+C       NUMT(J)
+C
+C F(J) = SUM  COEF(J,K) * X(1)**KDEG(J,1,K)...X(N)**KDEG(J,N,K)
+C
+C        K=1
+C
+C FOR J=1, ..., N.
+C
+C
+C POLSYS1H has two main run options:  automatic scaling and
+C the projective transformation.  These are evoked via the
+C flag "IFLG1", as described below.  The other input
+C parameters are the same whether one or both of these options
+C are specified, and the output is always returned unscaled
+C and untransformed.
+C
+C If automatic scaling is specified, then the input
+C coefficients are modified by subroutine  SCLGNP . The problem
+C is solved with the scaled coefficients and scaled variables.
+C The coefficients are returned scaled.
+C
+C If the projective transformation is specified, then
+C essentially the system is reformulated in homogeneous
+C coordinates, Z(1), ..., Z(N+1), and solved in complex
+C projective space.  The resulting solutions are
+C untransformed via
+C
+C X(J) = Z(J)/Z(N+1)   J=1, ..., N.
+C
+C On return,
+C
+C ROOTS(1,J,M) = real part of X(J) for the Mth path,
+C
+C ROOTS(2,J,M) = imaginary part of X(J) for the Mth path,
+C
+C for J=1, ..., N, and
+C
+C ROOTS(1,N+1,M) = real part of Z(N+1) for the Mth path,
+C
+C ROOTS(2,N+1,M) = imaginary part of Z(N+1) for the Mth path.
+C
+C If ROOTS(*,N+1,M) is small, then the associated solution
+C should be regarded as being "near infinity".  Note that,
+C when the projective transformation has been specified, the
+C ROOTS values have been untransformed -- that is, divided
+C through by Z(N+1) -- unless such division would have caused
+C overflow.  In this latter case, the affected components of
+C ROOTS are set to the largest floating point number (machine
+C infinity).
+C
+C The code can be modified easily to solve systems with complex
+C coefficients,  COEF .  Only the subroutines  INITP  and  FFUNP
+C need be changed.
+C
+C The FORTRAN COMPLEX declaration is not used in POLSYS1H.
+C Complex variables are represented by real arrays with first
+C index dimensioned 2 and complex operations are evoked by
+C subroutine calls.
+C
+C The total number of paths that will be tracked (if
+C IFLG2(M)=-2 for all M) is equal to the "total degree" of the
+C system, TOTDG.   TOTDG is equal to the products of the
+C degrees of all the equations in the system.  The degree of
+C an equation is the maximum of the degrees of its terms.  The
+C degree of a term is the sum of the degrees of the variables.
+C Thus, TOTDG = IDEG(1) * ... * IDEG(N) where IDEG(J) =
+C MAX {JDEG(J,K) | K=1,...,NUMT(J)} where JDEG(J,K) = KDEG(J,1,K) +
+C ... + KDEG(J,N,K).
+C
+C IFLG1  determines whether the system is to be automatically
+C scaled by  POLSYS1H  and whether the projective transformation
+C of the system is to be automatically evoked by POLSYS1H.  See
+c "ON INPUT" below.
+C
+C IFLG2, EPSBIG, EPSSML, and  SSPAR  tell the path tracker
+C FIXPNF  which paths to track and set parameters for the path
+C tracker.
+C
+C NUMRR  tells  POLSYS1H  how many multiples of 1000 steps to try
+C before abandoning a path.
+C
+C The output consists of  IFLG1, and of  LAMBDA, ROOTS, ARCLEN, and
+C NFE  for each path.  IFLG1  returns input data error information.
+C ROOTS  gives the solutions themselves, while  LAMBDA, ARCLEN,
+C and  NFE  give information about the associated paths.
+C
+C
+C The following subroutines are used directly or indirectly by
+C POLSYS1H: 
+C         Special for POLSYS1H:
+C           INITP , STRPTP , OTPUTP , RHO , RHOJAC ,
+C           HFUNP , HFUN1P , GFUNP , FFUNP ,
+C           MULP , POWP , DIVP , SCLGNP .
+C         From the general HOMPACK routines:
+C           FIXPNF , ROOT , ROOTNF , STEPNF , TANGNF .
+C         From LAPACK routines:
+C           DGEQPF , DGEQRF , DORMQR .
+C         From BLAS routines:
+C           DCOPY ,  DDOT ,  DGEMM ,  DGEMV ,  DGER ,  
+C           DNRM2 ,  DSCAL ,  DSWAP ,  DTRMM ,  DTRMV , DTRSV ,
+C           IDAMAX ,  LSAME , XERBLA . 
+C
+C ON INPUT:
+C
+C N  is the number of equations and variables.
+C
+C NUMT(1:N)  is an integer array.  NUMT(J)  is the number of terms
+C   in the Jth equation for J=1 to N.
+C
+C COEF(1:N,1:)  is a real array.  COEF(J,K)  is 
+C   the Kth coefficient of the Jth equation for J=1 to N,
+C   K=1 to NUMT(J).  The second dimension must be greater than or equal
+C   to the maximum number of terms in each equation.  In other words,
+C   SIZE(COEF,DIM=2) .GE. MAXT = MAX {NUMT(J) | J=1, ..., N} .
+C
+C KDEG(1:N,1:N+1,1:)  is an integer array.  
+C   KDEG(J,L,K)  is the degree of the Lth variable in the Kth
+C   term of the Jth equation for  J=1 to N, L=1 to N, K=1 to NUMT(J).
+C   SIZE(KDEG,DIM=3) .GE. MAXT = MAX {NUMT(J) | J=1, ..., N} .
+C
+C IFLG1 =
+C   00  if the problem is to be solved without
+C       calling POLSYS1H' scaling routine, SCLGNP, and
+C       without using the projective transformtion.
+C
+C   01  if scaling but no projective transformation is to be used.
+C
+C   10  if no scaling but projective transformation is to be used.
+C
+C   11  if both scaling and projective transformation are to be used.
+C
+C IFLG2(1:TOTDG)  is an integer array.  If IFLG2(M) = -2, then the 
+C   Mth path is tracked.  Otherwise the Mth path is skipped.
+C   Thus, to find all solutions set IFLG2(M) = -2 for M=1,...,TOTDG.
+C   Selected paths can be rerun by setting IFLG2(M)=-2 for
+C   the paths to be rerun and IFLG2(M).NE.-2 for the others.
+C
+C EPSBIG  is the local error tolerance allowed the path tracker along
+C   the path.  ARCRE and ARCAE (in  FIXPNF ) are set to  EPSBIG.
+C
+C EPSSML  is the accuracy desired for the final solution.  ANSRE and
+C   ANSAE (in  FIXPNF ) are set to  EPSSML.
+C
+C SSPAR(1:8) = (LIDEAL, RIDEAL, DIDEAL, HMIN, HMAX, BMIN, BMAX, P)  is
+C    a vector of parameters used for the optimal step size estimation.
+C    If  SSPAR(J) .LE. 0.0  on input, it is reset to a default value
+C    by  FIXPNF .  Otherwise the input value of  SSPAR(J)  is used.
+C    See the comments in  FIXPNF  and in  STEPNF  for more information
+C    about these constants.
+C
+C NUMRR  is the number of multiples of 1000 steps that will be tried
+C   before abandoning a path.
+C
+C
+C ON OUTPUT:
+C
+C N, NUMT, COEF, KDEG, EPSBIG, EPSSML, and NUMRR are unchanged.
+C
+C IFLG1=
+C   -1  if  NUMT  is incorrectly dimensioned or invalid.
+C   -2  if  COEF  is incorrectly dimensioned.
+C   -3  if  KDEG  is incorrectly dimensioned or invalid.
+C   -4  if any of  IFLG2, LAMBDA, ROOTS, ARCLEN, or  NFE  are
+C       incorrectly dimensioned.
+C   -5  if the global work arrays  IPAR  and  PAR  could not be
+C       allocated.
+C   -6  if  IFLG1  on input is not 00 or 01 or 10 or 11.
+C   Unchanged otherwise.
+C
+C IFLG2(1:TOTDG)  gives information about how the Mth path terminated:
+C IFLG2(M) =
+C   1   Normal return.
+C
+C   2   Specified error tolerance cannot be met.  Increase  EPSBIG
+C       and  EPSSML  and rerun.
+C
+C   3   Maximum number of steps exceeded.  To track the path further,
+C       increase  NUMRR  and rerun the path.  However, the path may
+C       be diverging, if the  LAMBDA  value is near 1 and the  ROOTS 
+C       values are large.
+C
+C   4   Jacobian matrix does not have full rank.  The algorithm
+C       has failed (the zero curve of the homotopy map cannot be
+C       followed any further).
+C
+C   5   The tracking algorithm has lost the zero curve of the
+C       homotopy map and is not making progress.  The error tolerances
+C       EPSBIG  and  EPSSML  were too lenient.  The problem should be
+C       restarted with smaller error tolerances.
+C
+C   6   The normal flow Newton iteration in  STEPNF  or  ROOTNF
+C       failed to converge.  The error tolerances  EPSBIG  or  EPSSML
+C       may be too stringent.
+C
+C   7   Illegal input parameters, a fatal error.
+C
+C LAMBDA(M)  is the final LAMBDA value for the Mth path, M = 1, ...,
+C   TOTDG, where LAMBDA is the continuation parameter.
+C
+C ROOTS(1,J,M), ROOTS(2,J,M)  are the real and imaginary parts
+C   of the Jth variable respectively, for J = 1,...,N, for
+C   the Mth path, for M = 1,...,TOTDG.  If  IFLG1 = 10 or 11, then
+C   ROOTS(1,N+1,M)  and  ROOTS(2,N+1,M)  are the real and
+C   imaginary parts respectively of the projective
+C   coordinate of the solution.
+C
+C ARCLEN(M)  is the arc length of the Mth path for M = 1, ..., TOTDG.
+C
+C NFE(M)  is the number of Jacobian matrix evaluations required to 
+C   track the Mth path for M =1, ..., TOTDG.
+C
+C ----------------------------------------------------------------------
+      USE hompack_nf, ONLY: fixpnf
+      USE HOMPACK_GLOBAL_LEGACY, ONLY: IPAR, PAR
+      USE HOMPACK_CORE_LEGACY, ONLY: INITP, STRPTP, OTPUTP
+      IMPLICIT NONE
+C
+C TYPE DECLARATIONS FOR INPUT AND OUTPUT
+C
+      INTEGER, INTENT(IN):: N,NUMT(:),NUMRR
+      REAL (dp), INTENT(IN OUT):: COEF(:,:),SSPAR(8)
+      INTEGER, INTENT(IN OUT):: KDEG(:,:,:),IFLG1,IFLG2(:)
+      REAL (dp), INTENT(IN):: EPSBIG,EPSSML
+      REAL (dp), INTENT(OUT):: LAMBDA(:),ROOTS(:,:,:),ARCLEN(:)
+      INTEGER, INTENT(OUT):: NFE(:)
+C
+C TYPE DECLARATIONS FOR LOCAL VARIABLES
+C
+      INTEGER:: I,ICOUNT(N),IDEG(N),IDUMMY,IFLAG,IJ,
+     &  IPROFF(15),J,LIPAR(15),LPAR(25),MAXT,N2,N2P1,
+     &  NNFE,NP1,NUMPAT,PROFF(25),TOTDG,TRACE
+      REAL (dp):: AARCLN,ANSAE,ANSRE,ARCAE,ARCRE,CL(2,N+1),
+     &  FACV(N),PDG(2,N),QDG(2*N),R(2,N),XNP1(2),Y(2*N+1)
+C
+C ----------------------------------------------------------------------
+      N2=2*N
+      NP1=N+1
+      N2P1=N2+1
+C
+C CHECK THAT DIMENSIONS ARE VALID.
+C
+      IF ((SIZE(NUMT) /= N) .OR. ANY(NUMT .LE. 0)) THEN
+        IFLG1=-1
+        RETURN
+      END IF
+      MAXT = MAXVAL(NUMT)
+      IF ((SIZE(COEF,DIM=1) /= N) .OR. (SIZE(COEF,DIM=2) < MAXT)) THEN
+        IFLG1=-2
+        RETURN
+      END IF
+      KDEG = ABS(KDEG)
+      IF ((SIZE(KDEG,DIM=1) /= N) .OR. (SIZE(KDEG,DIM=2) /= NP1) .OR.
+     &  (SIZE(KDEG,DIM=3) < MAXT) ) THEN
+        IFLG1=-3
+        RETURN
+      END IF
+      DO J=1,N
+        IDEG(J)=MAXVAL(SUM(KDEG(J,1:N,1:NUMT(J)),DIM=1))
+      END DO
+      TOTDG = PRODUCT(IDEG)
+      IF ((SIZE(IFLG2) < TOTDG) .OR. (SIZE(LAMBDA) < TOTDG) .OR.
+     &  (SIZE(ROOTS,DIM=3) < TOTDG) .OR. (SIZE(ARCLEN) < TOTDG) .OR.
+     &  (SIZE(NFE) < TOTDG) .OR. 
+     &  (IFLG1 <= 1 .AND. SIZE(ROOTS,DIM=2) /= N) .OR.
+     &  (IFLG1 >= 10 .AND. SIZE(ROOTS,DIM=2) /= NP1)) THEN
+        IFLG1=-4
+        RETURN
+      END IF
+      IF (IFLG1 /= 0 .AND. IFLG1 /= 1 .AND.
+     &  IFLG1 /= 10 .AND. IFLG1 /= 11) THEN
+        IFLG1=-6
+        RETURN
+      END IF
+C
+C ALLOCATE THE GLOBAL WORK ARRAYS  IPAR  AND  PAR, USED TO COMMUNICATE
+C DATA BETWEEN SUBROUTINES VIA THE MODULE HOMOTOPY.
+C
+      ALLOCATE(IPAR(42 + 2*N + N*(N+1)*MAXT),
+     &  PAR(2 + 28*N + 6*N**2 + 7*N*MAXT + 4*N**2*MAXT),STAT=IJ)
+      IF (IJ .NE. 0) THEN
+        IFLG1=-5
+        RETURN
+      END IF
+C      
+C INITIALIZATION
+C
+      CALL INITP(IFLG1,N,NUMT,KDEG,COEF,
+     &                              IDEG,FACV,CL,PDG,QDG,R)
+C
+C INTEGER VARIABLES AND ARRAYS TO BE PASSED IN IPAR:
+C
+C    IPAR INDEX     VARIABLE NAME       LENGTH
+C    ----------     -------------    -----------------
+C          1                N               1
+C          2             MAXT               1
+C          3            PROFF               25
+C          4           IPROFF               15
+C          5             IDEG               N
+C          6             NUMT               N
+C          7             KDEG               N*(N+1)*MAXT
+C
+C
+C DOUBLE PRECISION VARIABLES AND ARRAYS TO BE PASSED IN PAR:
+C
+C     PAR INDEX     VARIABLE NAME       LENGTH
+C    ----------     -------------    -----------------
+C          1              PDG               2*N
+C          2               CL               2*(N+1)
+C          3             COEF               N*MAXT
+C          4                H               N2
+C          5              DHX               N2*N2
+C          6              DHT               N2
+C          7            XDGM1               2*N
+C          8              XDG               2*N
+C          9              G                 2*N
+C         10             DG                 2*N
+C         11           PXDGM1               2*N
+C         12             PXDG               2*N
+C         13               F                2*N
+C         14              DF                2*N*(N+1)
+C         15               XX               2*N*(N+1)*MAXT
+C         16              TRM               2*N*MAXT
+C         17             DTRM               2*N*(N+1)*MAXT
+C         18              CLX               2*N
+C         19            DXNP1               2*N
+C
+C SET LENGTHS OF VARIABLES
+      LIPAR(1)=1
+      LIPAR(2)=1
+      LIPAR(3)=25
+      LIPAR(4)=15
+      LIPAR(5)=N
+      LIPAR(6)=N
+      LIPAR(7)=N*(N+1)*MAXT
+      LPAR( 1)=2*N
+      LPAR( 2)=2*NP1
+      LPAR( 3)=N*MAXT
+      LPAR( 4)=N2
+      LPAR( 5)=N2*N2
+      LPAR( 6)=N2
+      LPAR( 7)=2*N
+      LPAR( 8)=2*N
+      LPAR( 9)=2*N
+      LPAR(10)=2*N
+      LPAR(11)=2*N
+      LPAR(12)=2*N
+      LPAR(13)=2*N
+      LPAR(14)=2*N*NP1
+      LPAR(15)=2*N*NP1*MAXT
+      LPAR(16)=2*N*MAXT
+      LPAR(17)=2*N*NP1*MAXT
+      LPAR(18)=2*N
+      LPAR(19)=2*N
+C
+C PROFF AND IPROFF ARE OFFSETS THAT DEFINE THE VARIABLES LISTED ABOVE
+      PROFF(1)=1
+      DO I=2,19
+          PROFF(I)=PROFF(I-1)+LPAR(I-1)
+      END DO
+      IPROFF(1)=1
+      DO I=2,7
+          IPROFF(I)=IPROFF(I-1)+LIPAR(I-1)
+      END DO
+C
+C DEFINE VARIABLES
+      IPAR(1)=N
+      IPAR(2)=MAXT
+      IPAR(IPROFF(3):IPROFF(3)+18) = PROFF(1:19)
+      IPAR(IPROFF(4):IPROFF(4)+ 6) = IPROFF(1:7)
+      IPAR(IPROFF(5):IPROFF(5)+N-1) = IDEG(1:N)
+      IPAR(IPROFF(6):IPROFF(6)+N-1) = NUMT(1:N)
+      IPAR(IPROFF(7):IPROFF(7)+LIPAR(7)-1) =
+     &  PACK(KDEG(:,:,1:MAXT),.TRUE.)
+      PAR(PROFF(1):PROFF(1)+LPAR(1)-1) = PACK(PDG,.TRUE.)
+      PAR(PROFF(2):PROFF(2)+LPAR(2)-1) = PACK(CL,.TRUE.)
+      PAR(PROFF(3):PROFF(3)+LPAR(3)-1) = PACK(COEF(:,1:MAXT),.TRUE.)
+C
+C ICOUNT IS A COUNTER USED BY "STRPTP"
+      ICOUNT(1)=0
+      ICOUNT(2:N)=1
+C
+C PATHS LOOP -- ITERATE THROUGH PATHS
+C
+      PATHS: DO NUMPAT = 1,TOTDG
+C         GET A START POINT, Y, FOR THE PATH.
+          Y(1) = 0.0
+          CALL STRPTP(N,ICOUNT,IDEG,R,Y(2:N2P1))
+C         CHECK WHETHER PATH IS TO BE FOLLOWED.
+          IFLAG = IFLG2(NUMPAT)
+          IF (IFLAG .NE. -2) CYCLE PATHS
+          ARCRE = EPSBIG
+          ARCAE = ARCRE
+          ANSRE = EPSSML
+          ANSAE = ANSRE
+          TRACE = 0
+C         TRACK A HOMOTOPY PATH.
+          DO IDUMMY=1,MAX(NUMRR,1)
+            CALL FIXPNF(N2,Y,IFLAG,ARCRE,ARCAE,ANSRE,ANSAE,TRACE,
+     &        QDG,SSPAR,NNFE,AARCLN, POLY_SWITCH=.TRUE.)
+            IF (IFLAG .NE. 2 .AND. IFLAG .NE. 3) EXIT
+          END DO
+C         UNSCALE AND UNTRANSFORM COMPUTED SOLUTION.
+          CALL OTPUTP(N,NUMPAT,CL,FACV,
+     &      PAR(PROFF(18):PROFF(18)+LPAR(18)-1),Y(2:N2P1),XNP1)
+          LAMBDA(NUMPAT) = Y(1)
+          ROOTS(1,1:N,NUMPAT) = Y(2:N2P1:2)
+          ROOTS(2,1:N,NUMPAT) = Y(3:N2P1:2)
+          ROOTS(1:2,NP1,NUMPAT) = XNP1
+C
+          ARCLEN(NUMPAT)= AARCLN
+          NFE(NUMPAT)   = NNFE
+          IFLG2(NUMPAT) = IFLAG
+      END DO PATHS
+C CLEAN UP WORK SPACE.
+      IF (ALLOCATED(IPAR)) DEALLOCATE(IPAR)
+      IF (ALLOCATED(PAR))  DEALLOCATE(PAR)
+      RETURN
+      END SUBROUTINE POLSYS1H
+C
+      END MODULE HOMPACK

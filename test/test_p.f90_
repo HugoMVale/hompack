@@ -353,7 +353,7 @@ end program test_p
 ! These subroutines should be used verbatim with POLSYS1H for solving
 ! polynomial systems of equations. The polynomial coefficients, defined
 ! as input to POLSYS1H, are accessed by the routines here via the global
-! arrays in HOMPACK_GLOBAL.
+! arrays in HOMPACK_GLOBAL_LEGACY.
 !
 ! ###################################################################
 ! ONLY THE SUBROUTINES RHO AND RHOJAC ARE USED BY THE POLYNOMIAL
@@ -393,7 +393,7 @@ subroutine rho(a, lambda, x, v)
 
    use hompack_kinds, only: dp, zero
    use hompack_core, only: hfunp
-   use hompack_global, only: ipar, par
+   use hompack_global_legacy, only: ipar, par
    implicit none
 
    real(dp), intent(in) :: a(:), x(:)
@@ -436,7 +436,7 @@ subroutine rhojac(a, lambda, x, v, k)
 
    use hompack_kinds, only: dp, zero
    use hompack_core, only: hfunp
-   use hompack_global, only: ipar, par
+   use hompack_global_legacy, only: ipar, par
    implicit none
 
    real(dp), intent(in) :: a(:), x(:)
@@ -486,7 +486,7 @@ subroutine fjacs(x)
 ! elements of the Jacobian matrix must be stored in QRSPARSE.
 
    use hompack_kinds, only: dp
-   ! use hompack_global, only: qrsparse, rowpos, colpos
+   ! use hompack_global_legacy, only: qrsparse, rowpos, colpos
    implicit none
 
    real(dp), intent(in) :: x(:)
@@ -511,7 +511,7 @@ subroutine rhojs(a, lambda, x)
 ! elements of the Jacobian matrix must be stored in QRSPARSE.
 
    use hompack_kinds, only: dp
-   ! use hompack_global, only: qrsparse, rowpos, colpos
+   ! use hompack_global_legacy, only: qrsparse, rowpos, colpos
    implicit none
 
    real(dp), intent(in) :: a(:), lambda, x(:)

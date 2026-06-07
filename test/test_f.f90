@@ -9,7 +9,7 @@ contains
 
    subroutine f2(x, v, data)
 
-      use hompack_interfaces, only: f ! # TEMPORARY
+      use hompack_core_legacy, only: f ! # TEMPORARY
       real(dp), intent(in) :: x(:)
       real(dp), intent(out) :: v(:)
       type(c_ptr), value :: data
@@ -20,7 +20,7 @@ contains
 
    subroutine fjac2(x, v, k, data)
 
-      use hompack_interfaces, only: fjac ! # TEMPORARY
+      use hompack_core_legacy, only: fjac ! # TEMPORARY
       real(dp), intent(in) :: x(:)
       real(dp), intent(out) :: v(:)
       integer, intent(in) :: k
@@ -74,9 +74,10 @@ program test_f
 !! ```
 
    use hompack_kinds, only: dp
-   use hompack, only: fixpdf, fixpqf
+   use hompack_df, only: fixpdf
+   use hompack_qf, only: fixpqf
    use hompack_nf, only: fixpnf, hompack_callbacks
-   use hompack_interfaces, only: f, fjac
+   use hompack_core_legacy, only: f, fjac
    use test_f_mod, only: f2, fjac2
    implicit none
 
@@ -244,7 +245,7 @@ end subroutine rhojac
 subroutine fjacs(x)
 
    use hompack_kinds, only: dp
-   use hompack_global
+   use hompack_global_legacy
    implicit none
 
    real(dp), intent(in) :: x(:)
@@ -254,7 +255,7 @@ end subroutine fjacs
 subroutine rhojs(a, lambda, x)
 
    use hompack_kinds, only: dp
-   use hompack_global
+   use hompack_global_legacy
    implicit none
 
    real(dp), intent(in) :: a(:), lambda, x(:)
@@ -268,9 +269,9 @@ subroutine mainx
 !!  option of `stepnx`  is used to force smaller steps.
 
    use hompack_kinds, only: dp, zero, one
-   use hompack_core, only: rootnx, stepnx
+   use hompack_core_legacy, only: rootnx, stepnx
+   use hompack_core_legacy, only: f, fjac
    use hompack_nf, only: hompack_callbacks, tangnf
-   use hompack_interfaces, only: f, fjac
    use test_f_mod, only: f2, fjac2
    implicit none
 

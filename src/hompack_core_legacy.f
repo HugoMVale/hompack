@@ -1,0 +1,4731 @@
+      MODULE HOMPACK_CORE_LEGACY
+      USE HOMPACK_KINDS, ONLY: DP
+      IMPLICIT NONE
+C
+      INTERFACE
+
+      SUBROUTINE F(X, V)
+        IMPORT :: DP
+        REAL(DP), DIMENSION(:), INTENT(IN) :: X
+        REAL(DP), DIMENSION(:), INTENT(OUT) :: V
+      END SUBROUTINE F
+
+      SUBROUTINE FJAC(X, V, K)
+        IMPORT :: DP
+        REAL(DP), DIMENSION(:), INTENT(IN) :: X
+        REAL(DP), DIMENSION(:), INTENT(OUT) :: V
+        INTEGER, INTENT(IN) :: K
+      END SUBROUTINE FJAC
+
+      SUBROUTINE RHO(A, LAMBDA, X, V)
+        IMPORT :: DP
+        REAL(DP), INTENT(IN) :: A(:), X(:)
+        REAL(DP), INTENT(IN OUT) :: LAMBDA
+        REAL(DP), INTENT(OUT) :: V(:)
+      END SUBROUTINE RHO
+
+      SUBROUTINE RHOA(A, LAMBDA, X)
+        IMPORT :: DP
+        REAL(DP), DIMENSION(:), INTENT(OUT) :: A
+        REAL(DP), INTENT(IN) :: LAMBDA, X(:)
+      END SUBROUTINE RHOA
+
+      SUBROUTINE RHOJAC(A, LAMBDA, X, V, K)
+        IMPORT :: DP
+        REAL(DP), INTENT(IN) :: A(:), X(:)
+        REAL(DP), INTENT(IN OUT) :: LAMBDA
+        REAL(DP), INTENT(OUT) :: V(:)
+        INTEGER, INTENT(IN) :: K
+      END SUBROUTINE RHOJAC
+
+      SUBROUTINE FJACS(X)
+        IMPORT :: DP
+        REAL(DP), DIMENSION(:), INTENT(IN) :: X
+      END SUBROUTINE FJACS
+
+      SUBROUTINE RHOJS(A, LAMBDA, X)
+        IMPORT :: DP
+        REAL(DP), INTENT(IN) :: A(:), LAMBDA, X(:)
+      END SUBROUTINE RHOJS
+
+      END INTERFACE
+C
+      CONTAINS
+C
+      SUBROUTINE DIVP(XXXX,YYYY,ZZZZ,IERR)
+C
+C THIS SUBROUTINE PERFORMS DIVISION  OF COMPLEX NUMBERS:
+C ZZZZ = XXXX/YYYY
+C
+C ON INPUT:
+C
+C XXXX  IS AN ARRAY OF LENGTH TWO REPRESENTING THE FIRST COMPLEX
+C       NUMBER, WHERE XXXX(1) = REAL PART OF XXXX AND XXXX(2) =
+C       IMAGINARY PART OF XXXX.
+C
+C YYYY  IS AN ARRAY OF LENGTH TWO REPRESENTING THE SECOND COMPLEX
+C       NUMBER, WHERE YYYY(1) = REAL PART OF YYYY AND YYYY(2) =
+C       IMAGINARY PART OF YYYY.
+C
+C ON OUTPUT:
+C
+C ZZZZ  IS AN ARRAY OF LENGTH TWO REPRESENTING THE RESULT OF
+C       THE DIVISION, ZZZZ = XXXX/YYYY, WHERE ZZZZ(1) =
+C       REAL PART OF ZZZZ AND ZZZZ(2) = IMAGINARY PART OF ZZZZ.
+C
+C IERR =
+C  1   IF DIVISION WOULD HAVE CAUSED OVERFLOW.  IN THIS CASE, THE
+C      APPROPRIATE PARTS OF ZZZZ ARE SET EQUAL TO THE LARGEST
+C      FLOATING POINT NUMBER, AS GIVEN BY FUNCTION  HUGE .
+C
+C  0   IF DIVISION DOES NOT CAUSE OVERFLOW.
+C
+      USE HOMPACK_KINDS, ONLY: ONE
+      IMPLICIT NONE
+C
+C DECLARATION OF INPUT
+C
+      REAL(DP), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+C
+C DECLARATION OF OUTPUT
+      INTEGER, INTENT(OUT):: IERR
+      REAL(DP), DIMENSION(2), INTENT(OUT):: ZZZZ
+C
+C DECLARATION OF VARIABLES
+      REAL(DP):: DENOM,XNUM
+C
+      IERR = 0
+      DENOM = YYYY(1)*YYYY(1) + YYYY(2)*YYYY(2)
+      XNUM    =   XXXX(1)*YYYY(1) + XXXX(2)*YYYY(2)
+      IF (ABS(DENOM) .GE. ONE  .OR.  ( ABS(DENOM) .LT. ONE   .AND.
+     & ABS(XNUM)/HUGE(ONE) .LT. ABS(DENOM) ) ) THEN
+            ZZZZ(1) = XNUM/DENOM
+          ELSE
+            ZZZZ(1) = HUGE(ONE)
+            IERR =1
+          END IF
+      XNUM    =   XXXX(2)*YYYY(1) - XXXX(1)*YYYY(2)
+      IF (ABS(DENOM) .GE. ONE  .OR.  ( ABS(DENOM) .LT. ONE   .AND.
+     & ABS(XNUM)/HUGE(ONE) .LT. ABS(DENOM) ) ) THEN
+            ZZZZ(2) = XNUM/DENOM
+          ELSE
+            ZZZZ(2) = HUGE(ONE)
+            IERR =1
+          END IF
+      RETURN
+      END SUBROUTINE DIVP
+C
+      SUBROUTINE FFUNP(N,NUMT,MAXT,KDEG,COEF,CL,X,
+     &  XX,TRM,DTRM,CLX,DXNP1,F,DF)
+C
+C FFUNP  EVALUATES THE SYSTEM "F(X)=0" AND ITS PARTIAL
+C DERIVATIVES, USING THE "TABLEAU" INPUT: N,NUMT,KDEG,COEF.
+C
+C FFUNP  CAN BE MADE MORE EFFICIENT BY CUSTOMIZING IT TO
+C PARTICULAR SYSTEM TYPES.  FOR EXAMPLE,        
+C IF X(1)**2 AND X(1)**3 ARE USED IN SEVERAL
+C EQUATIONS, THE CURRENT  FFUNP  RECOMPUTES BOTH OF THESE FOR
+C EACH EQUATION.  BUT (OF COURSE) WE CAN COMPUTE
+C X1SQ=X(1)**2 AND X1CU=XSQ(1)*X(1), AND 
+C USE THESE IN EACH OF THE EQUATIONS.
+C
+C THE PART OF THE CODE BELOW LABELED "BLOCK A" CAN BE
+C CUSTOMIZED IN THIS WAY.   (THE CODE OUTSIDE OF
+C BLOCK A CONCERNS THE PROJECTIVE TRANSFORMATION AND NEED NOT
+C BE CHANGED.)  HOWEVER, BLOCK A REQUIRES THE HOMOGENEOUS FORM
+C OF THE POLYNOMIALS RATHER THAN THE STANDARD FORM.  FURTHER,
+C THE PARTIAL DERIVATIVES WITH RESPECT TO ALL N+1 PROJECTIVE
+C VARIABLES MUST BE COMPUTED.  MORE EXPLICITLY,
+C THE ORIGINAL SYSTEM, F(X)=0, IS GIVEN IN "NON-HOMOGENEOUS FORM" AS
+C DESCRIBED IN SUBROUTINE POLSYS.  F(X)  IS 
+C REPRESENTED IN "HOMOGENEOUS FORM" AS FOLLOWS:
+C
+C              NUMT(J)
+C
+C    F(J) =     SUM   TRM(J,K)
+C
+C               K=1
+C
+C WHERE  TRM(J,K)=COEF(J,K) * XX(J,1,K)*XX(J,2,K)* ... *XX(J,N+1,K)
+C
+C WITH XX(J,L,K) = X(L)**KDEG(J,L,K) FOR J=1 TO N, L=1 TO N, AND
+C K=1 TO NUMT(J), AND WITH XX(J,N+1,K) = XNP1**KDEG(J,N+1,K) FOR J=1 TO
+C N AND K=1 TO NUMT(J), WHERE  XNP1  IS THE "HOMOGENEOUS COORDINATE,"
+C KDEG(J,N+1,K)=IDEG(J)-(KDEG(J,1,K)+ ... + KDEG(J,N,K)),
+C AND IDEG(J) THE DEGREE OF THE J-TH EQUATION.   XNP1  IS GENERATED
+C FROM  X  AND  CL  BEFORE BLOCK A.
+C
+C IN THIS DISCUSSION WE HAVE OMITTED, FOR SIMPLICITY OF 
+C EXPOSITION, THE LEADING INDEX, WHICH DIFFERENTIATES THE 
+C REAL AND IMAGINARY PARTS.  HOWEVER, THIS INDEX MUST NOT BE 
+C OMITTED IN THE CODE.  
+C
+C WE COMPLETE THE EXPOSITION OF "REPLACING BLOCK A WITH MORE EFFICIENT
+C CODE" WITH AN EXPLICIT EXAMPLE.  FIRST, THE SYSTEM IS DESCRIBED.
+C THEN THE CODE THAT SHOULD BE USED IS GIVEN (COMMENTED OUT).
+C IN TESTS  POLSYS  WITH THE MORE EFFICIENT  FFUNP  RAN ABOUT TWICE AS
+C FAST AS WITH THE GENERIC  FFUNP .
+C
+C HERE IS THE SYSTEM TO BE SOLVED:
+C         
+C     F(1) = COEF(1,1) * X(1)**4
+C    &     + COEF(1,2) * X(1)**3 * X(2) 
+C    &     + COEF(1,3) * X(1)**3
+C    &     + COEF(1,4) * X(1)
+C    &     + COEF(1,5)
+C     F(2) = COEF(2,1) * X(1)     * X(2)**2
+C    &     + COEF(2,2)              X(2)**2
+C    &     + COEF(2,3) 
+C
+C THE REPLACEMENT CODE REQUIRES THE FOLLOWING DECLARATIONS:
+C     DOUBLE PRECISION X1SQ,X1CU,X2SQ,X3SQ,X3CU,
+C    &  TEMPA,TEMPB,TEMPC,TEMPD,TEMPE,TEMPF
+C     DIMENSION X1SQ(2),X1CU(2),X2SQ(2),X3SQ(2),X3CU(2),
+C    &  TEMPA(2),TEMPB(2),TEMPC(2),TEMPD(2),TEMPE(2),TEMPF(2)
+C
+C HERE IS CODE TO REPLACE BLOCK A:
+C
+C******************  BEGIN BLOCK A  *******************
+C
+C     CALL MULP(X(1,1),X(1,1),X1SQ)
+C     CALL MULP(X1SQ  ,X(1,1),X1CU)
+C     CALL MULP(X(1,2),X(1,2),X2SQ)
+C     CALL MULP(XNP1,  XNP1,  X3SQ)
+C     CALL MULP(X3SQ  ,XNP1,  X3CU)
+C     
+C     DO 1 I=1,2
+C       TEMPA(I)=   COEF(1,1) * X(I,1)
+C    &            + COEF(1,2) * X(I,2) 
+C    &            + COEF(1,3) * XNP1(I)
+C       TEMPB(I)=   COEF(1,4) * X(I,1)
+C    &            + COEF(1,5) * XNP1(I) 
+C 1   CONTINUE
+C
+C     CALL MULP(X1SQ,  TEMPA,TEMPC)
+C     CALL MULP(X(1,1),TEMPC,TEMPD)
+C     CALL MULP(X3SQ,  TEMPB,TEMPE)
+C     CALL MULP(XNP1,  TEMPE,TEMPF)
+C     
+C     DO 2 I=1,2
+C       F(I,1)=TEMPD(I) + TEMPF(I)
+C       DF(I,1,1)= 3. *TEMPC(I) + COEF(1,1)*X1CU(I) + COEF(1,4)*X3CU(I)
+C       DF(I,1,2)= COEF(1,2) * X1CU(I)
+C       DF(I,1,3)= COEF(1,3)*X1CU(I) + 3. *TEMPE(I) + COEF(1,5)*X3CU(I) 
+C
+C       TEMPA(I) = COEF(2,1) * X(I,1) + COEF(2,2) * XNP1(I)
+C  2  CONTINUE
+C
+C     CALL MULP(TEMPA,X(1,2),TEMPB)
+C     CALL MULP(TEMPB,X(1,2),TEMPC)
+C
+C     DO 3 I=1,2
+C       F(I,2) = TEMPC(I) + COEF(2,3) * X3CU(I)
+C       DF(I,2,1) = COEF(2,1) * X2SQ(I)  
+C       DF(I,2,2) = 2. * TEMPB(I)
+C       DF(I,2,3) = COEF(2,2) * X2SQ(I) + COEF(2,3) * 3. * X3SQ(I)      
+C  3  CONTINUE
+C******************  END OF BLOCK A  *******************
+C
+C ON INPUT:
+C
+C N  IS THE NUMBER OF EQUATIONS AND VARIABLES.
+C
+C NUMT(J)  IS THE NUMBER OF TERMS IN THE JTH EQUATION.
+C
+C MAXT  IS AN UPPER BOUND ON NUMT(J) FOR J=1 TO N.
+C
+C KDEG(J,L,K)  IS THE DEGREE OF THE L-TH VARIABLE IN THE K-TH TERM
+C   OF THE J-TH EQUATION.
+C
+C COEF(J,K)  IS THE K-TH COEFFICIENT OF THE J-TH EQUATION.
+C
+C CL  IS USED TO DEFINE THE PROJECTIVE TRANSFORMATION.  IF 
+C   THE PROJECTIVE TRANSFORMATION IS NOT SPECIFIED, THEN  CL
+C   CONTAINS DUMMY VALUES.
+C
+C X(1,J), X(2,J)  ARE THE REAL AND IMAGINARY PARTS RESPECTIVELY OF
+C   THE J-TH INDEPENDENT VARIABLE.
+C
+C XX, TRM, DTRM, CLX, DXNP1  ARE WORKSPACE VARIABLES.  
+C
+C ON OUTPUT:
+C
+C F(1,J), F(2,J)  ARE THE REAL AND IMAGINARY PARTS RESPECTIVELY OF 
+C   THE J-TH EQUATION.
+C
+C DF(1,J,K), DF(2,J,K)  ARE THE REAL AND IMAGINARY PARTS RESPECTIVELY
+C   OF THE K-TH PARTIAL DERIVATIVE OF THE J-TH EQUATION.
+C
+C
+C VARIABLES: XNP1,TEMP1,TEMP2.
+C 
+C NOTE:  XNP1(1), XNP1(2)  ARE THE REAL AND IMAGINARY PARTS, 
+C   RESPECTIVELY, OF THE PROJECTIVE VARIABLE.  XNP1  IS UNITY 
+C   IF THE PROJECTIVE TRANSFORMATION IS NOT SPECIFIED.
+C
+C  SUBROUTINES: MULP,POWP,DIVP.
+C
+      USE HOMPACK_KINDS, ONLY: ZERO
+      IMPLICIT NONE
+C
+C DECLARATION OF INPUT AND OUTPUT:
+      INTEGER, INTENT(IN):: N,NUMT(N),MAXT,KDEG(N,N+1,MAXT)
+      REAL(DP), INTENT(IN):: COEF(N,MAXT),CL(2,N+1),X(2,N)
+      REAL(DP), INTENT(IN OUT):: 
+     &  XX(2,N,N+1,MAXT),TRM(2,N,MAXT),DTRM(2,N,N+1,MAXT)
+      REAL(DP), INTENT(OUT):: 
+     &  CLX(2,N),DXNP1(2,N),F(2,N),DF(2,N,N+1)
+C
+C DECLARATION OF LOCAL VARIABLES:
+      INTEGER:: IERR,J,K,L,M,NNNN,NP1
+      REAL(DP), DIMENSION(2):: TEMP1,TEMP2,XNP1
+C
+      NP1=N+1
+C
+C GENERATE XNP1, THE PROJECTIVE COORDINATE, AND ITS DERIVATIVES.
+      DO J=1,N
+        CALL MULP(CL(1,J),X(1,J),CLX(1,J))
+      END DO
+C
+      XNP1(1:2)=CL(1:2,NP1) + SUM(CLX(1:2,1:N),DIM=2)
+      DXNP1(1:2,1:N)=CL(1:2,1:N)
+C
+C******************  BEGIN BLOCK A  *******************
+C
+C "BLOCK A" TAKES  X  AND  XNP1  AS INPUT AND RETURNS  F 
+C AND  DF  AS OUTPUT.   F  IS THE HOMOGENEOUS FORM OF THE
+C ORIGINAL  F, AND  DF  CONSISTS OF THE PARTIAL 
+C DERIVATIVES OF THE HOMOGENEOUS FORM OF  F  WITH RESPECT 
+C TO THE N+1 VARIABLES X(1), ... ,X(N), XNP1.
+C
+C BEGIN "COMPUTE F"
+C
+      DO J=1,N
+        DO K=1,NUMT(J)
+          CALL POWP(KDEG(J,NP1,K),XNP1, XX(1,J,NP1,K))
+          DO L=1,N
+            CALL POWP(KDEG(J, L,K),X(1,L),XX(1,J,  L,K))
+          END DO
+        END DO
+      END DO
+      TRM = ZERO
+      DO J=1,N
+        DO K=1,NUMT(J)
+          TRM(1,J,K)=COEF(J,K)
+          DO L=1,NP1
+            CALL MULP(XX(1,J,L,K), TRM(1,J,K),TEMP1)
+            TRM(1:2,J,K ) = TEMP1(1:2)
+          END DO
+        END DO
+      END DO
+      F(1:2,1:N) = SUM(TRM(1:2,1:N,:),DIM=3)
+C
+C END OF "COMPUTE F"
+C
+C BEGIN "COMPUTE DF"
+C
+      J_LOOP: DO J=1,N
+        K_LOOP: DO K=1,NUMT(J)
+        M_LOOP: DO M=1,NP1
+C
+C IF TERM DOES NOT INCLUDE X(M), SET PARTIAL DERIVATIVE OF TERM
+C   EQUAL TO ZERO.
+          IF(KDEG(J,M,K) .EQ. 0) THEN
+            DTRM(1:2,J,M,K) = ZERO
+          ELSE
+C
+C IF TERM DOES INCLUDE X(M), TRY COMPUTING THE PARTIAL BY DIVIDING
+C   THE TERM BY X(M).
+            IF(M.LE.N) CALL DIVP(TRM(1,J,K),X(1,M),DTRM(1,J,M,K),IERR)
+            IF(M.EQ.NP1) CALL DIVP(TRM(1,J,K),XNP1,DTRM(1,J,M,K),IERR)
+            IF (IERR .EQ. 0) THEN
+              DTRM(1:2,J,M,K)=KDEG(J,M,K)*DTRM(1:2,J,M,K)
+            ELSE
+C
+C IF DIVISION WOULD CAUSE OVERFLOW, GENERATE THE PARTIAL BY
+C   THE POLYNOMIAL FORMULA.
+              DTRM(1,J,M,K)=COEF(J,K)
+              DTRM(2,J,M,K)=ZERO
+              DO L=1,NP1
+                IF (L .EQ. M) CYCLE
+                CALL MULP(XX(1,J,L,K),DTRM(1,J,M,K),TEMP1)
+                DTRM(1:2,J,M,K)=TEMP1(1:2)
+              END DO
+              NNNN=KDEG(J,M,K)-1
+              IF (M .LE. N) CALL POWP(NNNN,X(1,M),TEMP2)
+              IF (M .EQ. NP1) CALL POWP(NNNN,XNP1 ,TEMP2)
+              CALL MULP(TEMP2,TEMP1,DTRM(1,J,M,K))
+              DTRM(1:2,J,M,K)=KDEG(J,M,K)*DTRM(1:2,J,M,K)
+            END IF
+          END IF
+        END DO M_LOOP
+        END DO K_LOOP
+      END DO J_LOOP
+      DO J=1,N
+        DF(1:2,J,1:NP1) = SUM(DTRM(1:2,J,1:NP1,1:NUMT(J)), DIM=3)
+      END DO
+C
+C END OF "COMPUTE DF"
+C*******************  END BLOCK A  ********************
+C
+C CONVERT  DF  TO BE PARTIALS WITH RESPECT TO  X(1), ... ,X(N),
+C BY APPLYING THE CHAIN RULE WITH  XNP1  CONSIDERED A FUNCTION OF 
+C OF  X(1), ... ,X(N).
+C
+      DO J=1,N
+        DO K=1,N
+          CALL MULP(DF(1,J,NP1),DXNP1(1,K),TEMP1)
+          DF(1:2,J,K)=DF(1:2,J,K)+TEMP1(1:2)
+        END DO
+      END DO
+      RETURN
+      END SUBROUTINE FFUNP
+C
+      SUBROUTINE GFUNP(N,IDEG,PDG,QDG,X,XDGM1,XDG,PXDGM1,PXDG,G,DG)
+C
+C GFUNP  EVALUATES THE START EQUATION "G".
+C
+C ON INPUT:
+C
+C N  IS THE NUMBER OF VARIABLES.
+C
+C IDEG(J)  IS THE DEGREE OF THE J-TH EQUATION.
+C
+C PDG(1,J), PDG(2,J)  ARE THE REAL AND IMAGINARY PARTS
+C   OF THE POWERS OF P USED TO DEFINE G.
+C
+C QDG(1,J), QDG(2,J)  ARE THE REAL AND IMAGINARY PARTS
+C   OF THE POWERS OF Q USED TO DEFINE G.
+C
+C X(1,J), X(2,J)  ARE THE REAL AND IMAGINARY PARTS OF THE
+C   J-TH INDEPENDENT VARIABLE.
+C
+C XDGM1,XDG,PXDGM1,PXDG ARE WORKSPACE ARRAYS.
+C
+C ON OUTPUT:
+C
+C N,IDEG,PDG,QDG, AND X  ARE UNCHANGED. 
+C
+C G(1,J),G(2,J)  ARE THE REAL AND IMAGINARY PARTS OF THE
+C   J-TH START EQUATION.
+C
+C DG(1,J),DG(2,J)  ARE THE REAL AND IMAGINARY PARTS OF THE
+C   PARTIAL DERIVATIVES OF THE J-TH START EQUATION WITH RESPECT TO THE
+C   J-TH INDEPENDENT VARIABLE.
+C
+C SUBROUTINES:  MULP, POWP.
+C
+      IMPLICIT NONE
+C
+C DECLARATION OF INPUT AND OUTPUT:
+      INTEGER, INTENT(IN):: N,IDEG(N)
+      REAL(DP), INTENT(IN):: PDG(2,N),QDG(2,N),X(2,N)
+      REAL(DP), INTENT(IN OUT):: XDGM1(2,N),XDG(2,N),PXDGM1(2,N),
+     &  PXDG(2,N)
+      REAL(DP), INTENT(OUT):: G(2,N),DG(2,N)
+C
+C DECLARATION LOCAL OF VARIABLES
+      INTEGER:: J
+C
+C COMPUTE THE (IDEG-1)-TH AND IDEG-TH POWER OF X
+      DO J=1,N
+        CALL POWP(IDEG(J)-1,X(1,J), XDGM1(1,J))
+        CALL MULP(X(1,J),XDGM1(1,J), XDG(1,J))
+      END DO
+C
+C COMPUTE THE PRODUCT OF PDG AND XDGM1
+      DO J=1,N
+          CALL MULP( PDG(1,J), XDGM1(1,J), PXDGM1(1,J) )
+      END DO
+C
+C COMPUTE THE PRODUCT OF PDG AND XDG
+      DO J=1,N
+          CALL MULP( PDG(1,J), XDG(1,J), PXDG(1,J) )
+      END DO
+      G = PXDG - QDG
+      DO J=1,N
+        DG(1:2,J)= IDEG(J)*PXDGM1(1:2,J)
+      END DO
+      RETURN
+      END SUBROUTINE GFUNP
+C
+      SUBROUTINE GMFADS(NN,A,NWK,MAXA)
+C
+C     This subroutine computes the LDU decomposition of a symmetric positive
+C     definite matrix B where only the upper triangular skyline structure
+C     is stored.  The decomposition is done by the Gill-Murray
+C     strategy from P.E. Gill and W. Murray, Newton type Methods
+C     for Unconstrained and Linearly Constrained Optimization,
+C     Mathematical Programming, 7, 311-350 (1974) and gives an
+C     approximate decomposition in the case of a nonpositive
+C     definite or ill-conditioned matrix.
+C
+C     Input variables:
+C
+C        NN -- dimension of B.
+C
+C        A -- one dimensional real array containing the upper 
+C             triangular skyline portion of a symmetric matrix B in
+C             packed skyline storage format.
+C
+C        NWK -- number of elements in A.
+C
+C        MAXA -- an integer array of dimension NN+1 containing the 
+C                locations of the diagonal elements of B in A.  
+C                By convention, MAXA(NN+1)=NWK+1.  
+C
+C     Output variables:
+C
+C        A -- the upper triangular skyline portion of the LDU 
+C             decomposition of the symmetric matrix B (or B + E if B
+C             was not sufficiently positive definite).
+C
+C
+C     No working storage is required by this routine.
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: NN,NWK,MAXA(NN+1)
+      REAL(DP), INTENT(IN OUT):: A(NWK)
+      INTEGER:: I,I0,I1,I2,I3,I4,J,J1,K,K1,K2,KH,KL,KN,KU,KZ,L,L1,
+     &   L2,L3,M,M1,N1,NNN
+      REAL(DP):: BET,DEL,DJ,G,GAM,GAM1,PHI,
+     &   THE,THE1,XT1,XT2,ZET,ZET1
+      G=ZERO
+      GAM=ZERO
+      DO I=1,NN
+         K=MAXA(I)
+         G=G+A(K)*A(K)
+         GAM1=ABS(A(K))
+         IF(GAM1.GT.GAM)GAM=GAM1
+      END DO
+      ZET=ZERO
+      DO I=1,NN
+         K=MAXA(I)
+         K1=MAXA(I+1)-1
+         K2=K1-K
+         IF (K2.EQ.0) CYCLE
+         L=K+1
+         DO J=L,K1
+            G=G+2*A(J)*A(J)
+            ZET1=ABS(A(J))
+            IF(ZET1.GT.ZET)ZET=ZET1
+         END DO
+      END DO
+      ZET=ZET/NN
+      DEL=EPSILON(ONE)
+      BET=DEL
+      IF (ZET .GT. BET) BET=ZET
+      IF (GAM .GT. BET) BET=GAM
+      G=SQRT(G)
+      IF (G .GT. ONE) DEL=DEL*G
+      DO I=1,NN
+         N1=I-1
+         KN=MAXA(I)
+         KL=KN+1
+         KU=MAXA(I+1)-1
+         KH=KU-KL
+         PHI=A(KN)
+         IF (KH .GE. 0) THEN
+           K1=KN+1
+           K2=I
+           DO J=K1,KU
+              K2=K2-1
+              KZ=MAXA(K2)
+              PHI=PHI-A(J)*A(J)*A(KZ)
+           END DO
+         END IF
+         PHI=ABS(PHI)
+         L=I+1
+         THE=ZERO
+         NNN=NN+1
+         IF (L .NE. NNN) THEN
+           DO J=L,NN
+              L1=MAXA(J)
+              L2=MAXA(J+1)
+              L3=L2-L1-1
+              M=J-I
+              IF (L3 .LT. M) CYCLE
+              M1=L1+M
+              IF (N1 .NE. 0) THEN
+                DO J1=1,N1
+                  I0=MAXA(J1)
+                  I1=MAXA(L)
+                  I2=I-J1
+                  I3=I1-KN-1
+                  I4=J-J1
+                  IF (I3 .LT. I2) CYCLE
+                  IF (L3 .LT. I4) CYCLE
+                  XT1=A(KN+I2)
+                  XT2=A(L1+I4)
+                  A(M1)=A(M1)-XT1*XT2*A(I0)
+                END DO
+              END IF
+            THE1=ABS(A(M1))
+            IF (THE .LT. THE1) THE=THE1
+            END DO
+         END IF
+         THE=THE*THE/BET
+         DJ=DEL
+         IF (PHI .GT. DJ) DJ=PHI
+         IF (THE .GT. DJ) DJ=THE
+         A(KN)=DJ
+         IF (L .EQ. NNN) CYCLE
+         DO J=L,NN
+            L1=MAXA(J)
+            L2=MAXA(J+1)
+            L3=L2-L1-1
+            M=J-I
+            IF (L3 .LT. M) CYCLE
+            M1=L1+M
+            A(M1)=A(M1)/A(KN)
+         END DO
+      END DO
+C
+      END SUBROUTINE GMFADS
+C
+      SUBROUTINE GMRES(N, KDMAX, ITMAX, RHS, X, KVAL,
+     &                PRECON, IFLAG, ROWPOSP, COLPOSP)
+C
+C THIS ROUTINE IS AN EXTENSION OF THE STANDARD RESTARTED GMRES METHOD OF
+C Y. SAAD AND M. SCHULTZ, "GMRES: A GENERALIZED MINIMAL RESIDUAL METHOD
+C FOR SOLVING NONSYMMETRIC LINEAR SYSTEMS", SIAM J. SCI. STAT. COMPUT., 7
+C (1986), PP. 856-869, THAT ALLOWS THE MAXIMUM KRYLOV SUBSPACE DIMENSION
+C TO INCREASE (UP TO A MAXIMUM SPECIFIED PARAMETER VALUE) IF STAGNATION
+C OCCURS.  THE ARNOLDI BASIS VECTORS ARE GENERATED USING ORTHOGONALIZATION
+C WITH HOUSEHOLDER TRANSFORMATIONS.
+C ON RESTARTS, RESIDUAL VECTORS ARE COMPUTED BY DIRECT EVALUATION.
+C CONDITIONING OF THE GMRES LEAST-SQUARES PROBLEM IS MONITORED USING 
+C LAPACK ROUTINE DLAIC1 (SEE P. N. BROWN AND H. F. WALKER, "GMRES ON 
+C (NEARLY) SINGULAR SYSTEMS", UTAH STATE UNIV.  C MATH. STAT. DEPT. RES.
+C REPORT 2/94/73, FEBRUARY, 1994).
+C
+C
+C INPUT VARIABLES:
+C
+C N  IS THE DIMENSION OF THE LINEAR SYSTEM AA*X = RHS.  THE SPARSE
+C   MATRIX DATA STRUCTURE FOR AA IS STORED IN THE MODULE HOMOTOPY.
+C
+C KDMAX  IS THE MAXIMUM KRYLOV SUBSPACE DIMENSION ALLOWED BEFORE
+C   STAGNATION DETECTION BEGINS.
+C
+C ITMAX  IS THE MAXIMUM OVERALL NUMBER OF GMRES ITERATIONS ALLOWED.
+C
+C RHS  IS THE RIGHT HAND SIDE OF THE LINEAR SYSTEM.
+C
+C X  IS THE INITIAL APPROXIMATE SOLUTION OF THE LINEAR SYSTEM.
+C
+C KVAL  IS AN INDEX INTO X REQUIRED FOR MATRIX-VECTOR MULTIPLICATION.
+C  
+C PRECON  IS A ONE-DIMENSIONAL REAL ARRAY CONTAINING A PRECONDITIONING
+C   MATRIX Q FOR AA.   
+C
+C IFLAG  INDICATES WHAT DATA IS USED IN MATRIX-VECTOR MULTIPLICATION.
+C
+C ROWPOSP  IS AN OPTIONAL INTEGER ARRAY USED IN THE DATA STRUCTURE
+C   DESCRIBING THE SPARSE PRECONDITIONING MATRIX Q. 
+C
+C COLPOSP  IS AN OPTIONAL INTEGER ARRAY USED IN THE DATA STRUCTURE
+C   DESCRIBING THE SPARSE PRECONDITIONING MATRIX Q. 
+C
+C OUTPUT VARIABLES:
+C
+C KDMAX  IS THE INCREASED MAXIMUM KRYLOV SUBSPACE DIMENSION ON
+C   TERMINATION.
+C
+C IFLAG  IS UNCHANGED ON NORMAL TERMINATION (DESIRED TOLERANCE MET);
+C   = 4, IF GMRES ITERATION FAILS TO CONVERGE BECAUSE
+C      - DESIRED TOLERANCE NOT MET AFTER ITMAX ITERATIONS;
+C      - DANGEROUS NEAR-SINGULARITY DETECTED;
+C      - LIMITS OF NUMERICAL ACCURACY REACHED;
+C      - STAGNATION OCCURS.
+C
+C ITMAX  IS THE TOTAL NUMBER OF GMRES ITERATIONS PERFORMED.
+C
+C X  IS THE FINAL APPROXIMATE SOLUTION.
+C   
+C
+C  CALLS DNRM2, ILUSOLVDS, MULTDS, MULT2DS, SOLVDS, AND INTERNAL
+C  SUBROUTINES MULM1 AND MULM2 AND INTERNAL FUNCTIONS APPL_HOUSE, HOUSE.
+C
+      USE HOMPACK_KINDS, ONLY: ONE, ZERO
+      USE HOMPACK_GLOBAL_LEGACY, ONLY: AA=>QRSPARSE, ROWPOS, COLPOS, PP
+      USE BLAS_INTERFACES, ONLY: DNRM2
+      USE LAPACK_INTERFACES, ONLY: DLAIC1
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: KVAL, N
+      INTEGER, INTENT(IN OUT):: IFLAG, ITMAX, KDMAX
+      REAL(DP), INTENT(IN):: PRECON(:), RHS(N)  
+      REAL(DP), INTENT(IN OUT):: X(N)
+      INTEGER, INTENT(IN), OPTIONAL:: COLPOSP(:), ROWPOSP(:)
+C
+C IPRINT  IS A PARAMETER FOR THE FORTRAN UNIT NUMBER, WHICH IF POSITIVE
+C   ACTIVATES TRACING OF THE GMRES ITERATIONS.
+C M  IS A PARAMETER USED IN THE ADAPTIVE STRATEGY FOR INCREMENTING THE 
+C   KRYLOV SUBSPACE DIMENSION (VALUE KDMAX).  
+C STRONG_VERSION  IS A LOGICAL PARAMETER, WHICH IF TRUE CAUSES GMRES TO 
+C   STOP IN TWO CASES: WHEN THE ESTIMATED CONDITION NUMBER IS GREATER 
+C   THAN 1.0/(50*EPSILON); 
+C   WHEN THE TRUE RESIDUAL NORM IS LARGE AND IT INCREASED DURING THE LAST 
+C   RESTART CYCLE.
+C
+      INTEGER, PARAMETER:: IPRINT=0, M=4 
+      LOGICAL, PARAMETER:: STRONG_VERSION=.TRUE.
+C
+C LOCAL VARIABLES.
+C
+      INTEGER:: I, IFLAGC, IFLAGI, IQUIT, ITNO, KD, 
+     &  KDP1, KDLIMIT, LENAA 
+      REAL(DP), ALLOCATABLE:: C(:), R(:,:), S(:), SVBIG(:), 
+     &  SVSML(:), V(:,:), W(:)
+      REAL(DP):: VTEMP(N), VTEMP2(N)
+      REAL(DP):: BIG, BIGCND, CC, CNDMAX,
+     &  RSN, RSNOLD, SESTPR, SMALL, SS, TEMP, TOL 
+C
+C DEFINE MAXIMUM ALLOWED KRYLOV SUBSPACE DIMENSION.
+C
+      KDLIMIT = MIN(MAX(200, INT(SQRT(REAL(N)))), (N+1)/2)
+      KDMAX = MIN(KDMAX,KDLIMIT)
+C
+C ALLOCATE LOCAL ARRAYS.
+C
+      IF(.NOT. ALLOCATED(C)) ALLOCATE(C(KDLIMIT))
+      IF(.NOT. ALLOCATED(R)) ALLOCATE(R(KDLIMIT,KDLIMIT))
+      IF(.NOT. ALLOCATED(S)) ALLOCATE(S(KDLIMIT))
+      IF(.NOT. ALLOCATED(SVBIG)) ALLOCATE(SVBIG(KDLIMIT))
+      IF(.NOT. ALLOCATED(SVSML)) ALLOCATE(SVSML(KDLIMIT))
+      IF(.NOT. ALLOCATED(V)) ALLOCATE(V(N,KDLIMIT+1))
+      IF(.NOT. ALLOCATED(W)) ALLOCATE(W(KDLIMIT+1))
+C
+C PERFORM INITIALIZATIONS.
+C
+      ITNO = 0
+      IFLAGC = 0
+      IFLAGI = 1
+      LENAA = ROWPOS(N)-1
+      TOL = REAL(MAX(1E2, 1.01*REAL(LENAA)/REAL(N)), DP)*EPSILON(ONE)
+      VTEMP = X
+      IF (PRESENT(ROWPOSP) .AND. PRESENT( COLPOSP)) THEN
+        CALL MULM2(V(:,1),VTEMP)            ! MODE=2 
+      ELSE 
+        CALL MULM1(V(:,1),VTEMP)            ! MODE=1 
+      END IF
+      V(:,1) = RHS - V(:,1)
+      RSN = DNRM2(N, V(:,1), 1)
+      TEMP = DNRM2(N, RHS, 1)
+      TOL = MAX(RSN,TEMP)*TOL
+      IF (RSN .LE. TOL) THEN 
+         ITMAX = ITNO
+         CALL CLEANUP
+         RETURN
+      ELSE
+         IF (ITMAX .EQ. 0) THEN 
+            ITMAX = ITNO
+            IFLAG = 4
+            CALL CLEANUP
+            RETURN
+         ENDIF
+      ENDIF
+      CNDMAX = ONE/(50*EPSILON(ONE))
+      IQUIT = 0
+      BIGCND = ZERO
+C
+C FOR PRINTING:
+C
+      IF (IPRINT .GT. 0) THEN 
+         WRITE(IPRINT, 19) ITNO, RSN
+19       FORMAT(//,9X,'GMRES ITERATIONS:',//,T4,'ITERATION',TR4,
+     &   'RESIDUAL NORM',TR5,'CONDITION NUMBER',/,T4,I6,TR7,ES16.8)
+      ENDIF
+C
+C BEGIN THE OUTER LOOP. 
+C
+      OUTER: DO
+C
+C FOR PRINTING:
+C
+      IF (IPRINT .GT. 0 ) THEN
+        IF (IFLAGI .NE. 0) THEN
+          WRITE (IPRINT, 21) KDMAX
+21        FORMAT(/' RESTART WITH KRYLOV SUBSPACE DIMENSION =',I2)
+        ELSE
+           WRITE(IPRINT, 22) 
+22         FORMAT(/' RESTART')
+        ENDIF
+      ENDIF
+C
+      KD = 0
+      RSNOLD = RSN
+      IQUIT = 0
+      IFLAGI = 0
+C
+C FIND HOUSEHOLDER VECTOR V(:,1).
+C
+      W(1)=V(1,1)
+      CALL HREFG(N,V(2:N,1),V(1,1),W(1))
+C
+C BEGIN THE INNER LOOP.
+C
+ 200  INNER: DO
+      KD = KD + 1
+      KDP1 = KD + 1
+      ITNO = ITNO + 1
+      IQUIT = 0 
+C
+C FIND THE KD-TH ORTHOGONAL VECTOR.
+C
+      VTEMP = ZERO
+      VTEMP(KD) = ONE
+      DO I=KD,1,-1
+        TEMP=V(I,I)
+        V(I,I)=ONE
+        CALL HREFX(N-I+1,V(I:N,I),TEMP,VTEMP(I:N))
+        V(I,I)=TEMP
+      END DO
+C
+C EVALUATE AA*(KD-TH KRYLOV SUBSPACE BASIS VECTOR). 
+C
+        IF (PRESENT(ROWPOSP) .AND. PRESENT(COLPOSP)) THEN  ! MODE = 2
+          CALL ILUSOLVDS(N, PRECON(1:ROWPOSP(N+1)-1), 
+     &      ROWPOSP(N+1)-1, ROWPOSP(1:N+1), 
+     &      COLPOSP(1:ROWPOSP(N+1)-1), VTEMP(1:N))
+          CALL MULM2(VTEMP2, VTEMP(1:N))
+        ELSE                                               ! MODE = 1 
+          CALL SOLVDS(N, PRECON, ROWPOS(N+1)-1, ROWPOS(1:N+1),
+     &      VTEMP(1:N))
+          CALL MULM1(VTEMP2, VTEMP(1:N))
+        ENDIF
+C
+C FIND HOUSEHOLDER VECTOR V(:,KDP1).
+C
+      VTEMP(1:N)=VTEMP2(1:N)
+      DO I=1,KD
+        TEMP=V(I,I)
+        V(I,I)=ONE
+        CALL HREFX(N-I+1,V(I:N,I),TEMP,VTEMP(I:N))
+        V(I,I)=TEMP
+      END DO 
+      IF ( MAXVAL(ABS(VTEMP(KDP1:N))) .NE. ZERO) THEN
+        V(KDP1+1:N, KDP1) = VTEMP(KDP1+1:N)
+        CALL HREFG(N-KDP1+1,V(KDP1+1:N, KDP1),V(KDP1,KDP1), 
+     &   VTEMP(KDP1))
+      ENDIF
+C
+C IF KD .GT. 1, APPLY THE PREVIOUS GIVENS ROTATIONS. 
+C
+      DO I = 1, KD-1
+        TEMP = VTEMP(I) 
+        VTEMP(I) = C(I)*TEMP + S(I)*VTEMP(I+1)
+        VTEMP(I+1) = -S(I)*TEMP + C(I)*VTEMP(I+1)
+      END DO   
+C
+C DETERMINE AND APPLY THE NEXT ROTATION. 
+C
+      IF (VTEMP(KDP1) .NE. ZERO) THEN
+        TEMP = VTEMP(KD)
+        R(KD,KD) = SQRT(VTEMP(KD)**2 + VTEMP(KDP1)**2) 
+        C(KD) = TEMP/R(KD,KD)
+        S(KD) = VTEMP(KDP1)/R(KD,KD)
+        VTEMP(KD) = C(KD)*TEMP + S(KD)*VTEMP(KDP1)
+      END IF 
+      R(1:KD, KD) = VTEMP(1:KD)
+C
+C COMPUTE AND TEST INCREMENTAL CONDITION NUMBER.
+C
+      IF (KD .EQ. 1) THEN 
+        BIG = R(KD,KD) 
+        SMALL = BIG 
+        SVBIG(1) = ONE
+        SVSML(1) = ONE
+      ELSE
+        I = 1
+        CALL DLAIC1(I, KD-1, SVBIG, BIG, R(1,KD), R(KD,KD),
+     &    SESTPR, SS, CC)
+        BIG = SESTPR
+        SVBIG(1:KD-1) = SS*SVBIG(1:KD-1)
+        SVBIG(KD) = CC
+        I = 2
+        CALL DLAIC1(I, KD-1, SVSML, SMALL, R(1,KD), R(KD,KD),
+     &    SESTPR, SS, CC)
+        SMALL = SESTPR
+        SVSML(1:KD-1) = SS*SVSML(1:KD-1)
+        SVSML(KD) = CC
+      ENDIF
+      IF (STRONG_VERSION) THEN
+        IF (BIG .GE. SMALL*CNDMAX) THEN
+          IF (IPRINT .GT. 0) THEN
+            WRITE (IPRINT, 230) CNDMAX
+ 230        FORMAT(/,4X, 'IN GMRES CONDITION NUMBER .GE.',
+     &      ES16.8)
+          ENDIF
+          ITNO = ITNO - 1
+          IFLAGC = 4
+          EXIT OUTER
+        ENDIF
+      ENDIF  
+      TEMP = BIG/SMALL
+      IF (TEMP .GT. BIGCND) BIGCND = TEMP
+C
+C UPDATE W AND THE RESIDUAL NORM. 
+C
+      IF (VTEMP(KDP1) .NE. ZERO) THEN
+        W(KDP1)= -S(KD)*W(KD)
+        W(KD) = C(KD)*W(KD)
+      ELSE
+        W(KDP1) = ZERO
+      ENDIF 
+      RSN = ABS(W(KDP1))
+C
+C FOR PRINTING:
+C
+      IF (IPRINT .GT. 0 ) THEN
+        WRITE (IPRINT, 240) ITNO, RSN, BIG/SMALL                             
+ 240    FORMAT(T4,I6, TR7,2ES16.8)
+      ENDIF
+C
+C TEST FOR TERMINATION OF THE INNER LOOP. 
+C
+      IF (RSN .LE. TOL .OR. KD .EQ. KDMAX .OR. ITNO .EQ. ITMAX)
+     &  EXIT INNER
+      END DO INNER
+C
+C IF TERMINATING THE INNER LOOP, TEST FOR TERMINATION OF THE OUTER LOOP, 
+C COMPUTE THE CORRECTION, AND UPDATE THE APPROXIMATE SOLUTION. 
+C
+C TEST FOR TERMINATION OF THE OUTER LOOP. 
+C
+      IF (RSN .LE. TOL .OR. ITNO .EQ. ITMAX ) THEN
+        IQUIT = 1
+C
+C TEST FOR STAGNATION.
+C
+      ELSE 
+        TEMP = KD*LOG(TOL/RSN)/
+     &    LOG(RSN/((ONE + 10*EPSILON(ONE))*RSNOLD))
+        IF (TEMP .GE. REAL(40*(ITMAX - ITNO), DP)) THEN
+          IF (KDMAX .LE. KDLIMIT-M) THEN
+            IFLAGI = 3
+            KDMAX = KDMAX + M ! INCREASE KDMAX BY M
+            GO TO 200
+          ELSE IF (KDMAX .NE. KDLIMIT) THEN
+            IFLAGI = 3 
+            KDMAX = KDLIMIT
+            GO TO 200 
+          END IF
+        ENDIF 
+      ENDIF             
+C
+C COMPUTE THE CORRECTION IN V(:,1).
+C
+      DO I = KD, 1, -1
+        W(I) = W(I)/R(I,I)
+        IF (I .GT. 1) W(1:I-1) = W(1:I-1)-W(I)*R(1:I-1,I) 
+      END DO
+C
+C COMPUTE KD ORTHOGONAL VECTORS FROM HOUSEHOLDER VECTORS.
+C
+      VTEMP = ZERO
+      VTEMP(1:KD)=W(1:KD)
+      DO I=KD,1,-1
+        TEMP=V(I,I)
+        V(I,I)=ONE
+        CALL HREFX(N-I+1,V(I:N,I), TEMP, VTEMP(I:N))
+        V(I,I)=TEMP
+      END DO
+C
+C ADD THE CORRECTION TO THE APPROXIMATE SOLUTION. 
+C
+      IF (PRESENT(ROWPOSP) .AND. PRESENT(COLPOSP)) THEN    ! MODE = 2
+        CALL ILUSOLVDS(N, PRECON(1:ROWPOSP(N+1)-1), 
+     &     ROWPOSP(N+1)-1, ROWPOSP(1:N+1), 
+     &     COLPOSP(1:ROWPOSP(N+1)-1), VTEMP(1:N))
+      ELSE                                                 ! MODE = 1
+        CALL SOLVDS(N, PRECON, ROWPOS(N+1)-1, ROWPOS(1:N+1),
+     &     VTEMP(1:N))
+      ENDIF
+      X = X+VTEMP
+C
+C UPDATE THE RESIDUAL VECTOR BY DIRECT EVALUATION IN (V:,1) AND RECOMPUTE 
+C THE RESIDUAL NORM.
+C
+      IF (IQUIT .EQ. 0 ) THEN
+        VTEMP=X
+        IF (PRESENT(ROWPOSP) .AND. PRESENT( COLPOSP)) THEN
+          CALL MULM2(V(:,1),VTEMP)            ! MODE=2
+        ELSE
+          CALL MULM1(V(:,1),VTEMP)            ! MODE=1
+        END IF
+        V(:,1) = RHS - V(:,1)
+        RSN = DNRM2(N, V(:,1), 1)
+      ENDIF
+C
+C TERMINATE, OR GO TO THE TOP OF THE OUTER LOOP.
+C
+      IF (RSN .LE. TOL) THEN 
+        IFLAGC = 0
+        EXIT OUTER 
+      ENDIF
+      IF (ITNO .EQ. ITMAX) THEN 
+        IF (IPRINT .GT. 0) THEN
+          WRITE (IPRINT, 250) ITMAX 
+ 250      FORMAT(/,4X, 'MAXIMUM NUMBER OF ITERATIONS REACHED:',I7)
+        ENDIF
+        IFLAGC = 4 
+        EXIT OUTER
+      END IF 
+      IF (IQUIT .EQ. 0 ) THEN
+        IF (RSN .GT. RSNOLD ) THEN
+          IF (IPRINT .GT. 0) THEN
+            WRITE (IPRINT, 260) RSN     
+ 260        FORMAT(/,4X, '(TRUE) RESIDUAL NORM INCREASED TO',ES16.8)
+          ENDIF
+          IF (RSN .LE. TOL**(2.0_DP/3.0_DP))  THEN
+            IFLAGC = 0
+          ELSE  IF (STRONG_VERSION) THEN
+            IF (IPRINT .GT. 0) THEN
+              WRITE (IPRINT, 270) TOL**(2.0_DP/3.0_DP)                
+ 270          FORMAT(/,4X,'(TRUE) RESIDUAL NORM IS LARGER THAN',ES16.8)
+            ENDIF
+            IFLAGC = 4
+          END IF
+          EXIT OUTER
+        END IF
+C
+C TEST FOR STAGNATION USING TRUE RESIDUAL NORM.
+C
+        TEMP = KD*LOG(TOL/RSN)/
+     &     LOG(RSN/((ONE + 10*EPSILON(ONE))*RSNOLD))
+        IF (TEMP .GE. REAL(70*(ITMAX - ITNO), DP)) THEN
+          IFLAGI = 3
+          IF ( KDMAX .LE. KDLIMIT-M ) THEN
+            KDMAX = KDMAX + M            ! INCREASE KDMAX
+          ELSE IF (KDMAX .NE. KDLIMIT) THEN
+            KDMAX = KDLIMIT
+          END IF
+        ELSE  IF (TEMP .GE. 1E3_DP*REAL(ITMAX - ITNO, DP)) THEN
+          IFLAGC = 4
+          EXIT OUTER
+        END IF
+      END IF
+      END DO OUTER
+C
+C RETURN. 
+C
+      ITMAX = ITNO
+      IF (IFLAGC .NE. 0) IFLAG = IFLAGC
+      CALL CLEANUP
+      RETURN
+C
+C INTERNAL SUBROUTINES.
+C
+      CONTAINS
+C
+      SUBROUTINE MULM1(Y,X)
+C
+C MATRIX-VECTOR MULTIPLY FOR MODE = 1.
+C 
+        REAL(DP), INTENT(IN):: X(N) 
+        REAL(DP), INTENT(OUT):: Y(N) 
+        Y = ZERO
+        CALL MULTDS(Y(1:N-1), AA, X(1:N-1), ROWPOS(1:N),
+     &    N-1, ROWPOS(N)-1)       
+C
+C       RESULT MODIFIED ACCORDING TO KVAL.
+C
+        Y(KVAL) = Y(KVAL)+X(N)
+        IF (KVAL .LT. N) 
+     &    Y(N) = X(KVAL) + X(N)*(ONE/ABS(AA(ROWPOS(KVAL)))+ONE)
+        RETURN
+      END SUBROUTINE MULM1
+C       
+      SUBROUTINE MULM2(Y,X)
+C
+C MATRIX-VECTOR MULTIPLY FOR MODE = 2.
+C
+        REAL(DP), INTENT(IN):: X(N)
+        REAL(DP), INTENT(OUT):: Y(N) 
+C
+        Y = ZERO
+        IF (IFLAG .NE. -2) THEN 
+          CALL MULT2DS(Y(1:N-1), AA, X(1:N-1), ROWPOS(1:N), 
+     &      COLPOS(1:LENAA), N-1, LENAA)
+          Y(1:N-1) = Y(1:N-1)-X(N)*PP(1:N-1)
+        ELSE
+          CALL MULT2DS(Y(1:N-1), AA, X(1:N), ROWPOS(1:N),
+     &      COLPOS(1:LENAA), N-1, LENAA)
+        END IF
+C
+C       RESULT MODIFIED ACCORDING TO KVAL.
+C
+        Y(N) = X(KVAL)
+        RETURN
+      END SUBROUTINE MULM2
+C
+      SUBROUTINE CLEANUP    ! DEALLOCATE TEMPORARY LOCAL STORAGE.
+        IF(ALLOCATED(C)) DEALLOCATE(C)
+        IF(ALLOCATED(R)) DEALLOCATE(R)
+        IF(ALLOCATED(S)) DEALLOCATE(S)
+        IF(ALLOCATED(SVBIG)) DEALLOCATE(SVBIG)
+        IF(ALLOCATED(SVSML)) DEALLOCATE(SVSML)
+        IF(ALLOCATED(V)) DEALLOCATE(V)
+        IF(ALLOCATED(W)) DEALLOCATE(W)
+      END SUBROUTINE CLEANUP
+C 
+      SUBROUTINE HREFG(N, X, TAU, ALPHA)
+C
+C HOUSEHOLDER VECTOR CONSTRUCTION. HREFG IS  THE LAPACK AUXILIARY 
+C ROUTINE DLARFG WITH TRIVIAL MODIFICATIONS FOR COMPATIBILITY WITH
+C HOMPACK90.
+C
+      USE BLAS_INTERFACES, ONLY: DNRM2
+      USE LAPACK_INTERFACES, ONLY: DLAMCH, DLAPY2
+C
+      INTEGER, INTENT(IN):: N
+      REAL(DP), INTENT(OUT):: ALPHA, TAU
+      REAL(DP), INTENT(IN OUT):: X(N-1)
+!
+!  Purpose
+!  =======
+!
+!  HREFG generates a real elementary reflector H of order N, such
+!  that
+!
+!        H * ( ALPHA ) = ( BETA ),   H' * H = I.
+!            (   X   )   (   0  )
+!
+!  where ALPHA and BETA are scalars, and X is an (N-1)-element real
+!  vector. H is represented in the form
+!
+!        H = I - TAU * ( 1 ) * ( 1 V' ) ,
+!                      ( V )
+!
+!  where TAU is a real scalar and V is a real (N-1)-element
+!  vector.
+!
+!  If the elements of X are all zero, then TAU = 0 and H is taken to be
+!  the unit matrix.
+!
+!  Otherwise  1 <= TAU <= 2.  
+!
+!  Arguments
+!  =========
+!
+!  N       (input)
+!          The order of the elementary reflector.
+!
+!
+!  X       (input/output) 
+!          On entry, the vector X.
+!          On exit, it is overwritten with the vector V.
+!
+!  TAU     (output)
+!          The value TAU.
+! 
+!  ALPHA   (INPUT/OUTPUT)
+!          On entry, the value ALPHA.
+!          On exit, it is overwritten with the value BETA.
+!
+!  =====================================================================
+!
+!     .. Local Scalars ..
+      INTEGER :: J, KNT
+      REAL(DP) :: BETA, RSAFMN, SAFMIN, XNORM
+!    
+!     .. Executable Statements ..
+!
+      IF( N.LE.1 ) THEN
+         TAU = ZERO
+         RETURN
+      END IF
+      XNORM = DNRM2( N-1, X, 1)
+      IF( XNORM.EQ.ZERO ) THEN
+!
+!        H  =  I
+!
+         TAU = ZERO
+      ELSE
+!
+!        General case.
+!
+         BETA = -SIGN( DLAPY2( ALPHA, XNORM ), ALPHA )
+         SAFMIN = DLAMCH( 'S' )
+         IF( ABS( BETA ).LT.SAFMIN ) THEN
+!
+!           XNORM, BETA may be inaccurate; scale X and recompute them.
+!
+            RSAFMN = ONE / SAFMIN
+            KNT = 0
+            DO WHILE (ABS(BETA) < SAFMIN)
+              KNT = KNT + 1
+              X=RSAFMN*X
+              BETA = BETA*RSAFMN
+              ALPHA = ALPHA*RSAFMN
+            END DO
+!
+!           New BETA is at most 1, at least SAFMIN.
+!
+            XNORM = DNRM2( N-1, X, 1 )
+            BETA = -SIGN( DLAPY2( ALPHA, XNORM ), ALPHA )
+            TAU = ( BETA-ALPHA ) / BETA
+            X = X/( ALPHA-BETA )
+!
+!           If ALPHA is subnormal, it may lose relative accuracy.
+!
+            ALPHA = BETA
+            DO J = 1, KNT
+               ALPHA = ALPHA*SAFMIN
+            END DO
+         ELSE
+            TAU = ( BETA-ALPHA) / BETA
+            X = X/( ALPHA-BETA )
+            ALPHA = BETA
+         END IF
+      END IF
+      RETURN
+      END SUBROUTINE HREFG
+C
+      SUBROUTINE HREFX(M, V, TAU, C)
+C
+C HOUSEHOLDER VECTOR APPLICATION. HREFX IS A FORTRAN 90 VERSION OF
+C THE LAPACK ROUTINE DLARFX WITH MODIFICATIONS FOR
+C COMPATIBILITY WITH HOMPACK 90.
+C
+      INTEGER, INTENT(IN):: M
+      REAL(DP), INTENT(IN):: TAU, V(M)
+      REAL(DP), INTENT(IN OUT):: C(M) 
+!
+!  Purpose
+!  =======
+!
+!  HREFX applies a real elementary reflector H to a real M-element
+!  vector C. H is represented in the form
+!
+!        H = I - TAU * V * V'
+!
+!  where TAU is a real scalar and V is a real vector.
+!
+!  If TAU = 0, then H is taken to be the unit matrix.
+!
+!  This version uses inline code if H has order < 11.
+!
+!  Arguments
+!  =========
+!
+!  M       (input)
+!          The order of the vector C.
+!
+!  V       (input) 
+!          The vector V in the representation of H.
+!
+!  TAU     (input) 
+!          The value TAU in the representation of H.
+!
+!  C       (input/output) 
+!          On entry, the M-element vector C.
+!          On exit, C is overwritten by H * C.
+!
+!  =====================================================================
+!
+!     .. Local Scalars ..
+      REAL(DP):: SUM, T1, T10, T2, T3, T4, T5, T6, T7, T8, T9,
+     &                   V1, V10, V2, V3, V4, V5, V6, V7, V8, V9
+!
+!     .. Executable Statements ..  
+!
+      IF( TAU.EQ.ZERO ) RETURN
+!
+!        Form  H * C, where H has order M.
+!
+      SELECT CASE(M)
+!
+!     Code for general M.
+!
+      CASE (11:)
+!
+!     C := C - TAU * V * V' * C
+!
+           C = C - (TAU * DOT_PRODUCT(V,C)) * V
+!
+!        Special code for 1 x 1 Householder. 
+!
+      CASE(1)
+           T1 = ONE - TAU*V( 1 )*V( 1 )
+           C(1) = T1*C(1)
+!
+!        Special code for 2 x 2 Householder.
+!
+      CASE(2)
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           SUM = V1*C(1) + V2*C(2)
+           C(1) = C(1) - SUM*T1
+           C(2) = C(2) - SUM*T2
+!
+!        Special code for 3 x 3 Householder.
+!
+      CASE(3)
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           V3 = V( 3 )
+           T3 = TAU*V3
+           SUM = V1*C(1) + V2*C(2) + V3*C(3)
+           C(1) = C(1) - SUM*T1
+           C(2) = C(2) - SUM*T2
+           C(3) = C(3) - SUM*T3
+!
+!        Special code for 4 x 4 Householder.
+!
+      CASE(4)
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           V3 = V( 3 )
+           T3 = TAU*V3
+           V4 = V( 4 )
+           T4 = TAU*V4
+           SUM = V1*C(1) + V2*C(2) + V3*C(3) + V4*C(4)
+           C( 1 ) = C( 1 ) - SUM*T1
+           C( 2 ) = C( 2 ) - SUM*T2
+           C( 3 ) = C( 3 ) - SUM*T3
+           C( 4 ) = C( 4 ) - SUM*T4
+!
+!        Special code for 5 x 5 Householder.
+!
+      CASE(5)
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           V3 = V( 3 )
+           T3 = TAU*V3
+           V4 = V( 4 )
+           T4 = TAU*V4
+           V5 = V( 5 )
+           T5 = TAU*V5
+           SUM = V1*C( 1 ) + V2*C( 2 ) + V3*C( 3 ) +
+     &            V4*C( 4 ) + V5*C( 5 )
+           C( 1 ) = C( 1 ) - SUM*T1
+           C( 2 ) = C( 2 ) - SUM*T2
+           C( 3 ) = C( 3 ) - SUM*T3
+           C( 4 ) = C( 4 ) - SUM*T4
+           C( 5 ) = C( 5 ) - SUM*T5
+!
+!        Special code for 6 x 6 Householder.
+!
+      CASE(6)
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           V3 = V( 3 )
+           T3 = TAU*V3
+           V4 = V( 4 )
+           T4 = TAU*V4
+           V5 = V( 5 )
+           T5 = TAU*V5
+           V6 = V( 6 )
+           T6 = TAU*V6
+           SUM = V1*C( 1 ) + V2*C( 2 ) + V3*C( 3 ) +
+     &            V4*C( 4 ) + V5*C( 5 ) + V6*C( 6 )
+           C( 1 ) = C( 1 ) - SUM*T1
+           C( 2 ) = C( 2 ) - SUM*T2
+           C( 3 ) = C( 3 ) - SUM*T3
+           C( 4 ) = C( 4 ) - SUM*T4
+           C( 5 ) = C( 5 ) - SUM*T5
+           C( 6 ) = C( 6 ) - SUM*T6
+!
+!        Special code for 7 x 7 Householder.
+!
+      CASE(7)
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           V3 = V( 3 )
+           T3 = TAU*V3
+           V4 = V( 4 )
+           T4 = TAU*V4
+           V5 = V( 5 )
+           T5 = TAU*V5
+           V6 = V( 6 )
+           T6 = TAU*V6
+           V7 = V( 7 )
+           T7 = TAU*V7
+           SUM = V1*C( 1 ) + V2*C( 2 ) + V3*C( 3 ) +
+     &            V4*C( 4 ) + V5*C( 5 ) + V6*C( 6 ) +
+     &            V7*C( 7 )
+           C( 1 ) = C( 1 ) - SUM*T1
+           C( 2 ) = C( 2 ) - SUM*T2
+           C( 3 ) = C( 3 ) - SUM*T3
+           C( 4 ) = C( 4 ) - SUM*T4
+           C( 5 ) = C( 5 ) - SUM*T5
+           C( 6 ) = C( 6 ) - SUM*T6
+           C( 7 ) = C( 7 ) - SUM*T7
+!
+!        Special code for 8 x 8 Householder.
+!
+      CASE(8) 
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           V3 = V( 3 )
+           T3 = TAU*V3
+           V4 = V( 4 )
+           T4 = TAU*V4
+           V5 = V( 5 )
+           T5 = TAU*V5
+           V6 = V( 6 )
+           T6 = TAU*V6
+           V7 = V( 7 )
+           T7 = TAU*V7
+           V8 = V( 8 )
+           T8 = TAU*V8
+           SUM = V1*C( 1 ) + V2*C( 2 ) + V3*C( 3 ) +
+     &            V4*C( 4 ) + V5*C( 5 ) + V6*C( 6 ) +
+     &            V7*C( 7 ) + V8*C( 8 )
+           C( 1 ) = C( 1 ) - SUM*T1
+           C( 2 ) = C( 2 ) - SUM*T2
+           C( 3 ) = C( 3 ) - SUM*T3
+           C( 4 ) = C( 4 ) - SUM*T4
+           C( 5 ) = C( 5 ) - SUM*T5
+           C( 6 ) = C( 6 ) - SUM*T6
+           C( 7 ) = C( 7 ) - SUM*T7
+           C( 8 ) = C( 8 ) - SUM*T8
+!
+!        Special code for 9 x 9 Householder.
+!
+      CASE(9)
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           V3 = V( 3 )
+           T3 = TAU*V3
+           V4 = V( 4 )
+           T4 = TAU*V4
+           V5 = V( 5 )
+           T5 = TAU*V5
+           V6 = V( 6 )
+           T6 = TAU*V6
+           V7 = V( 7 )
+           T7 = TAU*V7
+           V8 = V( 8 )
+           T8 = TAU*V8
+           V9 = V( 9 )
+           T9 = TAU*V9
+           SUM = V1*C( 1 ) + V2*C( 2 ) + V3*C( 3 ) +
+     &            V4*C( 4 ) + V5*C( 5 ) + V6*C( 6 ) +
+     &            V7*C( 7 ) + V8*C( 8 ) + V9*C( 9 )
+           C( 1 ) = C( 1 ) - SUM*T1
+           C( 2 ) = C( 2 ) - SUM*T2
+           C( 3 ) = C( 3 ) - SUM*T3
+           C( 4 ) = C( 4 ) - SUM*T4
+           C( 5 ) = C( 5 ) - SUM*T5
+           C( 6 ) = C( 6 ) - SUM*T6
+           C( 7 ) = C( 7 ) - SUM*T7
+           C( 8 ) = C( 8 ) - SUM*T8
+           C( 9 ) = C( 9 ) - SUM*T9
+!
+!        Special code for 10 x 10 Householder.
+!
+      CASE (10)
+           V1 = V( 1 )
+           T1 = TAU*V1
+           V2 = V( 2 )
+           T2 = TAU*V2
+           V3 = V( 3 )
+           T3 = TAU*V3
+           V4 = V( 4 )
+           T4 = TAU*V4
+           V5 = V( 5 )
+           T5 = TAU*V5
+           V6 = V( 6 )
+           T6 = TAU*V6
+           V7 = V( 7 )
+           T7 = TAU*V7
+           V8 = V( 8 )
+           T8 = TAU*V8
+           V9 = V( 9 )
+           T9 = TAU*V9
+           V10 = V( 10 )
+           T10 = TAU*V10
+           SUM = V1*C( 1 ) + V2*C( 2 ) + V3*C( 3 ) +
+     &            V4*C( 4 ) + V5*C( 5 ) + V6*C( 6 ) +
+     &            V7*C( 7 ) + V8*C( 8 ) + V9*C( 9 ) +
+     &            V10*C( 10 )
+           C( 1 ) = C( 1 ) - SUM*T1
+           C( 2 ) = C( 2 ) - SUM*T2
+           C( 3 ) = C( 3 ) - SUM*T3
+           C( 4 ) = C( 4 ) - SUM*T4
+           C( 5 ) = C( 5 ) - SUM*T5
+           C( 6 ) = C( 6 ) - SUM*T6
+           C( 7 ) = C( 7 ) - SUM*T7
+           C( 8 ) = C( 8 ) - SUM*T8
+           C( 9 ) = C( 9 ) - SUM*T9
+           C( 10 ) = C( 10 ) - SUM*T10
+      END SELECT   
+C
+      END SUBROUTINE HREFX
+C
+      END SUBROUTINE GMRES
+C
+      SUBROUTINE GMRILUDS(NN,LENAA,IFLAG,START,RHS)
+C
+C     This subroutine solves a system of equations using a
+C     preconditioned adaptive GMRES(k).
+C     GMRILUDS is the MODE=2 equivalent of subroutine PCGDS, which
+C     is only for MODE=1 storage.
+C
+C     The linear system to be solved is  Mx=b.
+C     If IFLAG = -1 or 0,
+C 
+C        +--          --+ 
+C        |        |     |
+C        |   AA   | -PP |
+C    M = |        |     | ,
+C        +--------+-----+ 
+C        |    E(k)**t   | 
+C        +--          --+
+C
+C        where AA is an (NN x NN) matrix stored in compressed-row format,
+C        PP is an (NN x 1) vector.
+C        It is assumed that rank [AA,-PP]=NN and M is invertible.
+C      If IFLAG = -2,
+C
+C        +--          --+ 
+C        |              |
+C        |     AA       | 
+C    M = |              | , 
+C        +--------+-----+ 
+C        |    E(k)**t   | 
+C        +--          --+ 
+C
+C        where AA is an (NN x (NN+1)) matrix stored in compressed-row 
+C        format. It is assumed that rank [AA]=NN and M is invertible.
+C
+C        +-   -+          +-    -+
+C        |  0  |          |      |
+C        | ... |          | -RHS |
+C    b = |  0  |,  or b = |      |, 
+C        +-----+          +------+
+C        |  T  |          |  T   |
+C        +-   -+          +-    -+
+C
+C        T = START(k), where |START(k)|= max|START(i)|
+C                                       1<=i<=NN+1
+C
+C        b is of length NN+1 and E(k)**t is the ( 1 x (NN+1) ) vector
+C        consisting of all zeros, except for a '1' in its k-th position.
+C
+C  Input variables:
+C
+C      NN -- row dimension of the matrix packed in AA.
+C
+C      LENAA -- number of elements in the packed array AA.
+C
+C      IFLAG -- indicator of how M is assembled.  
+C
+C      START -- vector of length NN+1, normally the solution to the
+C               previous linear system; used to determine the index k .
+C
+C      RHS -- optional vector of length NN, used to define right hand
+C             side for normal flow correction calculation.  It is
+C             assumed that GMRILUDS is called without RHS present before
+C             it is called with RHS present.  An ILU factorization based 
+C             preconditioner is computed only when RHS is not present.
+C
+C  Input variables defined in module HOMOTOPY:
+C
+C      AA -- one dimensional real array containing a submatrix of M
+C            in compressed-row storage form.  The logical dimensions
+C            of AA depend on IFLAG.
+C
+C      ROWPOS -- integer array used for specifying information about AA.
+C                Using compressed-row storage, it has length NN+2, and
+C                stores the indices of where each row begins within AA.
+C                ROWPOS(NN+1) = LENAA + 1 and ROWPOS(NN+2) = LENAA + 2.
+C                (NOTE:  The value of ROWPOS(NN+2) is set by this
+C                subroutine when the preconditioning matrix Q is
+C                initialized.)
+C
+C      COLPOS -- integer array used for specifying information about AA.
+C                Using compressed-row storage, it has length LENAA,
+C                and contains the column indices of the corresponding
+C                elements in AA.
+C
+C             For example, using the compressed-row storage scheme 
+C             with IFLAG = -2, a 5 x 6 matrix of the form
+C
+C             +--               --+
+C             |  1  3  0  0  0 10 |
+C             |  3  2  0  7  0 11 |
+C             |  0  0  4  6  0 12 |
+C             |  0  7  6  5  9 13 |
+C             |  0  0  0  9  8 14 |
+C             +--               --+
+C 
+C             would result in NN=5, LENAA=18, ROWPOS=(1,4,8,11,16,19,*),
+C             AA=(1,3,10,3,2,7,11,4,6,12,7,6,5,9,13,9,8,14),
+C             COLPOS=(1,2,6,1,2,6,3,4,6,2,3,4,5,6,4,5,6).
+C
+C      PP -- vector of length NN, used for (NN+1)st column of
+C            augmented matrix M when IFLAG = -1 or 0 .
+C
+C  Output variables:
+C
+C      START -- solution vector x of  M x = b  (defined above).
+C
+C      IFLAG -- normally unchanged on output.  If the GMRES
+C               iteration fails to converge in 10*(NN+1) iterations (most
+C               likely due to a singular Jacobian matrix), GMRILUDS returns
+C               with  IFLAG = 4 , and does not compute x.
+C
+C  Calls subroutines ILUFDS and GMRES.
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE HOMPACK_GLOBAL_LEGACY, ONLY: AA => QRSPARSE, WORK => PAR, 
+     &                          IWORK => IPAR, ROWPOS, PP, COLPOS
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: NN,LENAA
+      INTEGER, INTENT(IN OUT):: IFLAG
+      REAL(DP), INTENT(IN OUT):: START(NN+1)
+      REAL(DP), INTENT(IN), OPTIONAL :: RHS(NN)
+C
+C LOCAL VARIABLES.
+C
+      INTEGER:: I, ITMAX, K, KD, NP1, QIND, ZBIND  
+      INTEGER:: CIND, RIND, ROWL, STRT 
+      REAL(DP):: STARTK
+      REAL(DP):: RHSC(NN+1)
+C
+C GMRES PARAMETER.
+C
+      INTEGER, PARAMETER:: SUBSPACE=8         ! KRYLOV SUBSPACE VALUE.
+C 
+      NP1=NN+1 
+C
+C     INITIALIZE START POSITIONS WITHIN WORK AND IWORK.
+C
+      ZBIND = 1
+      QIND = NP1+1
+      RIND = 1
+      CIND = NP1+2
+C
+      IF (.NOT. ALLOCATED(WORK)) THEN
+        IF (IFLAG .EQ. -2) THEN
+          ALLOCATE(WORK(NP1+LENAA+2)) 
+        ELSE
+          ALLOCATE(WORK(NP1+LENAA+NN+2))
+        END IF
+        WORK(1:NP1) = ZERO
+      END IF
+      IF (.NOT. ALLOCATED(IWORK)) THEN
+        IF (IFLAG .EQ. -2) THEN
+          ALLOCATE(IWORK(NP1+1+LENAA+2))
+        ELSE
+          ALLOCATE(IWORK(NP1+1+LENAA+NN+2))
+        END IF
+      END IF
+C
+C     FIND THE ELEMENT OF LARGEST MAGNITUDE IN THE INITIAL VECTOR, AND
+C     RECORD ITS POSITION IN K.
+C
+      K = MAXVAL(MAXLOC(ABS(START)))
+      STARTK = START(K)
+C
+C     SET VALUES OF ROWPOS(NN+1) AND ROWPOS(NN+2), AND
+C     COMPUTE THE PRECONDITIONER Q FOR M.
+C
+      IF (.NOT. PRESENT(RHS)) THEN
+        ROWPOS(NP1) = LENAA+1
+        ROWPOS(NN+2) = LENAA+2
+        IF (IFLAG .EQ. -2) THEN
+          WORK(QIND:QIND+LENAA-1) = AA(1:LENAA)
+          IWORK(RIND:RIND+NP1) = ROWPOS
+          IWORK(CIND:CIND+LENAA-1) = COLPOS
+        ELSE
+C       MERGE AA AND -PP INTO Q ONLY FOR IFLAG >= -1. 
+          IWORK(RIND) = 1
+          DO I=1,NN
+            STRT = IWORK(RIND+I-1)
+            ROWL = ROWPOS(I+1)-ROWPOS(I)
+            WORK(QIND+STRT-1:QIND+STRT+ROWL-2) = 
+     &        AA(ROWPOS(I):ROWPOS(I+1)-1)
+            WORK(QIND+STRT+ROWL-1) = -PP(I)
+            IWORK(CIND+STRT-1:CIND+STRT+ROWL-2) =
+     &        COLPOS(ROWPOS(I):ROWPOS(I+1)-1)
+            IWORK(CIND+STRT+ROWL-1) = NN+1
+            IWORK(RIND+I) = ROWPOS(I+1)+I
+          END DO 
+          IWORK(RIND+NP1) = ROWPOS(NN+2)+NN
+        END IF
+        WORK(QIND+IWORK(RIND+NN)-1) = ONE
+        IWORK(CIND+IWORK(RIND+NN)-1) = K
+        IF (K. LT. NP1) THEN
+          WORK(QIND+IWORK(RIND+NN)) = ZERO
+          IWORK(CIND+IWORK(RIND+NN)) = NP1
+          IWORK(RIND+NP1) = IWORK(RIND+NP1)+1
+        END IF
+        CALL ILUFDS(NP1, WORK(QIND:QIND+IWORK(RIND+NP1)-2),
+     &    IWORK(RIND+NP1)-1, IWORK(RIND:RIND+NP1),
+     &    IWORK(CIND:CIND+IWORK(RIND+NP1)-2))
+      END IF
+C
+C     COMPUTE RIGHT HAND SIDE FOR Mx=b.
+C
+      RHSC(NP1) = STARTK
+      IF (PRESENT(RHS)) THEN 
+        RHSC(1:NN) = -RHS
+      ELSE
+        RHSC(1:NN) = ZERO
+      END IF
+C
+C CALL GMRES FOR THE Mx=b SYSTEM.
+C
+      ITMAX=15*NP1
+      KD=SUBSPACE          
+      CALL GMRES(NP1, KD, ITMAX, RHSC, WORK(ZBIND:ZBIND+NN), 
+     &  K, WORK(QIND:QIND+IWORK(RIND+NP1)-2), IFLAG,
+     &  ROWPOSP=IWORK(RIND:RIND+NP1),
+     &  COLPOSP=IWORK(CIND:CIND+IWORK(RIND+NP1)-2))
+      IF ( IFLAG .GT. 0) RETURN
+      START(1:NP1) = WORK(ZBIND:ZBIND+NN)
+      RETURN
+      END SUBROUTINE GMRILUDS
+C
+      SUBROUTINE HFUN1P(QDG,LAMBDA,X,
+     & PDG,CL,COEF,RHO,
+     & DRHOX,DRHOL,XDGM1,XDG,
+     & G,DG,PXDGM1,PXDG,
+     & F,DF,XX,TRM,
+     & DTRM,CLX,DXNP1,
+     & N,MAXT,IDEG,
+     & NUMT,KDEG)
+C
+C  HFUN1P  EVALUATES THE CONTINUATION EQUATION "RHO".
+C
+C  NOTE THAT:
+C    DRHOX IS THE "REALIFICATION" OF DCRHOX, WHERE
+C    DCRHOX DENOTES THE (COMPLEX) PARTIAL
+C    DERIVATIVE MATRIX OF THE CONTINUATION SYSTEM
+C    WITH RESPECT TO X,  AND
+C    DRHOL IS THE "REALIFICATION" OF DCRHOL, WHERE
+C    DCRHOL DENOTES THE (COMPLEX) PARTIAL
+C    DERIVATIVE MATRIX OF THE CONTINUATION SYSTEM
+C    WITH RESPECT TO LAMBDA. THUS
+C      DRHOX(2J-1,2K-1) = DCRHOX(1,J,K)
+C      DRHOX(2J  ,2K  ) = DCRHOX(1,J,K)
+C      DRHOX(2J-1,2K  ) =-DCRHOX(2,J,K)
+C      DRHOX(2J  ,2K-1) = DCRHOX(2,J,K)
+C      DRHOL(2J-1,N2P1) = DCRHOL(1,J)
+C      DRHOL(2J  ,N2P1) = DCRHOL(2,J)
+C       RHO(2J-1)      = CRHO(1,J)
+C       RHO(2J  )      = CRHO(2,J)
+C    WHERE CRHO DENOTES THE (COMPLEX) CONTINUATION SYSTEM,
+C    THE INITIAL "1" OR "2" DENOTES REAL OR IMAGINARY PARTS,
+C    RESPECTIVELY, "J" INDEXES THE EQUATION, "K" INDEXES THE PARTIAL
+C    DERIVATIVE, AND NEITHER DCRHOX NOR DCRHOL ARE PROGRAM VARIABLES.
+C
+C  ON INPUT:
+C
+C    QDG  IS THE "RANDOM" PARAMETER "A".
+C
+C    LAMBDA  IS THE CONTINUATION PARAMETER.
+C
+C    X    IS THE INDEPENDENT VARIABLE.
+C
+C    PDG  IS ONE OF THE PARAMETERS THAT DEFINES G (SEE SUBROUTINE
+C         GFUNP).
+C
+C    CL   IS ONE OF THE PARAMETERS THAT DEFINES F (SEE SUBROUTINE
+C         FFUNP).
+C
+C    COEF  IS ONE OF THE PARAMETERS THAT DEFINES F (SEE SUBROUTINE
+C         FFUNP).
+C
+C  ON OUTPUT:
+C
+C    RHO    IS THE HOMOTOPY.
+C
+C    DRHOX  CONTAINS THE PARTIAL DERIVATIVES OF RHO WITH RESPECT
+C         TO X.
+C
+C    DRHOL  CONTAINS THE PARTIAL DERIVATIVES OF RHO WITH RESPECT
+C         TO LAMBDA.
+C
+C  THE FOLLOWING ARE VARIABLES WHOSE WORKSPACE IS PASSED FROM HFUNP:
+C    XDGM1
+C    XDG
+C    G
+C    DG
+C    PXDGM1
+C    PXDG
+C    F
+C    DF
+C    XX
+C    TRM
+C    DTRM
+C    CLX
+C    DXNP1
+C    N
+C    MAXT
+C    IDEG
+C    NUMT
+C    KDEG
+C
+C  OTHER VARIABLES:
+C    ONEML
+C
+C  SUBROUTINES:  GFUNP, FFUNP.
+C
+      USE HOMPACK_KINDS, ONLY: ONE
+      IMPLICIT NONE
+C
+C DECLARATION OF INPUT, WORKSPACE, AND OUTPUT:
+      INTEGER, INTENT(IN):: N,MAXT,IDEG(N),NUMT(N),KDEG(N,N+1,MAXT)
+      REAL(DP), INTENT(IN):: QDG(2,N),LAMBDA,X(2,N),
+     &  PDG(2,N),CL(2,N+1),COEF(N,MAXT)
+      REAL(DP), INTENT(OUT):: RHO(2*N),DRHOX(2*N,2*N),DRHOL(2*N)
+      REAL(DP), INTENT(IN OUT):: XDGM1(2,N),XDG(2,N),
+     &  G(2,N),DG(2,N),PXDGM1(2,N),PXDG(2,N),
+     &  F(2,N), DF(2,N,N+1),XX(2,N,N+1,MAXT),TRM(2,N,MAXT),
+     &  DTRM(2,N,N+1,MAXT),CLX(2,N),DXNP1(2,N)
+C
+C DECLARATION OF LOCAL VARIABLES:
+      INTEGER:: J,J2,J2M1,K,K2,K2M1
+      REAL(DP):: ONEML
+C
+      CALL GFUNP(N,IDEG,PDG,QDG,X,XDGM1,XDG,PXDGM1,PXDG,G,DG)
+      CALL FFUNP(N,NUMT,MAXT,KDEG,COEF,CL,X,XX,TRM,DTRM,CLX,DXNP1,F,DF)
+      ONEML=ONE - LAMBDA
+      DO J=1,N
+          J2=2*J
+          J2M1=J2-1
+          DO K=1,N
+              K2=2*K
+              K2M1=K2-1
+              DRHOX(J2M1,K2M1)= LAMBDA*DF(1,J,K)
+              DRHOX(J2  ,K2  )= DRHOX(J2M1,K2M1)
+              DRHOX(J2  ,K2M1)= LAMBDA*DF(2,J,K)
+              DRHOX(J2M1,K2  )=-DRHOX(J2  ,K2M1)
+          END DO
+          DRHOX(J2M1,J2M1)= DRHOX(J2M1,J2M1) + ONEML*DG(1,J)
+          DRHOX(J2  ,J2  )= DRHOX(J2M1,J2M1)
+          DRHOX(J2  ,J2M1)= DRHOX(J2  ,J2M1) + ONEML*DG(2,J)
+          DRHOX(J2M1,J2  )=-DRHOX(J2  ,J2M1)
+          DRHOL(J2M1)     =   F(1,J)      -        G(1,J)
+          DRHOL(J2)       =   F(2,J)      -        G(2,J)
+          RHO(J2M1)      = LAMBDA*F(1,J) + ONEML* G(1,J)
+          RHO(J2  )      = LAMBDA*F(2,J) + ONEML* G(2,J)
+      END DO
+C
+      END SUBROUTINE HFUN1P
+C
+      SUBROUTINE HFUNP(N,QDG,LAMBDA,X)
+C
+C HFUNP ALLOCATES STORAGE FOR SUBROUTINE HFUN1P FROM THE WORK ARRAYS
+C PAR AND IPAR, AS FOLLOWS:
+C
+C DOUBLE PRECISION VARIABLES AND ARRAYS PASSED IN PAR
+C
+C     PAR INDEX     VARIABLE NAME       LENGTH
+C    ----------     -------------    -----------------
+C          1              PDG               2*N
+C          2               CL               2*(N+1)
+C          3             COEF               N*MAXT
+C          4              RHO               N2
+C          5              DRHOX             N2*N2
+C          6              DRHOL             N2
+C          7            XDGM1               2*N
+C          8              XDG               2*N
+C          9              G                 2*N
+C         10             DG                 2*N
+C         11           PXDGM1               2*N
+C         12             PXDG               2*N
+C         13               F                2*N
+C         14              DF                2*N*(N+1)
+C         15               XX               2*N*(N+1)*MAXT
+C         16              TRM               2*N*MAXT
+C         17             DTRM               2*N*(N+1)*MAXT
+C         18              CLX               2*N
+C         19            DXNP1               2*N
+C
+C INTEGER VARIABLES AND ARRAYS PASSED IN IPAR
+C
+C    IPAR INDEX     VARIABLE NAME       LENGTH            OFFSET
+C    ----------     -------------    -----------------
+C          1                N               1               1
+C          2             MAXT               1               2
+C          3            PROFF               25              3
+C          4           IPROFF               15              28
+C          5             IDEG               N               43
+C          6             NUMT               N               43+N
+C          7             KDEG               N*(N+1)*MAXT   43+N2
+C
+C ON INPUT:
+C
+C N  IS THE NUMBER OF EQUATIONS AND VARIABLES.
+C
+C QDG  IS THE "RANDOM" VECTOR DENOTED  "A"  IN HOMPACK DOCUMENTATION.
+C
+C LAMBDA  IS THE CONTINUATION PARAMETER.
+C
+C X  IS THE INDEPENDENT VARIABLE.
+C
+C ON OUTPUT:
+C
+C THE GLOBAL WORK ARRAYS PAR AND IPAR HAVE BEEN UPDATED.
+C
+C SUBROUTINES:  HFUN1P.
+C
+      USE HOMPACK_GLOBAL_LEGACY, ONLY: PAR, IPAR
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: N
+      REAL(DP), INTENT(IN):: QDG(2,N),LAMBDA,X(2,N)
+C
+      CALL HFUN1P(QDG,LAMBDA,X,
+     & PAR( IPAR(3 + ( 1-1))), PAR( IPAR(3 + ( 2-1))),
+     & PAR( IPAR(3 + ( 3-1))), PAR( IPAR(3 + ( 4-1))),
+     & PAR( IPAR(3 + ( 5-1))), PAR( IPAR(3 + ( 6-1))),
+     & PAR( IPAR(3 + ( 7-1))), PAR( IPAR(3 + ( 8-1))),
+     & PAR( IPAR(3 + ( 9-1))), PAR( IPAR(3 + (10-1))),
+     & PAR( IPAR(3 + (11-1))), PAR( IPAR(3 + (12-1))),
+     & PAR( IPAR(3 + (13-1))), PAR( IPAR(3 + (14-1))),
+     & PAR( IPAR(3 + (15-1))), PAR( IPAR(3 + (16-1))),
+     & PAR( IPAR(3 + (17-1))), PAR( IPAR(3 + (18-1))),
+     & PAR( IPAR(3 + (19-1))),
+     &IPAR( IPAR(28+ ( 1-1))),IPAR( IPAR(28+ ( 2-1))),
+     &IPAR( IPAR(28+ ( 5-1))),IPAR( IPAR(28+ ( 6-1))),
+     &IPAR( IPAR(28+ ( 7-1))) )
+C
+      END SUBROUTINE HFUNP
+C
+      SUBROUTINE ILUFDS(NP1, B, LENB, ROWPOSP, COLPOSP)
+c
+C     Computes the incomplete LU factorization of the matrix B,
+C     where B is NP1 x NP1.  B is assumed to be stored in the general
+C     sparse row scheme.
+C
+C     The method used is that found in TR 89-41, Department of Computer
+C     Science, VPI&SU, Blacksburg, VA, 1989: 'Preconditioned
+C     conjugate gradient algorithms for homotopy curve tracking',
+C     page 10.
+C---------------------------------------------------------------------
+C
+C     Input variables:
+C       B       matrix to be factored.
+C       ROWPOSP  indices of row-starts within B.
+C       COLPOSP  column indices for matrix B stored in the general
+C                sparse row scheme.
+C       LENB    number of entries in B.
+C       NP1     the dimension of B.
+C
+C     Output variables:
+C       B       the ILU factors of input matrix B.
+C-------------------------------------------------------------
+C
+      USE HOMPACK_KINDS, ONLY: ZERO
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: LENB, NP1, ROWPOSP(NP1+1), COLPOSP(LENB)
+      REAL(DP), INTENT(IN OUT):: B(LENB)
+C
+C LOCAL VARIABLES
+      REAL(DP):: SIJ, LIT, LII
+      INTEGER:: I, J, COUNT, ISTRT, IFIN, TMAX, K, T, M
+C
+C
+      DO I = 1, NP1
+         ISTRT = ROWPOSP(I)
+         IFIN  = ROWPOSP(I+1) - 1
+C---------------------------------------  FOR EACH ELEMENT IN ROW I,
+C                                         COMPUTE THE COLUMN NUMBER
+C                                         AND T.
+         DO COUNT = ISTRT, IFIN
+            J = COLPOSP(COUNT)
+            TMAX = MIN0(I,J) - 1
+            SIJ = B(COUNT)
+C---------------------------------------  COMPUTE THE CORRESPONDING
+C                                         SUM OF PRODUCTS OF ELEMENTS
+C                                         OF L AND U.
+            K = ISTRT
+ 42         T = COLPOSP(K)
+            IF (T .LE. TMAX) THEN
+              LIT = B(K)
+              M = ROWPOSP(T)
+C---------------------------------------  FIND VALUE OF U_{TJ}.
+ 20           IF (COLPOSP(M) .LT. J) THEN
+                 M = M + 1
+                 GOTO 20
+              ENDIF
+              IF (COLPOSP(M) .EQ. J) SIJ = SIJ - LIT*B(M)
+              K = K + 1
+              GOTO 42
+           ENDIF
+C---------------------------------------  END OF 'T' LOOP.
+           K = ISTRT
+C---------------------------------------  FIND VALUE OF L_{II}.
+ 30        IF (COLPOSP(K) .LT. I) THEN
+              K = K+1
+              GOTO 30
+           ENDIF
+           IF (COLPOSP(K) .EQ. I) THEN
+              LII = B(K)
+              IF (DABS(LII) .EQ. ZERO) THEN
+                 LII = 0.00001_DP
+                 B(K) = 0.00001_DP
+              ENDIF
+           ELSE
+              LII = 0.00001_DP
+           ENDIF
+C---------------------------------------  UPDATE L OR U, AS NEEDED.
+           IF (I .GE. J) THEN
+              B(COUNT) = SIJ
+           ELSE
+              B(COUNT) = SIJ/LII
+           ENDIF
+        END DO
+C---------------------------------------  END OF 'COUNT' LOOP.
+      END DO
+C
+      END SUBROUTINE ILUFDS
+C
+      SUBROUTINE ILUSOLVDS(NN, Q, LENQ, ROWPOSP, COLPOSP, B)
+C
+C     Computes Q^{-1}*B -- returns result as B.
+C---------------------------------------------------------------------
+C
+C     Input variables:
+C
+C       Q        triangular factors of preconditioning matrix, stored
+C                in the general sparse row scheme.
+C       ROWPOSP  indices of row-starts within B.
+C       COLPOSP  column indices for matrix B stored in the general
+C                sparse row scheme.
+C       NN       logical row dimension of Q.
+C       LENQ     number of data entries in Q.
+C       B        right hand side -- should have dimension NN.
+C
+C     Output variables:
+C
+C       B        solution of Qx = B.
+C
+C---------------------------------------------------------------------
+C 
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN) ::  NN, LENQ, ROWPOSP(NN+1), COLPOSP(LENQ)
+      REAL(DP), INTENT(IN) :: Q(LENQ) 
+      REAL(DP), INTENT(IN OUT) :: B(NN)
+C 
+C LOCAL VARIABLES
+      INTEGER:: DIAG(NN), I, K, J
+C------------------------------------------------ COMPUTE B = INV(L)*B
+      B(1) = B(1)/Q(1)
+      DIAG(1) = 1
+      DO  I = 2, NN
+        K = ROWPOSP(I)
+ 42     J = COLPOSP(K)
+        IF (J .LT. I) THEN
+          B(I) = B(I) - Q(K)*B(J)
+          K = K + 1
+          GOTO 42
+        ELSE 
+          DIAG(I) = K
+          B(I) = B(I)/Q(K)
+        ENDIF
+      END DO
+C------------------------------------------------ COMPUTE B = INV(U)*B
+      DO  I = NN-1, 1, -1
+        DO  K = DIAG(I)+1, ROWPOSP(I+1)-1
+          B(I) = B(I) - Q(K)*B(COLPOSP(K))
+        END DO
+      END DO
+C
+      END SUBROUTINE ILUSOLVDS
+C
+      SUBROUTINE INITP(IFLG1,N,NUMT,KDEG,COEF,
+     &                              IDEG,FACV,CL,PDG,QDG,R)
+C
+C INITP  INITIALIZES THE CONSTANTS THAT DEFINE THE POLSYS HOMOTOPY,
+C INITIALIZES THE CONSTANTS THAT DEFINE THE PROJECTIVE TRANSFORMATION,
+C AND SCALES THE COEFFICIENTS (IF SCALING IS SPECIFIED).
+C
+C ON INPUT:
+C
+C IFLG1  IS A FLAG THAT SPECIFIES WHETHER THE COEFFICIENTS ARE TO
+C   BE SCALED OR NOT AND WHETHER THE PROJECTIVE TRANSFORMATION IS TO
+C   BE USED OR NOT.  IFLG1=A*10+B.  SCALING IS SPECIFIED WHEN B=1.  THE 
+C   PROJECTIVE TRANSFORMATION IS SPECIFIED WHEN A=1.  OTHERWISE, A AND/OR 
+C   B =0.  SCALING IS EVOKED BY A CALL TO THE SUBROUTINE  SCLGNP.  THE 
+C   PROJECTIVE TRANSFORMATION IS EVOKED BY SETTING THE  CL  ARRAY EQUAL
+C   TO RANDOM COMPLEX NUMBERS.  OTHERWISE,  CL  IS SET TO NOMINAL VALUES.
+C
+C N  IS THE NUMBER OF EQUATIONS AND VARIABLES.
+C
+C NUMT(J)  IS THE NUMBER OF TERMS IN EQUATION J, FOR J=1 TO N.
+C
+C KDEG(J,L,K)  IS THE DEGREE OF THE L-TH VARIABLE, X(L), IN THE K-TH
+C  TERM OF THE J-TH EQUATION, WHERE J=1 TO N, L=1 TO N+1, AND K=1 TO 
+C  NUMT(J).  THE CASE "L=N+1" IS SPECIAL, AND  KDEG  IS NOT AN INPUT
+C  VALUE TO  POLSYS , BUT RATHER IS COMPUTED IN THIS SUBROUTINE.  
+C 
+C COEF(J,K)  IS THE COEFFICIENT OF THE K-TH TERM FOR THE J-TH
+C   EQUATION, WHERE J=1 TO N AND K=1 TO NUMT(J).
+C
+C
+C ON OUTPUT:
+C
+C IDEG(J)  IS THE DEGREE OF THE J-TH EQUATION FOR J=1 TO N.
+C
+C FACV(J)  IS THE SCALE FACTOR FOR THE J-TH VARIABLE.
+C
+C CL(2,1:N+1)  IS AN ARRAY USED TO DEFINE THE PROJECTIVE
+C   TRANSFORMATION.  IT IS USED IN SUBROUTINES  FFUNP  AND  OTPUTP
+C   TO DEFINE THE PROJECTIVE COORDINATE, XNP1.    
+C
+C PDG  IS USED IN SUBROUTINE  GFUNP  TO DEFINE THE INITIAL SYSTEM,
+C   G(X)=0.
+C
+C QDG  IS USED IN SUBROUTINE  GFUNP  TO DEFINE THE INITIAL SYSTEM,
+C   G(X)=0.
+C
+C R  IS USED IN SUBROUTINE  STRPTP  TO GENERATE SOLUTIONS TO G(X)=0.
+C
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE HOMPACK_GLOBAL_LEGACY, ONLY: PAR, IPAR
+      IMPLICIT NONE
+C
+C DECLARATIONS OF INPUT AND OUTPUT:
+      INTEGER, INTENT(IN):: IFLG1,N,NUMT(:)
+      INTEGER, INTENT(IN OUT):: KDEG(:,:,:)
+      REAL(DP), INTENT(IN OUT):: COEF(:,:)
+      INTEGER, INTENT(OUT):: IDEG(N)
+      REAL(DP), INTENT(OUT):: 
+     &  FACV(N),CL(2,N+1),PDG(2,N),QDG(2,N),R(2,N)
+C
+C DECLARATIONS OF LOCAL VARIABLES:
+      INTEGER:: IERR,J,JJ,MAXT,N2,NP1
+      REAL(DP):: CCL(2,11),P(2,10),Q(2,10)
+C
+      MAXT = MAXVAL(NUMT)
+      N2 =2*N
+      NP1=N+1
+
+      DO J=1,N
+        IDEG(J)=MAXVAL(SUM(KDEG(J,1:N,1:NUMT(J)),DIM=1))
+      END DO
+      DO J=1,N
+        KDEG(J,NP1,1:NUMT(J))=IDEG(J)-SUM(KDEG(J,1:N,1:NUMT(J)),DIM=1)
+      END DO
+      IF ( IFLG1 .EQ. 10  .OR.  IFLG1 .EQ. 00) THEN
+C
+C       DON'T SCALE THE COEFFICIENTS.  SET  FACV  EQUAL TO NOMINAL 
+C       VALUES.
+C
+        FACV = ZERO
+      ELSE
+C
+C SET UP THE WORKSPACE FOR SUBROUTINE  SCLGNP  AND CALL  SCLGNP  TO
+C SCALE THE COEFFICIENTS.
+C
+C*****************************************************************
+C VARIABLES THAT ARE PASSED IN ARRAY PAR.
+C
+C    VARIABLE NAME   LENGTH        OFFSET
+C
+C    1   CCOEF       N*MAXT        1
+C    2   ALPHA       4*N**2        1+N*MAXT
+C    3   BETA        2*N           1+N*MAXT+4*N**2
+C    4   RWORK       N*(2*N+1)     1+N*MAXT+4*N**2+2*N
+C    5   XWORK       2*N           1+N*MAXT+4*N**2+2*N+N*(2*N+1)
+C    6   FACE        N             1+N*MAXT+4*N**2+4*N+N*(2*N+1)
+C    7   COESCL      N*MAXT        1+N*MAXT+4*N**2+5*N+N*(2*N+1)
+C
+C*****************************************************************
+C VARIABLES THAT ARE PASSED IN ARRAY IPAR.
+C
+C    VARIABLE NAME       LENGTH               OFFSET
+C
+C    1   NNUMT             N                  1
+C    2   KKDEG             N*(N+1)*MAXT      1+N
+C
+C*****************************************************************
+C
+        CALL SCLGNP(N,MAXT,NUMT,KDEG,0,ZERO,COEF,
+     &    IPAR(1:N),
+     &    IPAR(1+N:N+N*(N+1)*MAXT),
+     &    PAR(1:N*MAXT),
+     &    PAR(1+N*MAXT:N*MAXT+4*N**2),
+     &    PAR(1+N*MAXT+4*N**2:N*MAXT+4*N**2+2*N),
+     &    PAR(1+N*MAXT+4*N**2+2*N:N*MAXT+4*N**2+2*N+N*(2*N+1)),
+     &    PAR(1+N*MAXT+4*N**2+2*N+N*(2*N+1):
+     &        N*MAXT+4*N**2+4*N+N*(2*N+1)),
+     &    FACV,
+     &    PAR(1+N*MAXT+4*N**2+4*N+N*(2*N+1):
+     &        N*MAXT+4*N**2+5*N+N*(2*N+1)),
+     &    PAR(1+N*MAXT+4*N**2+5*N+N*(2*N+1):
+     &        2*N*MAXT+4*N**2+5*N+N*(2*N+1)),
+     &    IERR)
+C
+C       SET COEF EQUAL TO THE SCALED COEFFICIENTS
+C
+        IF (IERR .EQ. 0) THEN
+          COEF(:,1:MAXT) = RESHAPE(PAR(1+N*MAXT+4*N**2+5*N+N*(2*N+1):
+     &      2*N*MAXT+4*N**2+5*N+N*(2*N+1)), (/N,MAXT/) )
+        END IF
+      END IF
+C
+      P(1, 1)= .12324754231_dp
+          P(2, 1)= .76253746298_dp
+      P(1, 2)= .93857838950_dp
+          P(2, 2)=-.99375892810_dp
+      P(1, 3)=-.23467908356_dp
+          P(2, 3)= .39383930009_dp
+      P(1, 4)= .83542556622_dp
+          P(2, 4)=-.10192888288_dp
+      P(1, 5)=-.55763522521_dp
+          P(2, 5)=-.83729899911_dp
+      P(1, 6)=-.78348738738_dp
+          P(2, 6)=-.10578234903_dp
+      P(1, 7)= .03938347346_dp
+          P(2, 7)= .04825184716_dp
+      P(1, 8)=-.43428734331_dp
+          P(2, 8)= .93836289418_dp
+      P(1, 9)=-.99383729993_dp
+          P(2, 9)=-.40947822291_dp
+      P(1,10)= .09383736736_dp
+          P(2,10)= .26459172298_dp
+C
+      Q(1, 1)= .58720452864_dp
+          Q(2, 1)= .01321964722_dp
+      Q(1, 2)= .97884134700_dp
+          Q(2, 2)=-.14433009712_dp
+      Q(1, 3)= .39383737289_dp
+          Q(2, 3)= .41543223411_dp
+      Q(1, 4)=-.03938376373_dp
+          Q(2, 4)=-.61253112318_dp
+      Q(1, 5)= .39383737388_dp
+          Q(2, 5)=-.26454678861_dp
+      Q(1, 6)=-.00938376766_dp
+          Q(2, 6)= .34447867861_dp
+      Q(1, 7)=-.04837366632_dp
+          Q(2, 7)= .48252736790_dp
+      Q(1, 8)= .93725237347_dp
+          Q(2, 8)=-.54356527623_dp
+      Q(1, 9)= .39373957747_dp
+          Q(2, 9)= .65573434564_dp
+      Q(1,10)=-.39380038371_dp
+          Q(2,10)= .98903450052_dp
+C
+      CCL(1, 1)=-.03485644332_dp
+          CCL(2, 1)= .28554634336_dp
+      CCL(1, 2)= .91453454766_dp
+          CCL(2, 2)= .35354566613_dp
+      CCL(1, 3)=-.36568737635_dp
+          CCL(2, 3)= .45634642477_dp
+      CCL(1, 4)=-.89089767544_dp
+          CCL(2, 4)= .34524523544_dp
+      CCL(1, 5)= .13523462465_dp
+          CCL(2, 5)= .43534535555_dp
+      CCL(1, 6)=-.34523544445_dp
+          CCL(2, 6)= .00734522256_dp
+      CCL(1, 7)=-.80004678763_dp
+          CCL(2, 7)=-.009387123644_dp
+      CCL(1, 8)=-.875432124245_dp
+          CCL(2, 8)= .00045687651_dp
+      CCL(1, 9)= .65256352333_dp
+          CCL(2, 9)=-.12356777452_dp
+      CCL(1,10)= .09986798321548_dp
+          CCL(2,10)=-.56753456577_dp
+      CCL(1,11)= .29674947394739_dp
+          CCL(2,11)= .93274302173_dp
+C
+C IF THE PROJECTIVE TRANSFORMATION IS TO BE USED, THEN  CL  IS
+C SET EQUAL TO THE  CCL  VALUES.  OTHERWISE,  CL  IS SET
+C EQUAL TO NOMINAL VALUES.
+C
+      IF (IFLG1 .EQ. 01  .OR.  IFLG1 .EQ. 00) THEN 
+        CL(1:2,1:N)=ZERO
+        CL(1,NP1)=ONE
+        CL(2,NP1)=ZERO
+      ELSE
+        DO J=1,NP1
+          JJ=MOD(J-1,11)+1
+          CL(1:2,J)=CCL(1:2,JJ)
+        END DO
+      END IF
+C
+C COMPUTE POWERS OF P AND Q, AND R=Q/P
+      DO J=1,N
+        JJ=MOD(J-1,10)+1
+        CALL POWP(IDEG(J),P(1,JJ),PDG(1,J))
+        CALL POWP(IDEG(J),Q(1,JJ),QDG(1,J))
+        CALL DIVP(Q(1,JJ),P(1,JJ),R(1,J),IERR)
+      END DO
+C
+      END SUBROUTINE INITP
+C
+      SUBROUTINE MULP(XXXX,YYYY,ZZZZ)
+C
+C THIS SUBROUTINE PERFORMS MULTIPLICATION OF COMPLEX NUMBERS:
+C ZZZZ = XXXX*YYYY
+C
+C NOTE:  IN THE CALLING ROUTINE, ZZZZ SHOULD NOT BE THE SAME
+C AS XXXX OR YYYY.  HOWEVER, XXXX MAY BE THE SAME AS YYYY.
+C THUS, "CALL MULP(X,X,Z)" IS OK, BUT "CALL MULP(X,Y,X)" IS NOT.
+C
+C ON INPUT:
+C
+C XXXX  IS AN ARRAY OF LENGTH TWO REPRESENTING THE FIRST COMPLEX
+C       NUMBER, WHERE XXXX(1) = REAL PART OF XXXX AND XXXX(2) =
+C       IMAGINARY PART OF XXXX.
+C
+C YYYY  IS AN ARRAY OF LENGTH TWO REPRESENTING THE SECOND COMPLEX
+C       NUMBER, WHERE YYYY(1) = REAL PART OF YYYY AND YYYY(2) =
+C       IMAGINARY PART OF YYYY.
+C
+C ON OUTPUT:
+C
+C ZZZZ  IS AN ARRAY OF LENGTH TWO REPRESENTING THE RESULT OF
+C       THE MULTIPLICATION, ZZZZ = XXXX*YYYY, WHERE ZZZZ(1) =
+C       REAL PART OF ZZZZ AND ZZZZ(2) = IMAGINARY PART OF ZZZZ.
+C
+      IMPLICIT NONE
+C
+C DECLARATION OF INPUT
+      REAL(DP), DIMENSION(2), INTENT(IN):: XXXX,YYYY
+C
+C DECLARATION OF OUTPUT
+      REAL(DP), DIMENSION(2), INTENT(OUT):: ZZZZ
+C
+      ZZZZ(1) = XXXX(1)*YYYY(1) - XXXX(2)*YYYY(2)
+      ZZZZ(2) = XXXX(1)*YYYY(2) + XXXX(2)*YYYY(1)
+C
+      END SUBROUTINE MULP
+C
+      SUBROUTINE MULT2DS(Y, B, X, ROWPOS, COLPOS, N, LENB)
+C
+C     Returns B*X as Y.
+C---------------------------------------------------------------------
+C
+C     Input variables:
+C
+C       B       matrix stored in the sparse row scheme.
+C       ROWPOSP  indices of row-starts within B.
+C       COLPOSP  column indices for matrix B stored in the general
+C                sparse row scheme.
+C       N       logical row dimension of B
+C       LENB    number of data entries in B.
+C       X       source vector -- should be compatible with B.
+C       Y       target vector -- should have dimension N.
+C
+C     Output variables:
+C
+C       Y       value of B*X.
+C
+C---------------------------------------------------------------------
+C
+      USE HOMPACK_KINDS, ONLY: ZERO
+      IMPLICIT NONE
+C
+      INTEGER, INTENT (IN):: LENB, N, ROWPOS(N+1), COLPOS(LENB)
+      REAL(DP), INTENT(IN):: X(:), B(LENB)
+      REAL(DP), INTENT (OUT) :: Y(N)
+C
+C LOCAL VARIABLES.
+C
+      INTEGER:: I, FIN, STRT, K
+      REAL(DP):: TMP
+C
+        DO I = 1, N
+         STRT = ROWPOS(I)
+         FIN = ROWPOS(I+1)-1
+         TMP = ZERO
+         DO K = STRT, FIN
+            TMP = TMP + B(K)*X(COLPOS(K))
+         END DO 
+         Y(I) = TMP
+        END DO
+C
+      END SUBROUTINE MULT2DS
+C
+      SUBROUTINE MULTDS(Y,AA,X,MAXA,NN,LENAA)
+C
+C     This subroutine accepts a matrix, AA, in packed skyline storage form and
+C       a vector, x, and returns the product AA*x in y.
+C
+C     Input Variables:
+C
+C       AA -- one dimensional real array containing the NN x NN matrix in 
+C             packed skyline storage form.
+C
+C       x -- real vector of length NN to be multiplied by AA.
+C
+C       MAXA -- integer array used for specifying information about AA.
+C               MAXA has length NN+1, and stores the indices of the 
+C               diagonal elements of the matrix packed in AA.  By 
+C               convention, MAXA(NN+1) = LENAA + 1 .
+C
+C       NN -- dimension of the matrix packed in AA .
+C
+C       LENAA -- number of elements in AA.
+C
+C
+C     Output Variables:
+C
+C       y -- real vector of length NN containing the product  AA*x .
+C
+C
+      USE HOMPACK_KINDS, ONLY: ZERO
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: LENAA,NN,MAXA(NN+1)
+      REAL(DP), INTENT(IN):: AA(LENAA),X(NN)
+      REAL(DP), INTENT(OUT):: Y(NN)
+      INTEGER:: I,II,KK,KL,KU
+      REAL(DP):: B,CC
+      IF (LENAA .LE. NN) THEN
+        DO I=1,NN
+          Y(I)=AA(I)*X(I)
+        END DO
+        RETURN
+      END IF
+      DO I=1,NN
+        Y(I)=ZERO
+      END DO
+      DO I=1,NN
+        KL=MAXA(I)
+        KU=MAXA(I+1)-1
+        II=I+1
+        CC=X(I)
+        DO KK=KL,KU
+          II=II-1
+          Y(II)=Y(II)+AA(KK)*CC
+        END DO
+      END DO
+      IF (NN .EQ. 1) RETURN
+      DO I=2,NN
+        KL=MAXA(I)+1
+        KU=MAXA(I+1)-1
+        IF (KU-KL .LT. 0) CYCLE
+        II=I
+        B=ZERO
+        DO KK=KL,KU
+          II=II-1
+          B=B+AA(KK)*X(II)
+        END DO
+        Y(I)=Y(I)+B
+      END DO
+C
+      END SUBROUTINE MULTDS
+C
+      SUBROUTINE OTPUTP(N,NUMPAT,CL,FACV,CLX,X,XNP1)
+C
+C OTPUTP  POSTPROCESSES THE ENDPOINTS OF THE PATHS, UNTRANSFORMING 
+C AND UNSCALING THEM.
+C
+C ON INPUT:
+C
+C N  IS THE NUMBER OF EQUATIONS AND VARIABLES.
+C
+C NUMPAT  IS THE CURRENT PATH NUMBER.         
+C
+C CL  IS THE ARRAY THAT DEFINES THE PROJECTIVE TRANSFORMATION.
+C
+C FACV  CONTAINS THE VARIABLE SCALING FACTORS.
+C
+C X  IS THE ENDPOINT OF THE PATH, POSSIBLY TRANSFORMED AND/OR SCALED 
+C   DEPENDING ON THE  POLSYS  INPUT FLAG  IFLG1.
+C
+C CLX  IS WORKSPACE.
+C
+C ON OUTPUT:
+C
+C N, NUMPAT, CL, AND  FACV  ARE UNCHANGED.
+C
+C X  IS THE UNTRANSFORMED AND UNSCALED VERSION OF X.
+C
+C XNP1  IS THE PROJECTIVE COORDINATE "X(N+1)".  XNP1  EQUALS UNITY IF
+C   THE PROJECTIVE TRANSFORMATION IS NOT SPECIFIED.
+C
+      USE HOMPACK_KINDS, ONLY: ONE
+      IMPLICIT NONE
+C
+C DECLARATIONS OF INPUT, WORKSPACE, AND OUTPUT:
+      INTEGER, INTENT(IN):: N,NUMPAT
+      REAL(DP), INTENT(IN):: CL(2,N+1),FACV(N)
+      REAL(DP), INTENT(IN OUT):: CLX(2,N),X(2,N),XNP1(2)
+C
+C DECLARATION OF LOCAL VARIABLES
+      INTEGER:: I,IERR,J,NP1 
+      REAL(DP):: FAC,TEMP(2)
+C
+      NP1=N+1
+C COMPUTE XNP1
+      DO J=1,N
+        CALL MULP(CL(1,J),X(1,J),CLX(1,J))
+      END DO
+      XNP1 = CL(:,NP1) + SUM(CLX,DIM=2)
+C UNTRANSFORM VARIABLES
+      DO J=1,N
+        CALL DIVP(X(1,J),XNP1,TEMP,IERR)
+        X(1,J)=TEMP(1)
+        X(2,J)=TEMP(2)
+      END DO
+C UNSCALE VARIABLES
+      TEMP(1) = HUGE(ONE)
+      DO J=1,N
+        FAC=1E1_DP**FACV(J)
+        DO I=1,2
+          IF( (ABS(X(I,J))/TEMP(1))*FAC .LT. ONE ) X(I,J)=FAC*X(I,J)
+        END DO
+      END DO
+C
+      END SUBROUTINE OTPUTP
+C
+      SUBROUTINE PCGDS(NN,LENAA,IFLAG,START,RHS)
+C
+C     PCGDS computes a tangent vector or normal flow correction using
+C     a preconditioned conjugate gradient method (adaptive GMRES(k)).
+C
+C     The system to be solved is in the form Bx=b, where
+C
+C        +--          --+        +-   -+    +-    -+
+C        |        |     |        |  0  |    |      | 
+C        |   AA   | -PP |        | ... |    | -RHS |
+C    B = |        |     | ,  b = |  0  | or |      |, 
+C        +--------+-----+        +-----+    +------+ 
+C        |    E(k)**t   |        |  T  |    |  T   | 
+C        +--          --+        +-   -+    +-    -+
+C
+C        T = START(k), where |START(k)|=     max    |START(i)|.
+C                                        1<=i<=NN+1
+C                           
+C        AA is an (NN x NN) symmetric matrix, PP is an (NN x 1) vector,
+C        b is of length NN+1 and E(k)**t is the ( 1 x (NN+1) ) vector
+C        consisting of all zeros, except for a '1' in its k-th position.
+C        It is assumed that rank [AA,-PP]=NN and B is invertible.
+C
+C   The system is solved by splitting B into two matrices M and L, where
+C
+C       +-        -+                                +-     -+
+C       |      |   |                                |       |
+C       |  AA  | c |                                | -PP-c |
+C   M = |      |   |  ,  L = u * [E(NN+1)**t],  u = |       | ,
+C       +------+---+                                +-------+
+C       |  c   | d |                                |  d'   |
+C       +-        -+                                +-     -+
+C
+C   d = 1 and d' = 0 if k = NN+1, otherwise d = -d' = 1 + 1/M(k,k).
+C   E(NN+1) is the (NN+1) x 1 vector consisting of all zeros except for
+C   a '1' in its last position, and x**t is the transpose of x.
+C
+C    The final solution vector, x, is given by
+C
+C            +-                                    -+
+C            |           [sol(u)]*[E(NN+1)**t]      |
+C       x =  | I  -  -----------------------------  | * sol(b)
+C            |        {[(sol(u))**t]*E(NN+1)}+1.0   |
+C            +-                                    -+
+C
+C     where sol(a)=[M**(-1)]*a.  The two systems (Mz=u, Mz=b) are solved
+C     by a preconditioned GMRES algorithm.
+C
+C  Input variables:
+C
+C        NN -- dimension of the matrix packed in AA.
+C
+C        LENAA -- number of elements in the packed array AA.
+C
+C        START -- vector of length NN+1, normally the solution to the
+C                 previous linear system; used to determine the index k .
+C
+C        RHS -- optional vector of length NN, used to define right hand
+C               side for normal flow correction calculation.  It is
+C               assumed that PCGDS is called without RHS present before
+C               it is called with RHS present.  A Gill-Murray LL^t
+C               factorization based preconditioner is computed only when
+C               RHS is not present.
+C
+C  Input variables defined in module HOMOTOPY:
+C
+C        AA -- one dimensional real array containing the leading NN x NN
+C              submatrix of B in packed skyline storage form.
+C
+C        ROWPOS -- integer array used for specifying information about AA.
+C                  Using packed skyline storage, it has length NN+2, and
+C                  stores the indices of the diagonal elements within AA.
+C                  ROWPOS(NN+1) = LENAA + 1 and ROWPOS(NN+2) = 
+C                  LENAA + NN + 3 - k (k as defined above) by convention.
+C                  (NOTE:  The value of ROWPOS(NN+2) is set by this
+C                  subroutine when the preconditioning matrix Q is
+C                  initialized.)
+C
+C                For example, using the packed storage scheme,
+C                a symmetric 5 x 5 matrix of the form
+C
+C                +--             --+
+C                |  1  3  0  0  0  |
+C                |  3  2  0  7  0  |
+C                |  0  0  4  6  0  |
+C                |  0  7  6  5  9  |
+C                |  0  0  0  9  8  |
+C                +--             --+
+C
+C                would result in NN=5, LENAA=9, ROWPOS=(1,2,4,5,8,10,*),
+C                and AA=(1,2,3,4,5,6,7,8,9).
+C
+C        PP -- vector of length NN, used for (NN+1)st column of
+C              augmented matrix B .
+C
+C  Output variables:
+C
+C        START -- solution vector x of  B x = b  (defined above).
+C
+C        IFLAG -- normally unchanged on output.  If the GMRES
+C                 iteration fails to converge in 10*(NN+1) iterations (most
+C                 likely due to a singular Jacobian matrix), PCGDS returns
+C                 with  IFLAG = 4 , and does not compute x.
+C
+C    Calls subroutines GMFADS and GMRES.
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE HOMPACK_GLOBAL_LEGACY, ONLY: AA => QRSPARSE, WORK => PAR, 
+     & ROWPOS, PP
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: LENAA, NN
+      INTEGER, INTENT(IN OUT):: IFLAG
+      REAL(DP), INTENT(IN OUT):: START(NN+1)
+      REAL(DP), INTENT(IN), OPTIONAL:: RHS(NN)
+C
+C LOCAL VARIABLES.
+C
+      INTEGER:: ITMAX, K, KD, NP1, QIND, ZBIND, ZUIND
+      REAL(DP):: STARTK
+      REAL(DP):: RHSC(NN+1)            ! RIGHT-HAND SIDE FOR GMRES.
+C
+C GMRES PARAMETERS.
+C 
+      INTEGER, PARAMETER:: SUBSPACE=8        ! KRYLOV SUBSPACE VALUE.
+C    
+      NP1 = NN+1
+C
+C     INITIALIZE START POSITIONS WITHIN WORK.
+C
+      ZBIND = 1
+      ZUIND = NP1+1
+      QIND = 2*NP1+1
+C
+      IF (.NOT. ALLOCATED(WORK)) THEN
+        ALLOCATE(WORK(2*NP1+LENAA+NN+1))
+        WORK(1:2*NP1) = ZERO
+      END IF
+C
+C     FIND THE ELEMENT OF LARGEST MAGNITUDE IN THE INITIAL VECTOR, AND
+C     RECORD ITS POSITION IN K.
+C 
+      K = MAXVAL(MAXLOC(ABS(START)))
+      STARTK = START(K)
+C
+C     SET VALUES OF ROWPOS(NN+1) AND ROWPOS(NN+2), AND
+C     COMPUTE THE PRECONDITIONER Q FOR M.
+C
+      IF (.NOT. PRESENT(RHS)) THEN
+        WORK(QIND:QIND+LENAA-1) = AA(1:LENAA)
+        ROWPOS(NP1) = LENAA+1
+        ROWPOS(NN+2) = LENAA+NN+3-K
+        WORK(QIND+LENAA+NN+1-K) = ONE
+        IF (K .LT. NP1) THEN
+          WORK(QIND+LENAA) = ONE + ONE/ABS(AA(ROWPOS(K)))
+          WORK(QIND+LENAA+1:QIND+LENAA+NN-K) = ZERO
+        END IF
+        CALL GMFADS(NP1, WORK(QIND:QIND+LENAA+NP1-K),
+     &            ROWPOS(NN+2)-1, ROWPOS(1:NN+2))
+      END IF
+C
+C     COMPUTE RIGHT HAND SIDE FOR MZ=B.
+C
+      RHSC(NP1) = STARTK
+      IF (PRESENT(RHS))  THEN
+        RHSC(1:NN) = -RHS
+      ELSE
+        RHSC(1:NN) = ZERO
+      END IF
+C
+C CALL TO GMRES (MZ=B SYSTEM). 
+C
+      ITMAX = 30*NP1
+      KD = SUBSPACE          
+      CALL GMRES(NP1, KD, ITMAX, RHSC, WORK(ZBIND:ZBIND+NN),  
+     &           K, WORK(QIND:QIND+LENAA+NP1-K), IFLAG) 
+      IF ( IFLAG .GT. 0) RETURN
+C
+C COMPUTE RIGHT HAND SIDE FOR  MZ=U.
+C
+      RHSC(1:NN) = -PP(1:NN)
+      IF (K .LT. NP1) THEN 
+        RHSC(K) = RHSC(K)-ONE
+        RHSC(NP1) = -(ONE + ONE/ABS(AA(ROWPOS(K))))
+      ELSE
+        RHSC(NP1) = ZERO
+      END IF
+C
+C CALL TO GMRES (MZ=U SYSTEM).      
+C
+      ITMAX = 30*NP1-ITMAX
+      KD = SUBSPACE
+      CALL GMRES(NP1, KD, ITMAX, RHSC, WORK(ZUIND:ZUIND+NN),  
+     &           K, WORK(QIND:QIND+LENAA+NP1-K), IFLAG) 
+      IF ( IFLAG .GT. 0) RETURN
+C
+C COMPUTE THE FINAL SOLUTION BY SHERMAN-MORRISON FORMULA.
+C
+      STARTK = -WORK(ZBIND+NN)/(ONE + WORK(ZUIND+NN))
+      START(1:NP1) = WORK(ZBIND:ZBIND+NN) + STARTK*WORK(ZUIND:ZUIND+NN)
+C
+      END SUBROUTINE PCGDS
+C
+      SUBROUTINE POWP(NNNN,XXXX,YYYY)
+C
+C THIS SUBROUTINE TAKES A NON-NEGATIVE POWER OF A COMPLEX NUMBER:
+C YYYY = XXXX**NNNN USING DE MOIVRE'S FORMULA:
+C
+C     YYYY = R**NNNN * (COS(NNNN*THETA),SIN(NNNN*THETA)),
+C
+C WHERE R=DNRM2(2,XXXX,1) AND THETA=ATAN2(XXXX(2),XXXX(1)).
+C
+C NOTE: POWP SETS 0**0 EQUAL TO 1.
+C
+C ON INPUT:
+C
+C NNNN  IS A NON-NEGATIVE INTEGER.
+C
+C XXXX  IS AN ARRAY OF LENGTH TWO REPRESENTING A COMPLEX
+C       NUMBER, WHERE XXXX(1) = REAL PART OF XXXX AND XXXX(2) =
+C       IMAGINARY PART OF XXXX.
+C
+C ON OUTPUT:
+C
+C YYYY  IS AN ARRAY OF LENGTH TWO REPRESENTING THE RESULT OF
+C       THE POWER, YYYY = XXXX**NNNN, WHERE YYYY(1) =
+C       REAL PART OF YYYY AND YYYY(2) = IMAGINARY PART OF YYYY.
+C
+C SUBROUTINES: COS, SIN, ATAN2, DNRM2
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE BLAS_INTERFACEs, ONLY: DNRM2
+      IMPLICIT NONE
+C
+C DECLARATION OF INPUT
+      INTEGER, INTENT(IN):: NNNN
+      REAL(DP), DIMENSION(2), INTENT(IN):: XXXX
+C
+C DECLARATION OF OUTPUT
+      REAL(DP), DIMENSION(2), INTENT(IN OUT):: YYYY
+C
+C DECLARATION OF VARIABLES
+      REAL(DP):: R,RR,T,TT
+C
+      IF (NNNN .EQ. 0) THEN
+          YYYY(1)=ONE
+          YYYY(2)=ZERO
+          RETURN
+      ENDIF
+      IF (NNNN .EQ. 1) THEN
+          YYYY(1)=XXXX(1)
+          YYYY(2)=XXXX(2)
+          RETURN
+      ENDIF
+      R = DNRM2(2,XXXX,1)
+      IF (R .EQ. ZERO) THEN
+          YYYY(1)=ZERO
+          YYYY(2)=ZERO
+          RETURN
+      END IF
+      RR= R**NNNN
+      T = ATAN2(XXXX(2),XXXX(1))
+      TT= NNNN*T
+      YYYY(1) = RR*COS(TT)
+      YYYY(2) = RR*SIN(TT)
+C
+      END SUBROUTINE POWP
+C
+      SUBROUTINE ROOTNS(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,YPOLD,
+     &   A,MODE,LENQR)
+C
+C ROOTNS  FINDS THE POINT  YBAR = (XBAR, 1)  ON THE ZERO CURVE OF THE
+C HOMOTOPY MAP.  IT STARTS WITH TWO POINTS YOLD=(XOLD,LAMBDAOLD) AND
+C Y=(X,LAMBDA) SUCH THAT  LAMBDAOLD < 1 <= LAMBDA , AND ALTERNATES
+C BETWEEN USING A SECANT METHOD TO FIND A PREDICTED POINT ON THE 
+C HYPERPLANE  LAMBDA=1, AND TAKING A NEWTON STEP TO RETURN TO THE 
+C ZERO CURVE OF THE HOMOTOPY MAP.
+C
+C THE FOLLOWING INTERFACE BLOCK SHOULD BE INCLUDED IN THE CALLING
+C PROGRAM:
+C
+C     INTERFACE
+C       SUBROUTINE ROOTNS(NC,NFEC,IFLAGC,ANSRE,ANSAE,Y,YP,YOLD,YPOLD,
+C    &     A,MODE,LENQR)
+C       USE REAL_PRECISION
+C       INTEGER, INTENT(IN):: LENQR,MODE,NC
+C       INTEGER, INTENT(IN OUT):: IFLAGC,NFEC
+C       REAL(DP), INTENT(IN):: A(:)
+C       REAL(DP), INTENT(IN):: ANSAE,ANSRE
+C       REAL(DP), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
+C       END SUBROUTINE ROOTNS
+C     END INTERFACE
+C
+C
+C ON INPUT:
+C
+C N = DIMENSION OF X AND THE HOMOTOPY MAP.
+C
+C NFE = NUMBER OF JACOBIAN MATRIX EVALUATIONS.
+C
+C IFLAG = -2, -1, OR 0, INDICATING THE PROBLEM TYPE.
+C
+C RELERR, ABSERR = RELATIVE AND ABSOLUTE ERROR VALUES.  THE ITERATION IS
+C    CONSIDERED TO HAVE CONVERGED WHEN A POINT Y=(X,LAMBDA) IS FOUND 
+C    SUCH THAT
+C
+C    |Y(NP1) - 1| <= RELERR + ABSERR              AND
+C
+C    ||Z|| <= RELERR*||X|| + ABSERR  ,          WHERE
+C
+C    (Z,?) IS THE NEWTON STEP TO Y=(X,LAMBDA).
+C
+C Y(1:N+1) = POINT (X(S), LAMBDA(S)) ON ZERO CURVE OF HOMOTOPY MAP.
+C
+C YP(1:N+1) = UNIT TANGENT VECTOR TO THE ZERO CURVE OF THE HOMOTOPY MAP
+C    AT  Y .
+C
+C YOLD(1:N+1) = A POINT DIFFERENT FROM  Y  ON THE ZERO CURVE.
+C
+C YPOLD(1:N+1) = UNIT TANGENT VECTOR TO THE ZERO CURVE OF THE HOMOTOPY
+C    MAP AT  YOLD .
+C
+C A(:) = PARAMETER VECTOR IN THE HOMOTOPY MAP.
+C
+C MODE = 1 IF THE JACOBIAN MATRIX IS SYMMETRIC AND STORED IN A PACKED
+C          SKYLINE FORMAT;
+C      = 2 IF THE JACOBIAN MATRIX IS STORED IN A SPARSE ROW FORMAT.
+C
+C LENQR  IS THE NUMBER OF NONZERO ENTRIES IN THE SPARSE JACOBIAN
+C    MATRICES, USED TO DETERMINE THE SPARSE MATRIX DATA STRUCTURES.
+C
+C
+C ON OUTPUT:
+C
+C N , RELERR , ABSERR , A  ARE UNCHANGED.
+C
+C NFE  HAS BEEN UPDATED.
+C
+C IFLAG 
+C    = -2, -1, OR 0 (UNCHANGED) ON A NORMAL RETURN.
+C
+C    = 4 IF THE PRECONDITIONED CONJUGATE GRADIENT ITERATION FAILED TO
+C        CONVERGE (MOST LIKELY DUE TO A JACOBIAN MATRIX WITH RANK < N).
+C        THE ITERATION WAS NOT COMPLETED.
+C
+C    = 6 IF THE INTERPOLATION/NEWTON ITERATION FAILED TO CONVERGE.  
+C        Y  AND  YOLD  CONTAIN THE LAST TWO POINTS FOUND ON THE 
+C        ZERO CURVE.
+C
+C Y  IS THE POINT ON THE ZERO CURVE OF THE HOMOTOPY MAP AT  LAMBDA = 1 .
+C
+C
+C CALLS  DNRM2 , ROOT , TANGNS .
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE BLAS_INTERFACES, ONLY: DNRM2
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: LENQR,MODE,N
+      INTEGER, INTENT(IN OUT):: IFLAG,NFE
+      REAL(DP), INTENT(IN):: A(:)
+      REAL(DP), INTENT(IN):: ABSERR,RELERR
+      REAL(DP), DIMENSION(:), INTENT(IN OUT):: Y,YOLD,YP,YPOLD
+C
+C ***** LOCAL VARIABLES. *****
+C
+      REAL(DP):: AERR,DD001,DD0011,DD01,DD011,DELS,
+     &   F0,F1,FP0,FP1,QOFS,QSOUT,RERR,S,SA,SB,SOUT,U
+      INTEGER:: JUDY,JW,LCODE,NP1
+      LOGICAL:: BRACK
+C
+C ***** AUTOMATIC WORK ARRAYS. *****
+C
+      REAL(DP):: TZ(N+1),W(N+1),WP(N+1)
+C
+C THE LIMIT ON THE NUMBER OF ITERATIONS ALLOWED MAY BE CHANGED BY
+C CHANGING THE FOLLOWING PARAMETER STATEMENT:
+      INTEGER, PARAMETER:: LIMIT=20
+C
+C DEFINITION OF HERMITE CUBIC INTERPOLANT VIA DIVIDED DIFFERENCES.
+C
+      DD01(F0,F1,DELS)=(F1-F0)/DELS
+      DD001(F0,FP0,F1,DELS)=(DD01(F0,F1,DELS)-FP0)/DELS
+      DD011(F0,F1,FP1,DELS)=(FP1-DD01(F0,F1,DELS))/DELS
+      DD0011(F0,FP0,F1,FP1,DELS)=(DD011(F0,F1,FP1,DELS) - 
+     &                            DD001(F0,FP0,F1,DELS))/DELS
+      QOFS(F0,FP0,F1,FP1,DELS,S)=((DD0011(F0,FP0,F1,FP1,DELS)*(S-DELS) +
+     &   DD001(F0,FP0,F1,DELS))*S + FP0)*S + F0
+C
+C ***** END OF SPECIFICATION INFORMATION. *****
+C
+      U=EPSILON(ONE)
+      RERR=MAX(RELERR,U)
+      AERR=MAX(ABSERR,ZERO)
+      NP1=N+1
+      TZ=Y - YOLD
+      DELS=DNRM2(NP1,TZ,1)
+C
+C USING TWO POINTS AND TANGENTS ON THE HOMOTOPY ZERO CURVE, CONSTRUCT 
+C THE HERMITE CUBIC INTERPOLANT Q(S).  THEN USE  ROOT  TO FIND THE S
+C CORRESPONDING TO  LAMBDA = 1 .  THE TWO POINTS ON THE ZERO CURVE ARE
+C ALWAYS CHOSEN TO BRACKET LAMBDA=1, WITH THE BRACKETING INTERVAL
+C ALWAYS BEING [0, DELS].
+C
+      SA=ZERO
+      SB=DELS
+      LCODE=1
+130   CALL ROOT(SOUT,QSOUT,SA,SB,RERR,AERR,LCODE)
+      IF (LCODE .GT. 0) GO TO 140
+      QSOUT=QOFS(YOLD(NP1),YPOLD(NP1),Y(NP1),YP(NP1),DELS,SOUT) - ONE
+      GO TO 130
+C IF LAMBDA = 1 WERE BRACKETED,  ROOT  CANNOT FAIL.
+140   IF (LCODE .GT. 2) THEN
+        IFLAG=6
+        RETURN
+      ENDIF
+C
+C CALCULATE Q(SA) AS THE INITIAL POINT FOR A NEWTON ITERATION.
+      DO JW=1,NP1
+        W(JW)=QOFS(YOLD(JW),YPOLD(JW),Y(JW),YP(JW),DELS,SA)
+      END DO
+C
+C ***** END OF CALCULATION OF CUBIC INTERPOLANT. *****
+C
+C TANGENT INFORMATION  YP  IS NO LONGER NEEDED.  HEREAFTER,  YP
+C REPRESENTS THE MOST RECENT POINT WHICH IS ON THE OPPOSITE SIDE OF
+C THE HYPERPLANE  LAMBDA = 1 FROM  Y.
+C
+C    PREPARE FOR MAIN LOOP.
+C
+      YP=YOLD
+C
+C INITIALIZE  BRACK  TO INDICATE THAT THE POINTS  Y  AND  YOLD  BRACKET
+C LAMBDA = 1,  THUS  YOLD = YP .
+C
+      BRACK = .TRUE.
+C
+      DO JUDY = 1,LIMIT         ! ***** MAIN LOOP. *****
+C CALCULATE NEWTON STEP AT CURRENT ESTIMATE  W .
+      SA = -ONE
+      CALL TANGNS(SA,W,WP,TZ,YPOLD,A,MODE,LENQR,NFE,N,IFLAG)
+      IF (IFLAG .GT. 0) RETURN
+C
+C NEXT POINT = CURRENT POINT + NEWTON STEP.
+C
+      W = W + TZ
+C
+C CHECK FOR CONVERGENCE.
+C
+      IF ((ABS(W(NP1)-ONE) .LE. RERR+AERR) .AND.
+     &    (DNRM2(NP1,TZ,1) .LE. RERR*DNRM2(N,W(1:N),1)+AERR)) THEN
+        Y = W
+        RETURN
+      ENDIF
+C
+C PREPARE FOR NEXT ITERATION.
+C
+      IF (ABS(W(NP1)-ONE) .LE. RERR+AERR) THEN
+         YPOLD=WP
+         CYCLE
+      ENDIF
+C
+C    UPDATE  Y  AND  YOLD .
+C
+      YOLD=Y
+      Y=W
+C
+C    UPDATE  YP  SUCH THAT  YP  IS THE MOST RECENT POINT
+C    OPPOSITE OF  LAMBDA = 1  FROM  Y .  SET  BRACK = .TRUE.  IFF
+C    Y  AND  YOLD  BRACKET  LAMBDA = 1  SO THAT  YP = YOLD .
+C
+          IF ((Y(NP1)-ONE)*(YOLD(NP1)-ONE) .GT. ZERO) THEN
+            BRACK = .FALSE.
+          ELSE
+            BRACK = .TRUE.
+            YP=YOLD
+          END IF
+C
+C    COMPUTE  DELS = ||Y-YP||.
+C
+          TZ=Y - YP
+          DELS=DNRM2(NP1,TZ,1)
+C
+C       COMPUTE  TZ  FOR THE LINEAR PREDICTOR   W = Y + TZ,
+C           WHERE  TZ = SA*(YOLD-Y).
+C
+          SA = (ONE-Y(NP1))/(YOLD(NP1)-Y(NP1))
+          TZ = SA*(YOLD - Y)
+C
+C       TO INSURE STABILITY, THE LINEAR PREDICTION MUST BE NO FARTHER
+C       FROM  Y  THAN  YP  IS.  THIS IS GUARANTEED IF  BRACK = .TRUE.
+C       IF LINEAR PREDICTION IS TOO FAR AWAY, USE BRACKETING POINTS
+C       TO COMPUTE LINEAR PREDICTION.
+C
+          IF (.NOT. BRACK) THEN
+            IF (DNRM2(NP1,TZ,1) .GT. DELS) THEN
+C
+C             COMPUTE  TZ = SA*(YP-Y).
+C
+              SA = (ONE-Y(NP1))/(YP(NP1)-Y(NP1))
+              TZ = SA*(YP - Y)
+            END IF
+          END IF
+C
+C       COMPUTE ESTIMATE  W = Y + TZ  AND SAVE OLD TANGENT VECTOR.
+C
+           W = W + TZ
+           YPOLD = WP
+       END DO          ! ***** END OF MAIN LOOP. *****
+C
+C THE ALTERNATING SECANT ESTIMATION AND NEWTON ITERATION
+C HAS NOT CONVERGED IN  LIMIT  STEPS.  ERROR RETURN.
+      IFLAG=6
+      RETURN
+      END SUBROUTINE ROOTNS
+C
+      SUBROUTINE ROOTNX(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,
+     &   YPOLD,A,GOFW,TZ,W,WP)
+C
+C  ROOTNX  is an expert user version of ROOTN(F|S), written using the
+C reverse call protocol.  All matrix data structures and numerical linear
+C algebra are the responsibility of the calling program.  ROOTNX
+C indicates to the calling program, via flags, at which points
+C RHO(A,LAMBDA,X)  and [ D RHO(A,LAMBDA,X)/D LAMBDA, D RHO(A,LAMBDA,X)/DX ] 
+C must be evaluated, and what linear algebra must be done with these
+C functions.  ROOTNX  solves the following problem:  given
+C YOLD = (LAMBDA(S1),X(S1)), YPOLD = (LAMBDA'(S1),X'(S1)),
+C Y = (LAMBDA(S2),X(S2)), YP = (LAMBDA'(S2),X'(S2)), S1 < S2, and a
+C continuous function G(Y) = G(LAMBDA,X) such that  G(YOLD) G(Y) <= 0,
+C find the point Y(S) = (LAMBDA(S),X(S)), S1 <= S <= S2, such that
+C G(Y(S)) = 0.  ROOTNX  alternates between secant estimates of  Y(S)
+C and Newton iteration until convergence.
+C
+C The following interface block should be inserted in the calling
+C program:
+C
+C     INTERFACE
+C       SUBROUTINE ROOTNX(N,NFE,IFLAG,RELERR,ABSERR,Y,YP,YOLD,
+C    &   YPOLD,A,GOFW,TZ,W,WP)
+C       USE REAL_PRECISION
+C       INTEGER, INTENT(IN):: N
+C       INTEGER, INTENT(IN OUT):: NFE,IFLAG
+C       REAL(DP), INTENT(IN):: RELERR,ABSERR
+C       REAL(DP), DIMENSION(:), INTENT(IN):: A
+C       REAL(DP), INTENT(IN OUT):: GOFW
+C       REAL(DP), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+C    &    TZ,W,WP
+C       END SUBROUTINE ROOTNX
+C     END INTERFACE
+C
+C
+C ON INPUT:
+C
+C N = dimension of X and the homotopy map.
+C
+C NFE = number of Jacobian matrix evaluations.
+C
+C IFLAG = -2, -1, or 0, indicating the problem type, on the first
+C         call to  ROOTNX .  ROOTNX  does not distinguish between
+C         these values, but they are permitted for consistency with
+C         the rest of HOMPACK.
+C
+C       = 0-10*R, -1-10*R, OR -2-10*R, R = 1,...,5, indicate to  ROOTNX
+C         where to resume after a reverse call.  The calling program
+C         must not modify  IFLAG  after a reverse call.
+C
+C RELERR, ABSERR = relative and absolute error values.  The iteration is
+C    considered to have converged when a point Y=(LAMBDA,X) is found 
+C    such that
+C
+C    | G(Y(S)) | <= RELERR*||Y|| + ABSERR       and
+C
+C    ||Z|| <= RELERR*||Y|| + ABSERR  ,          where
+C
+C    Z is the Newton step to Y=(LAMBDA,X).
+C
+C Y(1:N+1) = point (LAMBDA(S), X(S)) on zero curve of homotopy map.
+C
+C YP(1:N+1) = unit tangent vector to the zero curve of the homotopy map
+C    at  Y .
+C
+C YOLD(1:N+1) = a point different from  Y  on the zero curve.
+C
+C YPOLD(1:N+1) = unit tangent vector to the zero curve of the homotopy
+C    map at  YOLD .
+C
+C A(:) = parameter vector in the homotopy map.
+C
+C GOFW = G(W), the value requested by some reverse calls.
+C
+C TZ(1:N+1), W(1:N+1), and WP(1:N+1)  are work arrays used for the
+C    Newton step calculation and the interpolation.  On reentry after
+C    a reverse call,  WP  and  TZ  contain the tangent vector and
+C    Newton step, respectively, at the point  W .  Precisely,
+C    D RHO(A,W)/DW WP = 0,  WP^T YPOLD > 0,  ||WP|| = 1,
+C    and  TZ  is the minimum norm solution of
+C    D RHO(A,W)/DW TZ = - RHO(A,W).
+C
+C
+C ON OUTPUT:
+C
+C N , RELERR , ABSERR , A  are unchanged.
+C
+C NFE  has been updated.
+C
+C IFLAG 
+C    = -52, -51, or -50 requests the calling program to
+C      return the unit tangent vector in  WP  and the normal flow Newton
+C      step in  TZ , all evaluated at the point  W .
+C
+C    = 0-10*R, -1-10*R, or -2-10*R, R = 1,...,4, requests the calling
+C      program to return in  GOFW  the scalar function  G(Y)  evaluated
+C      at  W .  The calling program must not modify  IFLAG  after a
+C      reverse call.
+C
+C    = -2, -1, or 0 (unchanged) on a normal return.
+C
+C    = 4 if a Jacobian matrix with rank < N has occurred.  The
+C        iteration was not completed.
+C
+C    = 6 if the iteration failed to converge.  Y  and  YOLD  contain
+C        the last two points found on the zero curve.
+C
+C    = 7 if input arguments or array sizes are invalid, or  IFLAG  was
+C        changed during a reverse call.
+C
+C Y  is the point on the zero curve of the homotopy map such that
+C    G(Y) = 0.
+C
+C
+C Calls  DNRM2 , ROOT .
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE BLAS_INTERFACES, ONLY: DNRM2
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: N
+      INTEGER, INTENT(IN OUT):: NFE,IFLAG
+      REAL(DP), INTENT(IN):: RELERR,ABSERR
+      REAL(DP), DIMENSION(:), INTENT(IN):: A
+      REAL(DP), INTENT(IN OUT):: GOFW
+      REAL(DP), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+     &    TZ,W,WP
+C
+C ***** LOCAL VARIABLES. *****
+C
+      REAL(DP), SAVE:: AERR,DELS,F0,F1,FP0,FP1,GOFY,
+     &  GOFYOLD,GOFYP,RERR,S,SA,SB,SOUT,U
+      REAL(DP):: DD001,DD0011,DD01,DD011,QOFS
+      INTEGER, SAVE:: IFLAGC,JUDY,JW,LCODE,LIMIT,NP1
+      LOGICAL, SAVE:: BRACK
+C
+C ***** END OF SPECIFICATION INFORMATION. *****
+C
+C DEFINITION OF HERMITE CUBIC INTERPOLANT VIA DIVIDED DIFFERENCES.
+C
+      DD01(F0,F1,DELS)=(F1-F0)/DELS
+      DD001(F0,FP0,F1,DELS)=(DD01(F0,F1,DELS)-FP0)/DELS
+      DD011(F0,F1,FP1,DELS)=(FP1-DD01(F0,F1,DELS))/DELS
+      DD0011(F0,FP0,F1,FP1,DELS)=(DD011(F0,F1,FP1,DELS) - 
+     &                            DD001(F0,FP0,F1,DELS))/DELS
+      QOFS(F0,FP0,F1,FP1,DELS,S)=((DD0011(F0,FP0,F1,FP1,DELS)*(S-DELS) +
+     &   DD001(F0,FP0,F1,DELS))*S + FP0)*S + F0
+C
+C
+      NP1=N+1
+      IF (IFLAG > 0) RETURN
+      IF ((MOD(-IFLAG,10) > 2) .OR. SIZE(Y) /= NP1 .OR.
+     &  SIZE(YP) /= NP1 .OR. SIZE(YOLD) /= NP1 .OR.
+     &  SIZE(YPOLD) /= NP1 .OR. SIZE(TZ) /= NP1 .OR.
+     &  SIZE(W) /= NP1 .OR. SIZE(WP) /= NP1 .OR.
+     &  (IFLAG < -2 .AND. IFLAG /= IFLAGC)) THEN
+        IFLAG=7
+        RETURN
+      ENDIF
+      IFLAGC=-MOD(-IFLAG,10)
+C
+C PICK UP EXECUTION WEHRE IT LEFT OFF AFTER A REVERSE CALL.
+C
+      IF (IFLAG < -2) THEN
+        GO TO (100,110,130,210,200), ABS(IFLAG)/10
+      ENDIF
+      U=EPSILON(ONE)
+      RERR=MAX(RELERR,U)
+      AERR=MAX(ABSERR,ZERO)
+C
+C THE LIMIT ON THE NUMBER OF ITERATIONS ALLOWED MAY BE CHANGED BY
+C CHANGING THE FOLLOWING STATEMENT:
+      LIMIT=2*(INT(ABS(LOG10(AERR+RERR)))+1)
+C
+      TZ=Y - YOLD
+      DELS=DNRM2(NP1,TZ,1)
+C EVALUATE  G  AT  YOLD  AND  Y .
+      W = YOLD
+      IFLAG = IFLAGC - 10
+      IFLAGC = IFLAG
+      RETURN
+ 100  GOFYOLD = GOFW
+      W = Y
+      IFLAG = IFLAGC - 20
+      IFLAGC = IFLAG
+      RETURN
+ 110  GOFY = GOFW
+C
+C USING TWO POINTS AND TANGENTS ON THE HOMOTOPY ZERO CURVE, CONSTRUCT 
+C THE HERMITE CUBIC INTERPOLANT Q(S).  THEN USE  ROOT  TO FIND THE S
+C CORRESPONDING TO  G(Q(S)) = 0 .  THE TWO POINTS ON THE ZERO CURVE ARE
+C ALWAYS CHOSEN TO BRACKET  G(Y(S)) = 0, WITH THE BRACKETING INTERVAL
+C ALWAYS BEING [0, DELS].
+C
+      SA=ZERO
+      SB=DELS
+      LCODE=1
+130   DO
+        CALL ROOT(SOUT,GOFW,SA,SB,RERR,AERR,LCODE)
+        IF (LCODE .GT. 0) EXIT
+        DO JW=1,NP1
+          W(JW)=QOFS(YOLD(JW),YPOLD(JW),Y(JW),YP(JW),DELS,SOUT)
+        END DO
+C REQUEST VALUE  G(Q(SOUT))  BY REVERSE CALL.
+        IFLAG = IFLAGC - 30
+        IFLAGC = IFLAG
+        RETURN
+      END DO
+C IF G(Y(S)) = 0 WERE BRACKETED,  ROOT  CANNOT FAIL.
+      IF (LCODE .GT. 2) THEN
+        IFLAG=6
+        RETURN
+      ENDIF
+C
+C CALCULATE Q(SA) AS THE INITIAL POINT FOR A NEWTON ITERATION.
+      DO JW=1,NP1
+        W(JW)=QOFS(YOLD(JW),YPOLD(JW),Y(JW),YP(JW),DELS,SA)
+      END DO
+C
+C ***** END OF CALCULATION OF CUBIC INTERPOLANT. *****
+C
+C TANGENT INFORMATION  YP  IS NO LONGER NEEDED.  HEREAFTER,  YP
+C REPRESENTS THE MOST RECENT POINT WHICH IS ON THE OPPOSITE SIDE OF
+C THE SOLUTION TO  G(Y(S)) = 0 FROM  Y.
+C
+C    PREPARE FOR MAIN LOOP.
+C
+      YP=YOLD
+      GOFYP=GOFYOLD
+C
+C INITIALIZE  BRACK  TO INDICATE THAT THE POINTS  Y  AND  YOLD  BRACKET
+C G(Y(S)) = 0,  THUS  YOLD = YP .
+C
+      BRACK = .TRUE.
+C
+C ***** MAIN LOOP. *****
+      JUDY=1                                  ! DO JUDY = 1,LIMIT
+ 170  IF (JUDY > LIMIT) GO TO 600
+C CALCULATE NEWTON STEP  TZ  AT CURRENT ESTIMATE  W .
+      IFLAG = IFLAGC - 50
+      IFLAGC = IFLAG
+      NFE = NFE+1
+      RETURN
+C
+C NEXT POINT = CURRENT POINT + NEWTON STEP.
+C
+ 200  W = W + TZ
+C
+C GET FUNCTION VALUE  G(W) .
+C
+      IFLAG = IFLAGC - 40
+      IFLAGC = IFLAG
+      RETURN
+C
+C CHECK FOR CONVERGENCE.
+C
+ 210  SA = RERR*DNRM2(NP1,W,1)+AERR
+      IF ((ABS(GOFW) .LE. SA) .AND. (DNRM2(NP1,TZ,1) .LE. SA)) THEN
+        Y = W
+        IFLAG = IFLAGC
+        RETURN
+      ENDIF
+C
+C PREPARE FOR NEXT ITERATION.
+C
+      IF (ABS(GOFW) .LE. SA) THEN
+         YPOLD=WP
+         GO TO 590    ! CYCLE
+      ENDIF
+C
+C    UPDATE  Y  AND  YOLD .
+C
+      YOLD=Y
+      Y=W
+      GOFYOLD=GOFY
+      GOFY=GOFW
+C
+C    UPDATE  YP  SUCH THAT  YP  IS THE MOST RECENT POINT
+C    OPPOSITE OF  G(Y(S)) = 0  FROM  Y .  SET  BRACK = .TRUE.  IFF
+C    Y  AND  YOLD  BRACKET  G(Y(S)) = 0  SO THAT  YP = YOLD .
+C
+      IF ( GOFY * GOFYOLD .GT. 0) THEN
+        BRACK = .FALSE.
+      ELSE
+        BRACK = .TRUE.
+        YP=YOLD
+        GOFYP=GOFYOLD
+      END IF
+C
+C    COMPUTE  DELS = ||Y-YP||.
+C
+      TZ=Y - YP
+      DELS=DNRM2(NP1,TZ,1)
+C
+C     COMPUTE  TZ  FOR THE LINEAR PREDICTOR   W = Y + TZ,
+C     WHERE  TZ = SA*(YOLD-Y).
+C
+      S = ABS(GOFY - GOFYOLD)
+      IF (S .GE. ONE) THEN
+        SA = GOFY/(GOFY - GOFYOLD)
+        TZ = SA*(YOLD - Y)
+      ELSE IF (ANY(ABS(GOFY*(YOLD-Y)) .GE. S*HUGE(ONE))) THEN
+        TZ = DELS
+      ELSE
+        SA = GOFY/(GOFY - GOFYOLD)
+        TZ = SA*(YOLD - Y)
+      END IF
+C
+C     TO INSURE STABILITY, THE LINEAR PREDICTION MUST BE NO FARTHER
+C     FROM  Y  THAN  YP  IS.  THIS IS GUARANTEED IF  BRACK = .TRUE.
+C     IF LINEAR PREDICTION IS TOO FAR AWAY, USE BRACKETING POINTS
+C     TO COMPUTE LINEAR PREDICTION.
+C
+      IF (.NOT. BRACK) THEN
+        IF (DNRM2(NP1,TZ,1) .GT. DELS) THEN
+C
+C         COMPUTE  TZ = SA*(YP-Y).
+C
+          SA = GOFY/(GOFY - GOFYP)
+          TZ = SA*(YP - Y)
+        END IF
+      END IF
+C
+C     COMPUTE ESTIMATE  W = Y + TZ  AND SAVE OLD TANGENT VECTOR.
+C
+      W = W + TZ
+      YPOLD = WP
+ 590  JUDY=JUDY+1
+      GO TO 170                          ! END DO
+C
+C ***** END OF MAIN LOOP. *****
+C
+C THE ALTERNATING SECANT ESTIMATION AND NEWTON ITERATION
+C HAS NOT CONVERGED IN  LIMIT  STEPS.  ERROR RETURN.
+ 600  IFLAG=6
+      RETURN
+      END SUBROUTINE ROOTNX
+C
+      SUBROUTINE SCLGNP(N,MAXT,NUMT,DEG,MODE,EPS0,COEF,
+     &  NNUMT,DDEG,CCOEF,ALPHA,BETA,RWORK,XWORK,
+     &  FACV,FACE,COESCL,IERR)
+C
+C SCLGNP  SCALES THE COEFFICIENTS OF A POLYNOMIAL SYSTEM OF N
+C EQUATIONS IN N UNKNOWNS, F(X)=0, WHERE THE JTH TERM OF
+C THE ITH EQUATION LOOKS LIKE:
+C
+C    COEF(I,J) * X(1)**DEG(I,1,J) ... X(N)**DEG(I,N,J)
+C
+C THE ITH EQUATION IS SCALED BY 10**FACE(I).  THE KTH
+C VARIABLE IS SCALED BY 10**FACV(K).  IN OTHER WORDS, X(K) =
+C 10**FACV(K) * Y(K), WHERE Y SOLVES THE SCALED EQUATION.
+C THE SCALED EQUATION HAS THE SAME FORM AS THE ORIGINAL
+C EQUATION, EXCEPT THAT COESCL(I,J) REPLACES COEF(I,J), WHERE
+C
+C COESCL(I,J)=COEF(I,J)* 10**( FACE(I) + FACV(1)*DEG(I,1,J)+ ...
+C                                       +FACV(N)*DEG(I,N,J) )
+C
+C THE CRITERION FOR GENERATING FACE AND FACV IS THAT OF
+C MINIMIZING THE SUM OF SQUARES OF THE EXPONENTS OF THE SCALED
+C COEFFICIENTS.  IT TURNS OUT THAT THIS CRITERION REDUCES TO
+C SOLVING A SINGLE LINEAR SYSTEM, ALPHA*X = BETA, AS DEFINED
+C IN THE CODE BELOW.  FURTHER, THE FORM OF THE POLYNOMIAL
+C SYSTEM ALONE DETERMINES THE MATRIX ALPHA.  THUS, IN CASES
+C IN WHICH MANY SYSTEMS OF THE SAME FORM, BUT WITH DIFFERENT
+C COEFFICIENTS, ARE TO BE SCALED, THE MATRIX ALPHA IS
+C UNCHANGED AND MAY BE FACTORED ONLY ONCE (BY  DGEQRF).  WHEN
+C SCLGNP  IS CALLED WITH MODE=1,  SCLGNP  DOES NOT RECOMPUTE OR
+C REFACTOR THE MATRIX ALPHA.  SEE MEINTJES AND MORGAN "A
+C METHODOLOGY FOR SOLVING CHEMICAL EQUILIBRIUM SYSTEMS"
+C (GENERAL MOTORS RESEARCH LABORATORIES TECHNICAL REPORT
+C GMR-4971).
+C
+C CALLS DIRECTLY: THE LAPACK ROUTINES  DGEQRF,  DORMQR,  THE BLAS 
+C ROUTINE  DTRSV.
+C
+C N  IS THE NUMBER OF EQUATIONS AND THE NUMBER OF VARIABLES.
+C
+C MAXT  IS THE LEAST UPPER BOUND OF THE SET NUMT(I), I=1 TO N.
+C
+C NUMT(I)  IS THE NUMBER OF TERMS IN THE I-TH EQUATION FOR I=1 TO N.
+C
+C DEG(I,K,J)  IS THE DEGREE OF THE K-TH VARIABLE IN THE
+C   J-TH TERM OF THE I-TH EQUATION FOR I=1 TO N, J=1 TO NUMT(I), AND
+C   K=1 TO N.
+C
+C MODE  
+C  =1  THIS IS NOT THE FIRST CALL TO  SCLGNP, AND THE FORM OF THE
+C      SYSTEM HAS NOT CHANGED.
+C  =0  THIS IS THE FIRST CALL TO  SCLGNP.
+C
+C EPS0  ZERO-EPSILON FOR TERMS (TERMS LESS THAN  EPS0  IN MAGNITUDE
+C   ARE TREATED AS ZERO BY THE SCALING ALGORITHM).
+C
+C COEF(I,J)  IS THE COEFFICIENT OF THE JTH TERM OF THE ITH EQUATION
+C   FOR I=1 TO N AND J=1 TO NUMT(N).  (COEF(I,J) MAY BE ZERO.)
+C
+C NNUMT, DDEG, CCOEF, ALPHA, BETA, RWORK, AND  XWORK  ARE WORKSPACES.
+C
+C ON OUTPUT:
+C
+C N, NUMT, DEG, MODE, EPS0, AND  COEF  ARE UNCHANGED.
+C
+C FACV(I)  IS THE VARIABLE SCALE FACTOR FOR THE I-TH VARIABLE, FOR
+C   I=1 TO N.
+C
+C FACE(I)  IS THE EQUATION SCALE FACTOR FOR THE I-TH EQUATION, FOR
+C   I=1 TO N.
+C
+C COESCL(I,J)  IS THE SCALED VERSION OF COEFFICIENT  COEF(I,J), FOR
+C   I=1 TO N, J=1 TO NUMT(I), UNLESS IERR=1.
+C
+C IERR
+C   =0  IF SCALING MATRIX, ALPHA, IS WELL CONDITIONED.  
+C   =1  OTHERWISE.  IN THIS CASE, ALPHA IS "REPAIRED" AND A
+C         SCALING IS COMPUTED.
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE BLAS_INTERFACES, ONLY: DTRSV, IDAMAX
+      USE LAPACK_INTERFACES, ONLY: DGEQRF, DORMQR
+      IMPLICIT NONE
+C
+C DECLARATION OF INPUT
+      INTEGER, INTENT(IN):: N,MAXT,NUMT(:),DEG(:,:,:),MODE
+      REAL(DP), INTENT(IN):: EPS0,COEF(:,:)
+C
+C DECLARATION OF WORKSPACE
+      INTEGER, INTENT(IN OUT):: NNUMT(N),DDEG(N,N+1,MAXT)
+      REAL(DP), INTENT(IN OUT):: CCOEF(N,MAXT),ALPHA(2*N,2*N),
+     &  BETA(2*N),RWORK(N*(2*N+1)),XWORK(2*N)
+C
+C DECLARATION OF OUTPUT
+      REAL(DP), INTENT(OUT):: FACV(N),FACE(N),COESCL(N,MAXT)
+      INTEGER, INTENT(OUT):: IERR
+C
+C DECLARATION OF LOCAL VARIABLES
+      INTEGER:: I,ICMAX,IRMAX,J,JJ,K,LENR,N2,S
+      REAL(DP):: DUM,LMFPN,NTUR,RTOL,TUM
+C
+      SAVE
+C
+      IERR=0
+      N2=2*N
+      LMFPN=HUGE(ONE)
+      NTUR=EPSILON(ONE)*N
+      LENR=N*(N+1)/2
+C
+C  DELETE NEAR ZERO TERMS
+      NNUMT = 0
+      DO I=1,N
+        JJ=0
+        DO J=1,NUMT(I)
+          IF (ABS(COEF(I,J)) .GT. EPS0) THEN
+            JJ=JJ+1
+            NNUMT(I)=NNUMT(I)+1
+            CCOEF(I,JJ)=COEF(I,J)
+            DDEG(I,1:N,JJ)=DEG(I,1:N,J)
+          END IF
+        END DO
+      END DO
+      DO I=1,N
+        COESCL(I,1:NNUMT(I)) = LOG10(ABS(CCOEF(I,1:NNUMT(I))))
+      END DO
+C
+C SKIP OVER THE GENERATION AND DECOMPOSITON OF MATRIX ALPHA IF MODE=1
+      MODE0: IF (MODE .EQ. 0) THEN
+C
+C GENERATE THE MATRIX ALPHA
+      ALPHA(1:N,1:N) = ZERO
+      DO S=1,N
+        ALPHA(S,S)=REAL(NNUMT(S), DP)
+      END DO
+      DO I=1,N
+        ALPHA(N+1:2*N,I) = REAL(SUM(DDEG(I,1:N,1:NNUMT(I)),DIM=2), DP)
+      END DO
+      DO S=1,N
+        DO K=1,N
+          TUM=0
+          DO I=1,N
+            DO J=1,NNUMT(I)
+              TUM = TUM + REAL(DDEG(I,S,J)*DDEG(I,K,J), DP)
+            END DO
+          END DO
+          ALPHA(N+S,N+K)=TUM
+        END DO
+      END DO
+      DO S=1,N
+        ALPHA(S,N+1:2*N) = REAL(SUM(DDEG(S,1:N,1:NNUMT(S)),DIM=2), DP)
+      END DO
+C
+C COMPUTE QR FACTORIZATION OF MATRIX ALPHA
+      CALL DGEQRF(2*N,2*N,ALPHA,2*N,XWORK,BETA,2*N,I)
+C
+C REPAIR ILL-CONDITIONED SCALING MATRIX
+      IRMAX=1        
+      ICMAX=1
+      DO J=2,N
+        I=IDAMAX(J,ALPHA(1,J),1)
+        IF (ABS(ALPHA(I,J)) .GT. ABS(ALPHA(IRMAX,ICMAX))) THEN 
+          IRMAX=I
+          ICMAX=J
+        ENDIF
+      END DO
+      RTOL=ABS(ALPHA(IRMAX,ICMAX))*NTUR
+      DO I=N,1,-1
+        IF (ABS(ALPHA(I,I)) .LT. RTOL) THEN
+          ALPHA(I,I)=LMFPN
+          IERR=1
+        ENDIF
+      END DO
+C      
+      ENDIF MODE0
+C
+C CONTROL PASSES HERE IF MODE=1
+C
+C
+C GENERATE THE COLUMN BETA
+      DO S=1,N
+        BETA(S)=-SUM(COESCL(S,1:NNUMT(S)))
+      END DO
+      DO S=1,N
+        TUM=0
+        DO I=1,N
+          TUM = TUM + DOT_PRODUCT(COESCL(I,1:NNUMT(I)),
+     &      REAL(DDEG(I,S,1:NNUMT(I)), DP))
+        END DO
+        BETA(N+S)=-TUM
+      END DO
+C
+C SOLVE THE LINEAR SYSTEM ALPHA * X = BETA
+      CALL DORMQR('L','T',2*N,1,2*N-1,ALPHA,2*N,XWORK,BETA,2*N,RWORK,
+     &  N*(2*N+1),I) 
+      CALL DTRSV('U','N','N',2*N,ALPHA,2*N,BETA,1) 
+C
+C GENERATE FACE, FACV, AND THE MATRIX COESCL
+      FACE(1:N)=BETA(1:N)
+      FACV(1:N)=BETA(N+1:2*N)
+      DO I=1,N
+        DO J=1,NUMT(I)
+          DUM = ABS(COEF(I,J))
+          IF (DUM .EQ. ZERO) THEN
+            COESCL(I,J) = ZERO
+          ELSE
+            TUM = FACE(I) + LOG10( DUM ) 
+     &      + DOT_PRODUCT(FACV(1:N), REAL(DEG(I,1:N,J), DP))
+            COESCL(I,J) = SIGN(1E1_DP**(TUM), COEF(I,J))
+          ENDIF
+        END DO
+      END DO
+C
+      END SUBROUTINE SCLGNP
+C
+      SUBROUTINE SINTRP(X,Y,XOUT,YOUT,YPOUT,NEQN,KOLD,PHI,IVC,IV,KGI,GI,
+     &                                                ALPHA,G,W,XOLD,P)
+C 
+C***BEGIN PROLOGUE  SINTRP
+C***DATE WRITTEN   740101   (YYMMDD)
+C***REVISION DATE  840201   (YYMMDD)
+C***CATEGORY NO.  D2A2
+C***KEYWORDS  INITIAL VALUE ORDINARY DIFFERENTIAL EQUATIONS,
+C             VARIABLE ORDER ADAMS METHODS, SMOOTH INTERPOLANT FOR
+C             DEABM IN THE DEPAC PACKAGE
+C***AUTHOR  SHAMPINE, L.F.,  SNLA 
+C           GORDON, M.K.
+C             MODIFIED BY H.A. WATTS
+C***PURPOSE  APPROXIMATES THE SOLUTION AT XOUT BY EVALUATING THE
+C            POLYNOMIAL COMPUTED IN STEPS AT XOUT.  MUST BE USED IN 
+C            CONJUNCTION WITH STEPS.
+C***DESCRIPTION 
+C 
+C   WRITTEN BY L. F. SHAMPINE AND M. K. GORDON
+C 
+C   ABSTRACT
+C 
+C 
+C   THE METHODS IN SUBROUTINE  STEPS  APPROXIMATE THE SOLUTION NEAR  X
+C   BY A POLYNOMIAL.  SUBROUTINE  SINTRP  APPROXIMATES THE SOLUTION AT
+C   XOUT  BY EVALUATING THE POLYNOMIAL THERE.  INFORMATION DEFINING THIS
+C   POLYNOMIAL IS PASSED FROM  STEPS  SO  SINTRP  CANNOT BE USED ALONE. 
+C 
+C   THIS CODE IS COMPLETELY EXPLAINED AND DOCUMENTED IN THE TEXT, 
+C   COMPUTER SOLUTION OF ORDINARY DIFFERENTIAL EQUATIONS, THE INITIAL 
+C   VALUE PROBLEM  BY L. F. SHAMPINE AND M. K. GORDON.
+C   FURTHER DETAILS ON USE OF THIS CODE ARE AVAILABLE IN *SOLVING 
+C   ORDINARY DIFFERENTIAL EQUATIONS WITH ODE, STEP, AND INTRP*, 
+C   BY L. F. SHAMPINE AND M. K. GORDON, SLA-73-1060.
+C 
+C   INPUT TO SINTRP --
+C 
+C   THE USER PROVIDES STORAGE IN THE CALLING PROGRAM FOR THE ARRAYS IN
+C   THE CALL LIST 
+C      DIMENSION Y(NEQN),YOUT(NEQN),YPOUT(NEQN),PHI(NEQN,16),P(NEQN),
+C                ALPHA(12),G(13),W(12),GI(11),IV(10)
+C   AND DEFINES 
+C      XOUT -- POINT AT WHICH SOLUTION IS DESIRED.
+C   THE REMAINING PARAMETERS ARE DEFINED IN  STEPS  AND PASSED TO 
+C   SINTRP  FROM THAT SUBROUTINE.
+C 
+C   OUTPUT FROM  SINTRP --
+C 
+C      YOUT(*) -- SOLUTION AT  XOUT 
+C      YPOUT(*) -- DERIVATIVE OF SOLUTION AT  XOUT
+C 
+C   THE REMAINING PARAMETERS ARE RETURNED UNALTERED FROM THEIR INPUT
+C   VALUES.  INTEGRATION WITH  STEPS  MAY BE CONTINUED. 
+C 
+C***REFERENCES  SHAMPINE L.F., GORDON M.K., *SOLVING ORDINARY 
+C                 DIFFERENTIAL EQUATIONS WITH ODE, STEP, AND INTRP*,
+C                 SLA-73-1060, SANDIA LABORATORIES, 1973. 
+C               WATTS H.A., SHAMPINE L.F., *A SMOOTHER INTERPOLANT FOR
+C                 DE/STEP,INTRP : II*, SAND84-0293, SANDIA LABORATORIES,
+C                 1984. 
+C***ROUTINES CALLED  (NONE) 
+C***END PROLOGUE  SINTRP
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      IMPLICIT NONE
+C
+      REAL(DP):: ALP,ALPHA,C,G,GAMMA,GDI,GDIF,GI,GTEMP,
+     &  H,HI,HMU,P,PHI,RMU,SIGMA,TEMP1,TEMP2,TEMP3,W,WTEMP,
+     &  X,XI,XIM1,XIQ,XOLD,XOUT,Y,YOUT,YPOUT
+      INTEGER I,IQ,IV,IVC,IW,J,JQ,KGI,KOLD,KP1,KP2,L,M,NEQN
+C
+      DIMENSION Y(NEQN),YOUT(NEQN),YPOUT(NEQN),PHI(NEQN,16),P(NEQN)
+      DIMENSION GTEMP(13),C(13),WTEMP(13),G(13),W(12),ALPHA(12),
+     &          GI(11),IV(10) 
+C 
+C***FIRST EXECUTABLE STATEMENT
+      KP1 = KOLD + 1
+      KP2 = KOLD + 2
+C 
+      HI = XOUT - XOLD
+      H = X - XOLD
+      XI = HI/H 
+      XIM1 = XI - ONE
+C 
+C   INITIALIZE WTEMP(*) FOR COMPUTING GTEMP(*)
+C 
+      XIQ = XI
+      DO IQ = 1,KP1
+        XIQ = XI*XIQ
+        TEMP1 = REAL(IQ*(IQ+1), DP) 
+        WTEMP(IQ) = XIQ/TEMP1 
+      END DO
+C 
+C   COMPUTE THE DOUBLE INTEGRAL TERM GDI
+C 
+      IF (KOLD .LE. KGI) THEN
+        GDI = GI(KOLD)
+      ELSE
+        IF (IVC .GT. 0) THEN
+          IW = IV(IVC)
+          GDI = W(IW)
+          M = KOLD - IW + 3 
+        ELSE
+          GDI = ONE/TEMP1 
+          M = 2 
+        END IF
+        IF (M .LE. KOLD) THEN
+          DO I = M,KOLD
+            GDI = W(KP2-I) - ALPHA(I)*GDI
+          END DO
+        END IF
+      END IF
+C 
+C   COMPUTE GTEMP(*) AND C(*) 
+C 
+      GTEMP(1) = XI 
+      GTEMP(2) = XI*XI/2
+      C(1) = ONE
+      C(2) = XI 
+      IF (KOLD .GE. 2) THEN
+        DO I = 2,KOLD
+          ALP = ALPHA(I)
+          GAMMA = ONE + XIM1*ALP
+          L = KP2 - I 
+          DO JQ = 1,L
+            WTEMP(JQ) = GAMMA*WTEMP(JQ) - ALP*WTEMP(JQ+1) 
+          END DO
+          GTEMP(I+1) = WTEMP(1) 
+          C(I+1) = GAMMA*C(I) 
+        END DO
+      END IF
+C 
+C   DEFINE INTERPOLATION PARAMETERS 
+C 
+      SIGMA = (WTEMP(2) - XIM1*WTEMP(1))/GDI
+      RMU = XIM1*C(KP1)/GDI 
+      HMU = RMU/H 
+C 
+C   INTERPOLATE FOR THE SOLUTION -- YOUT
+C   AND FOR THE DERIVATIVE OF THE SOLUTION -- YPOUT 
+C 
+      YOUT = ZERO 
+      YPOUT = ZERO
+      DO J = 1,KOLD 
+        I = KP2 - J 
+        GDIF = G(I) - G(I-1)
+        TEMP2 = (GTEMP(I) - GTEMP(I-1)) - SIGMA*GDIF
+        TEMP3 = (C(I) - C(I-1)) + RMU*GDIF
+        YOUT = YOUT + TEMP2*PHI(:,I)
+        YPOUT = YPOUT + TEMP3*PHI(:,I)
+      END DO
+
+      YOUT = ((ONE - SIGMA)*P + SIGMA*Y) +
+     &             H*(YOUT + (GTEMP(1) - SIGMA*G(1))*PHI(:,1))
+      YPOUT = HMU*(P - Y) + (YPOUT + (C(1) + RMU*G(1))*PHI(:,1))
+C 
+      END SUBROUTINE SINTRP
+C
+      SUBROUTINE SOLVDS(NN,A,NWK,MAXA,V)
+C
+C     This subroutine solves a system of linear equations Bx=b, where
+C     B is symmetric, and is represented by its LDU factorization.
+C
+C     Input variables:
+C
+C        NN  -- dimension of B.
+C
+C        A -- one dimensional real array containing the upper
+C             triangular skyline portion of the LDU decomposition 
+C             of the symmetric matrix B.  
+C
+C        NWK  -- number of elements in A.
+C
+C        MAXA -- an integer array of length NN+1 which contains the
+C                location in A of the diagonal elements of B.  
+C                By convention, MAXA(NN+1) = NWK+1 .
+C
+C        V -- real array of length NN containing the vector b.
+C
+C 
+C     Output variables:
+C
+C        V -- solution of the system of equations B x = b .
+C
+C
+C     No working storage is required by this routine.
+C
+      USE HOMPACK_KINDS, ONLY: ZERO
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: NN,MAXA(NN+1),NWK
+      REAL(DP), INTENT(IN):: A(NWK)
+      REAL(DP), INTENT(IN OUT):: V(NN)
+C local variables.
+      INTEGER:: K,KK,KL,KU,L,N
+      REAL(DP):: C
+      DO N=1,NN
+         KL=MAXA(N)+1
+         KU=MAXA(N+1)-1
+         IF (KU-KL < 0) CYCLE
+         K=N
+         C=ZERO
+         DO KK=KL,KU
+            K=K-1
+            C=C+A(KK)*V(K)
+         END DO
+         V(N)=V(N)-C
+      END DO
+      DO N=1,NN
+         K=MAXA(N)
+         V(N)=V(N)/A(K)
+      END DO
+      IF (NN.EQ.1) RETURN
+      N=NN
+      DO L=2,NN
+         KL=MAXA(N) + 1
+         KU=MAXA(N+1) - 1
+         IF (KU-KL .GE. 0) THEN
+           K=N
+           DO KK=KL,KU
+             K=K - 1
+             V(K)=V(K) - A(KK)*V(N)
+           END DO
+         END IF
+         N = N - 1
+      END DO
+C
+      END SUBROUTINE SOLVDS
+C
+      SUBROUTINE STEPNX(N,NFE,IFLAG,START,CRASH,HOLD,H,RELERR,
+     &   ABSERR,S,Y,YP,YOLD,YPOLD,A,TZ,W,WP,RHOLEN,SSPAR)
+C
+C  STEPNX  takes one step along the zero curve of the homotopy map
+C using a predictor-corrector algorithm.  The predictor uses a Hermite
+C cubic interpolant, and the corrector returns to the zero curve along
+C the flow normal to the Davidenko flow.  STEPNX  also estimates a
+C step size H for the next step along the zero curve.  STEPNX  is an
+C expert user version of STEPN(F|S), written using the reverse call
+C protocol.  All matrix data structures and numerical linear algebra
+C are the responsibility of the calling program.  STEPNX  indicates to
+C the calling program, via flags, at which points  RHO(A,LAMBDA,X)  and
+C [ D RHO(A,LAMBDA,X)/D LAMBDA, D RHO(A,LAMBDA,X)/DX ]  must be
+C evaluated, and what linear algebra must be done with these functions.
+C Out of range arguments can also be signaled to  STEPNX , which will
+C attempt to modify its steplength algorithm to reflect this
+C information.
+C
+C The following interface block should be inserted in the calling
+C program:
+C
+C     INTERFACE
+C       SUBROUTINE STEPNX(N,NFE,IFLAG,START,CRASH,HOLD,H,RELERR,
+C    &    ABSERR,S,Y,YP,YOLD,YPOLD,A,TZ,W,WP,RHOLEN,SSPAR)
+C       USE REAL_PRECISION
+C       INTEGER, INTENT(IN):: N
+C       INTEGER, INTENT(IN OUT):: NFE,IFLAG
+C       LOGICAL, INTENT(IN OUT):: START,CRASH
+C       REAL(DP), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
+C    &    SSPAR(8)
+C       REAL(DP), DIMENSION(:), INTENT(IN):: A
+C       REAL(DP), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+C    &    TZ,W,WP
+C       REAL(DP), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
+C       END SUBROUTINE STEPNX
+C     END INTERFACE
+C
+C ON INPUT:
+C
+C N = dimension of X and the homotopy map.
+C
+C NFE = number of Jacobian matrix evaluations.
+C
+C IFLAG = -2, -1, or 0, indicating the problem type, on the first
+C         call to  STEPNX .  STEPNX  does not distinguish between
+C         these values, but they are permitted for consistency with
+C         the rest of HOMPACK.
+C
+C       = 0-10*R, -1-10*R, or -2-10*R, R = 1,2,3, indicate to  STEPNX
+C         where to resume after a reverse call.  The calling program
+C         must not modify  IFLAG  after a reverse call, except as
+C         noted next.
+C
+C       = -40, -41, or -42, used for a final call to deallocate working
+C         storage, after all path tracking is finished.  START  and
+C         IFLAG  are reset on return.
+C
+C       = -100-10*R, -101-10*R, -102-10*R, R = 1,2,3, indicate to
+C         STEPNX  where to resume after a reverse call, and that the
+C         requested evaluation point was out of range.  STEPNX  will
+C         reduce  H  and try again.
+C
+C START = .TRUE. on first call to  STEPNX , .FALSE. otherwise.
+C
+C HOLD = ||Y - YOLD||; should not be modified by the user.
+C
+C H = upper limit on length of step that will be attempted.  H  must be
+C    set to a positive number on the first call to  STEPNX .
+C    Thereafter  STEPNX  calculates an optimal value for  H , and  H
+C    should not be modified by the user.
+C
+C RELERR, ABSERR = relative and absolute error values.  The iteration is
+C    considered to have converged when a point W=(LAMBDA,X) is found 
+C    such that
+C
+C    ||Z|| <= RELERR*||W|| + ABSERR  ,          where
+C
+C    Z is the Newton step to W=(LAMBDA,X).
+C
+C S = (approximate) arc length along the homotopy zero curve up to
+C    Y(S) = (LAMBDA(S), X(S)).
+C
+C Y(1:N+1) = previous point (LAMBDA(S), X(S)) found on the zero curve of 
+C    the homotopy map.
+C
+C YP(1:N+1) = unit tangent vector to the zero curve of the homotopy map
+C    at  Y .
+C
+C YOLD(1:N+1) = a point before  Y  on the zero curve of the homotopy map.
+C
+C YPOLD(1:N+1) = unit tangent vector to the zero curve of the homotopy
+C    map at  YOLD .
+C
+C A(:) = parameter vector in the homotopy map.
+C
+C TZ(1:N+1), W(1:N+1), and WP(1:N+1)  are work arrays used for the
+C    Newton step calculation and the interpolation.  On reentry after
+C    a reverse call,  WP  and  TZ  contain the tangent vector and
+C    Newton step, respectively, at the point  W .  Precisely,
+C    D RHO(A,W)/DW WP = 0,  WP^T YP > 0,  ||WP|| = 1,
+C    and  TZ  is the minimum norm solution of
+C    D RHO(A,W)/DW TZ = - RHO(A,W).
+C
+C RHOLEN = ||RHO(A,W)||_2 is required by some reverse calls.
+C
+C SSPAR(1:8) = (LIDEAL, RIDEAL, DIDEAL, HMIN, HMAX, BMIN, BMAX, P)  is
+C    a vector of parameters used for the optimal step size estimation.
+C    If  SSPAR(J) .LE. 0.0  on input, it is reset to a default value
+C    by  STEPNX .  Otherwise the input value of  SSPAR(J)  is used.
+C    See the comments below in  STEPNX  for more information about
+C    these constants.
+C
+C
+C ON OUTPUT:
+C
+C N  and  A  are unchanged.
+C
+C NFE  has been updated.
+C
+C IFLAG  
+C    = -22, -21, -20, -32, -31, or -30 requests the calling program to
+C      return the unit tangent vector in  WP , the normal flow Newton
+C      step in  TZ , and the 2-norm of the homotopy map in  RHOLEN ,
+C      all evaluated at the point  W .
+C
+C    = -12, -11, or -10 requests the calling program to return in  WP
+C      the unit tangent vector at  W .
+C
+C    = -2, -1, or 0 (unchanged) on a normal return after a successful
+C      step.
+C
+C    = 4 if a Jacobian matrix with rank < N has occurred.  The
+C        iteration was not completed.
+C
+C    = 6 if the iteration failed to converge.  W  contains the last
+C        Newton iterate.
+C
+C    = 7 if input arguments or array sizes are invalid, or  IFLAG  was
+C        changed during a reverse call.
+C
+C START = .FALSE. on a normal return.
+C
+C CRASH 
+C    = .FALSE. on a normal return.
+C
+C    = .TRUE. if the step size  H  was too small.  H  has been
+C      increased to an acceptable value, with which  STEPNX  may be
+C      called again.
+C
+C    = .TRUE. if  RELERR  and/or  ABSERR  were too small.  They have
+C      been increased to acceptable values, with which  STEPNX  may
+C      be called again.
+C
+C HOLD = ||Y - YOLD||.
+C
+C H = optimal value for next step to be attempted.  Normally  H  should
+C    not be modified by the user.
+C
+C RELERR, ABSERR  are unchanged on a normal return.
+C
+C S = (approximate) arc length along the zero curve of the homotopy map 
+C    up to the latest point found, which is returned in  Y .
+C
+C Y, YP, YOLD, YPOLD  contain the two most recent points and tangent
+C    vectors found on the zero curve of the homotopy map.
+C
+C SSPAR  may have been changed to default values.
+C
+C
+C Z0(1:N+1), Z1(1:N+1)  are allocatable work arrays used for the
+C    estimation of the next step size  H .
+C
+C Calls  DNRM2 .
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE BLAS_INTERFACES, ONLY: DNRM2
+      IMPLICIT NONE
+C
+      INTEGER, INTENT(IN):: N
+      INTEGER, INTENT(IN OUT):: NFE,IFLAG
+      LOGICAL, INTENT(IN OUT):: START,CRASH
+      REAL(DP), INTENT(IN OUT):: HOLD,H,RELERR,ABSERR,S,RHOLEN,
+     &  SSPAR(8)
+      REAL(DP), DIMENSION(:), INTENT(IN):: A
+      REAL(DP), DIMENSION(:), INTENT(IN OUT):: Y,YP,YOLD,YPOLD,
+     &  TZ,W,WP
+      REAL(DP), DIMENSION(:), ALLOCATABLE, SAVE:: Z0,Z1
+C
+C ***** LOCAL VARIABLES. *****
+C
+      REAL(DP), SAVE:: DCALC,DELS,F0,F1,FOURU,FP0,FP1,
+     &  HFAIL,HT,LCALC,RCALC,TEMP,TWOU
+      INTEGER, SAVE:: IFLAGC,ITNUM,J,JUDY,NP1
+      LOGICAL, SAVE:: FAIL
+C
+C ***** END OF SPECIFICATION INFORMATION. *****
+C
+C THE LIMIT ON THE NUMBER OF NEWTON ITERATIONS ALLOWED BEFORE REDUCING
+C THE STEP SIZE  H  MAY BE CHANGED BY CHANGING THE FOLLOWING PARAMETER 
+C STATEMENT:
+      INTEGER, PARAMETER:: LITFH=4
+C
+C DEFINITION OF HERMITE CUBIC INTERPOLANT VIA DIVIDED DIFFERENCES.
+C
+      REAL(DP):: DD001,DD0011,DD01,DD011,QOFS
+C
+      DD01(F0,F1,DELS)=(F1-F0)/DELS
+      DD001(F0,FP0,F1,DELS)=(DD01(F0,F1,DELS)-FP0)/DELS
+      DD011(F0,F1,FP1,DELS)=(FP1-DD01(F0,F1,DELS))/DELS
+      DD0011(F0,FP0,F1,FP1,DELS)=(DD011(F0,F1,FP1,DELS) - 
+     &                            DD001(F0,FP0,F1,DELS))/DELS
+      QOFS(F0,FP0,F1,FP1,DELS,S)=((DD0011(F0,FP0,F1,FP1,DELS)*(S-DELS) +
+     &   DD001(F0,FP0,F1,DELS))*S + FP0)*S + F0
+C
+C
+      NP1=N+1
+      IF (IFLAG > 0) RETURN
+      IF ((START .AND. IFLAG < -2) .OR. SIZE(Y) /= NP1 .OR.
+     &  SIZE(YP) /= NP1 .OR. SIZE(YOLD) /= NP1 .OR.
+     &  SIZE(YPOLD) /= NP1 .OR. SIZE(TZ) /= NP1 .OR.
+     &  SIZE(W) /= NP1 .OR. SIZE(WP) /= NP1 .OR.
+     &  (.NOT. START .AND. -MOD(-IFLAG,100) /= IFLAGC .AND.
+     &  ABS(IFLAG)/10 /= 4)) THEN
+        IFLAG=7
+        RETURN
+      ENDIF
+      IFLAGC=-MOD(-IFLAG,10)
+C
+C PICK UP EXECUTION WEHRE IT LEFT OFF AFTER A REVERSE CALL.
+C
+      IF (IFLAG < -2) THEN
+        GO TO (50,100,400,700), MOD(ABS(IFLAG),100)/10
+      ENDIF
+      TWOU=2*EPSILON(ONE)
+      FOURU=TWOU+TWOU
+      CRASH=.TRUE.
+C THE ARCLENGTH  S  MUST BE NONNEGATIVE.
+      IF (S .LT. ZERO) RETURN
+C IF STEP SIZE IS TOO SMALL, DETERMINE AN ACCEPTABLE ONE.
+      IF (H .LT. FOURU*(ONE+S)) THEN
+        H=FOURU*(ONE+S)
+        RETURN
+      ENDIF
+C IF ERROR TOLERANCES ARE TOO SMALL, INCREASE THEM TO ACCEPTABLE VALUES.
+      TEMP=DNRM2(NP1,Y,1) + ONE
+      IF (0.5_DP*(RELERR*TEMP+ABSERR) .LT. TWOU*TEMP) THEN
+        IF (RELERR .NE. ZERO) THEN
+          RELERR=FOURU*(ONE+FOURU)
+          ABSERR=MAX(ABSERR,ZERO)
+        ELSE
+          ABSERR=FOURU*TEMP
+        ENDIF
+        RETURN
+      ENDIF
+      CRASH=.FALSE.
+      IF (.NOT. START) GO TO 300
+C
+C *****  STARTUP SECTION (FIRST STEP ALONG ZERO CURVE).  *****
+C
+      FAIL=.FALSE.
+      START=.FALSE.
+      IF (ALLOCATED(Z0)) DEALLOCATE(Z0)
+      IF (ALLOCATED(Z1)) DEALLOCATE(Z1)
+      ALLOCATE(Z0(NP1),Z1(NP1))
+C
+C SET OPTIMAL STEP SIZE ESTIMATION PARAMETERS.
+C LET Z[K] DENOTE THE NEWTON ITERATES ALONG THE FLOW NORMAL TO THE
+C DAVIDENKO FLOW AND Y THEIR LIMIT.
+C IDEAL CONTRACTION FACTOR:  ||Z[2] - Z[1]|| / ||Z[1] - Z[0]||
+      IF (SSPAR(1) .LE. ZERO) SSPAR(1)= 0.5_DP
+C IDEAL RESIDUAL FACTOR:  ||RHO(A, Z[1])|| / ||RHO(A, Z[0])||
+      IF (SSPAR(2) .LE. ZERO) SSPAR(2)= 0.01_DP
+C IDEAL DISTANCE FACTOR:  ||Z[1] - Y|| / ||Z[0] - Y||
+      IF (SSPAR(3) .LE. ZERO) SSPAR(3)= 0.5_DP
+C MINIMUM STEP SIZE  HMIN .
+      IF (SSPAR(4) .LE. ZERO) THEN
+        SSPAR(4) = (SQRT(REAL(N + 1, DP)) + 4.0_DP)*EPSILON(ONE)
+      END IF
+C MAXIMUM STEP SIZE  HMAX .
+      IF (SSPAR(5) .LE. ZERO) SSPAR(5)= ONE
+C MINIMUM STEP SIZE REDUCTION FACTOR  BMIN .
+      IF (SSPAR(6) .LE. ZERO) SSPAR(6)= 0.1_DP
+C MAXIMUM STEP SIZE EXPANSION FACTOR  BMAX .
+      IF (SSPAR(7) .LE. ZERO) SSPAR(7)= 3.0_DP
+C ASSUMED OPERATING ORDER  P .
+      IF (SSPAR(8) .LE. ZERO) SSPAR(8)= 2.0_DP
+C
+C DETERMINE SUITABLE INITIAL STEP SIZE.
+      H=MIN(H, 0.10_dp, SQRT(SQRT(RELERR*TEMP+ABSERR)))
+C USE LINEAR PREDICTOR ALONG TANGENT DIRECTION TO START NEWTON ITERATION.
+      YPOLD(1)=ONE
+      YPOLD(2:NP1)=ZERO
+C REQUEST TANGENT VECTOR AT Y VIA REVERSE CALL.
+      W=Y
+      YP=YPOLD
+      IFLAG=IFLAGC-10
+      IFLAGC=IFLAG
+      NFE=NFE+1
+      RETURN
+ 50   YP=WP
+C IF THE STARTING POINT IS OUT OF RANGE, GIVE UP.
+      IF (IFLAG .LE. -100) THEN
+        IFLAG=6
+        RETURN
+      ENDIF
+ 70   W=Y + H*YP
+      Z0=W
+      JUDY=1                                    ! DO JUDY=1,LITFH
+ 80   IF (JUDY > LITFH) GO TO 200
+C REQUEST THE CALCULATION OF THE NEWTON STEP  TZ  AT THE CURRENT
+C POINT  W  VIA REVERSE CALL.
+        IFLAG=IFLAGC-20
+        IFLAGC=IFLAG
+        NFE=NFE+1
+        RETURN
+100     IF (IFLAG .LE. -100) GO TO 200
+C
+C TAKE NEWTON STEP AND CHECK CONVERGENCE.
+        W=W + TZ
+        ITNUM=JUDY
+C COMPUTE QUANTITIES USED FOR OPTIMAL STEP SIZE ESTIMATION.
+        IF (JUDY .EQ. 1) THEN
+          LCALC=DNRM2(NP1,TZ,1)
+          RCALC=RHOLEN
+          Z1=W
+        ELSE IF (JUDY .EQ. 2) THEN
+          LCALC=DNRM2(NP1,TZ,1)/LCALC
+          RCALC=RHOLEN/RCALC
+        ENDIF
+C GO TO MOP-UP SECTION AFTER CONVERGENCE.
+        IF (DNRM2(NP1,TZ,1) .LE. RELERR*DNRM2(NP1,W,1)+ABSERR)
+     &                                                 GO TO 600
+C
+        JUDY=JUDY+1
+      GO TO 80                                   ! END DO
+C
+C NO CONVERGENCE IN  LITFH  ITERATIONS.  REDUCE  H  AND TRY AGAIN.
+200   IF (H .LE. FOURU*(ONE + S)) THEN
+        IFLAG=6
+        RETURN
+      ENDIF
+      H = H/2
+      GO TO 70
+C
+C ***** END OF STARTUP SECTION. *****
+C
+C ***** PREDICTOR SECTION. *****
+C
+300   FAIL=.FALSE.
+C COMPUTE POINT PREDICTED BY HERMITE INTERPOLANT.  USE STEP SIZE  H
+C COMPUTED ON LAST CALL TO  STEPNX .
+320   DO J=1,NP1
+        W(J)=QOFS(YOLD(J),YPOLD(J),Y(J),YP(J),HOLD,HOLD+H)
+      END DO
+      Z0=W 
+C
+C ***** END OF PREDICTOR SECTION. *****
+C
+C ***** CORRECTOR SECTION. *****
+C
+      JUDY=1                          ! CORRECTOR: DO JUDY=1,LITFH
+350   IF (JUDY > LITFH) GO TO 500
+C REQUEST THE CALCULATION OF THE NEWTON STEP  TZ  AT THE CURRENT
+C POINT  W  VIA REVERSE CALL.
+        IFLAG=IFLAGC-30
+        IFLAGC=IFLAG
+        NFE=NFE+1
+        RETURN
+400     IF (IFLAG .LE. -100) GO TO 500
+C
+C TAKE NEWTON STEP AND CHECK CONVERGENCE.
+        W=W + TZ
+        ITNUM=JUDY
+C COMPUTE QUANTITIES USED FOR OPTIMAL STEP SIZE ESTIMATION.
+        IF (JUDY .EQ. 1) THEN
+          LCALC=DNRM2(NP1,TZ,1)
+          RCALC=RHOLEN
+          Z1=W
+        ELSE IF (JUDY .EQ. 2) THEN
+          LCALC=DNRM2(NP1,TZ,1)/LCALC
+          RCALC=RHOLEN/RCALC
+        ENDIF
+C GO TO MOP-UP SECTION AFTER CONVERGENCE.
+        IF (DNRM2(NP1,TZ,1) .LE. RELERR*DNRM2(NP1,W,1)+ABSERR)
+     &                                                 GO TO 600
+C
+        JUDY=JUDY+1
+      GO TO 350                              ! END DO CORRECTOR
+C
+C NO CONVERGENCE IN  LITFH  ITERATIONS.  RECORD FAILURE AT CALCULATED  H , 
+C SAVE THIS STEP SIZE, REDUCE  H  AND TRY AGAIN.
+500   FAIL=.TRUE.
+      HFAIL=H
+      IF (H .LE. FOURU*(ONE + S)) THEN
+        IFLAG=6
+        RETURN
+      ENDIF
+      H = H/2
+      GO TO 320
+C
+C ***** END OF CORRECTOR SECTION. *****
+C
+C ***** MOP-UP SECTION. *****
+C
+C YOLD  AND  Y  ALWAYS CONTAIN THE LAST TWO POINTS FOUND ON THE ZERO
+C CURVE OF THE HOMOTOPY MAP.  YPOLD  AND  YP  CONTAIN THE TANGENT
+C VECTORS TO THE ZERO CURVE AT  YOLD  AND  Y , RESPECTIVELY.
+C
+600   YPOLD=YP
+      YOLD=Y
+      Y=W
+      YP=WP
+      W=Y - YOLD
+C UPDATE ARC LENGTH.
+      HOLD=DNRM2(NP1,W,1)
+      S=S+HOLD
+C
+C ***** END OF MOP-UP SECTION. *****
+C
+C ***** OPTIMAL STEP SIZE ESTIMATION SECTION. *****
+C
+C CALCULATE THE DISTANCE FACTOR  DCALC .
+      TZ=Z0 - Y
+      W=Z1 - Y
+      DCALC=DNRM2(NP1,TZ,1)
+      IF (DCALC .NE. ZERO) DCALC=DNRM2(NP1,W,1)/DCALC
+C
+C THE OPTIMAL STEP SIZE HBAR IS DEFINED BY
+C
+C   HT=HOLD * [MIN(LIDEAL/LCALC, RIDEAL/RCALC, DIDEAL/DCALC)]**(1/P)
+C
+C     HBAR = MIN [ MAX(HT, BMIN*HOLD, HMIN), BMAX*HOLD, HMAX ]
+C
+C IF CONVERGENCE HAD OCCURRED AFTER 1 ITERATION, SET THE CONTRACTION
+C FACTOR  LCALC  TO ZERO.
+      IF (ITNUM .EQ. 1) LCALC = ZERO
+C FORMULA FOR OPTIMAL STEP SIZE.
+      IF (LCALC+RCALC+DCALC .EQ. ZERO) THEN
+        HT = SSPAR(7) * HOLD
+      ELSE 
+        HT = (ONE/MAX(LCALC/SSPAR(1), RCALC/SSPAR(2), DCALC/SSPAR(3)))
+     &       **(ONE/SSPAR(8)) * HOLD
+      ENDIF
+C  HT  CONTAINS THE ESTIMATED OPTIMAL STEP SIZE.  NOW PUT IT WITHIN
+C REASONABLE BOUNDS.
+      H=MIN(MAX(HT,SSPAR(6)*HOLD,SSPAR(4)), SSPAR(7)*HOLD, SSPAR(5))
+      IF (ITNUM .EQ. 1) THEN
+C IF CONVERGENCE HAD OCCURRED AFTER 1 ITERATION, DON'T DECREASE  H .
+        H=MAX(H,HOLD)
+      ELSE IF (ITNUM .EQ. LITFH) THEN
+C IF CONVERGENCE REQUIRED THE MAXIMUM  LITFH  ITERATIONS, DON'T
+C INCREASE  H .
+        H=MIN(H,HOLD)
+      ENDIF
+C IF CONVERGENCE DID NOT OCCUR IN  LITFH  ITERATIONS FOR A PARTICULAR
+C H = HFAIL , DON'T CHOOSE THE NEW STEP SIZE LARGER THAN  HFAIL .
+      IF (FAIL) H=MIN(H,HFAIL)
+C
+C
+      IFLAG=IFLAGC
+      RETURN
+C CLEAN UP ALLOCATED WORKING STORAGE.
+ 700  START=.TRUE.
+      IFLAG=IFLAGC
+      IF (ALLOCATED(Z0)) DEALLOCATE(Z0)
+      IF (ALLOCATED(Z1)) DEALLOCATE(Z1)
+C
+      END SUBROUTINE STEPNX
+C
+      SUBROUTINE STRPTP(N,ICOUNT,IDEG,R,X)
+C
+C COMPUTES INITIAL POINTS FOR PATHS.
+C
+C ON INPUT:
+C
+C N  IS THE NUMBER OF (COMPLEX) VARIABLES.
+C
+C ICOUNT  IS A COUNTER USED TO INCREMENT EACH
+C   VARIABLE AROUND THE UNIT CIRCLE SO THAT EVERY
+C   COMBINATION OF START VALUES IS CHOSEN.  ICOUNT  IS
+C   INITIALIZED IN  POLSYS1H .
+C
+C IDEG(J)  IS THE DEGREE OF THE J-TH EQUATION.
+C
+C R(I,J)  IS A (COMPLEX) ARRAY GENERATED BY SUBROUTINE  INITP.
+C   R(1,J), AND R(2,J) ARE THE REAL AND IMAGINARY PARTS, RESPECTIVELY.
+C
+C ON OUTPUT:
+C
+C X(1:2*N)  IS INITIALIZED TO THE START VALUES FOR THE CURRENT PATH,
+C   WITH X(2*J-1) AND X(2*J) THE REAL AND IMAGINARY PARTS OF THE 
+C   J-TH VARIABLE, RESPECTIVELY.
+C
+C FUNCTIONS USED:  ATAN, COS, SIN.
+C
+      USE HOMPACK_KINDS, ONLY: PI
+      IMPLICIT NONE
+C
+C DECLARATION OF INPUT AND OUTPUT:
+      INTEGER:: N,ICOUNT(N),IDEG(N)
+      REAL(DP):: R(2,N),X(2*N)
+C
+C DECLARATION OF LOCAL VARIABLES:
+      INTEGER:: J
+      REAL(DP):: ANGLE,TWOPI
+      COMPLEX (dp):: XXXX
+C
+      DO J=1,N
+        IF (ICOUNT(J) .GE. IDEG(J)) THEN
+          ICOUNT(J)=1
+        ELSE
+          ICOUNT(J)=ICOUNT(J)+1
+          EXIT
+        END IF
+      END DO
+      TWOPI = 2*PI
+      DO J=1,N
+        ANGLE = TWOPI / REAL(IDEG(J), DP) * REAL(ICOUNT(J), DP)
+        XXXX = CMPLX(COS(ANGLE),SIN(ANGLE),kind=dp)*
+     &         CMPLX(R(1,J),R(2,J),kind=dp)
+        X(2*J-1) = REAL(XXXX)
+        X(2*J) = AIMAG(XXXX)
+      END DO
+C
+      END SUBROUTINE STRPTP
+C
+      SUBROUTINE TANGNS(RHOLEN,Y,YP,TZ,YPOLD,A,MODE,LENQR,NFE,N,IFLAG)
+C
+C THIS SUBROUTINE BUILDS THE JACOBIAN MATRIX OF THE HOMOTOPY MAP,
+C AND THEN CALCULATES THE (UNIT) TANGENT VECTOR AND THE NEWTON STEP
+C USING A PRECONDITIONED CONJUGATE GRADIENT ALGORITHM.
+C
+C THE CALLING PROGRAM MUST CONTAIN THE FOLLOWING INTERFACE BLOCK:
+C
+C     INTERFACE
+C       SUBROUTINE TANGNS(RHOLEN,Y,YP,TZ,YPOLD,A,MODE,LENQR,
+C    &    NFE,N,IFLAG)
+C       use hompack_interfaces, QR => QRSPARSE
+C       USE REAL_PRECISION
+C       REAL(DP), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
+C       REAL(DP), INTENT(IN OUT):: RHOLEN
+C       REAL(DP), INTENT(OUT), DIMENSION(:):: TZ,YP
+C       INTEGER, INTENT(IN):: LENQR,MODE,N
+C       INTEGER, INTENT(IN OUT):: IFLAG,NFE
+C       END SUBROUTINE TANGNS
+C     END INTERFACE
+C
+C
+C ON INPUT:
+C
+C RHOLEN < 0 IF THE NORM OF THE HOMOTOPY MAP EVALUATED AT
+C    (A, X, LAMBDA) IS TO BE COMPUTED.  IF  RHOLEN >= 0  THE NORM IS NOT
+C    COMPUTED AND  RHOLEN  IS NOT CHANGED.
+C
+C Y(1:N+1) = CURRENT POINT (X(S), LAMBDA(S)).
+C
+C YPOLD(1:N+1) = UNIT TANGENT VECTOR AT PREVIOUS POINT ON THE ZERO
+C    CURVE OF THE HOMOTOPY MAP.
+C
+C A(:) = PARAMETER VECTOR IN THE HOMOTOPY MAP.
+C
+C MODE = 1 IF THE JACOBIAN MATRIX IS SYMMETRIC AND STORED IN A PACKED
+C          SKYLINE FORMAT;
+C      = 2 IF THE JACOBIAN MATRIX IS STORED IN A SPARSE ROW FORMAT.
+C
+C LENQR  IS THE NUMBER OF NONZERO ENTRIES IN THE SPARSE JACOBIAN
+C    MATRICES, USED TO DETERMINE THE SPARSE MATRIX DATA STRUCTURES.
+C
+C NFE = NUMBER OF JACOBIAN MATRIX EVALUATIONS = NUMBER OF HOMOTOPY
+C    FUNCTION EVALUATIONS.
+C
+C N = DIMENSION OF X.
+C
+C IFLAG = -2, -1, OR 0, INDICATING THE PROBLEM TYPE.
+C
+C
+C ON OUTPUT:
+C
+C RHOLEN = ||RHO(A, X(S), LAMBDA(S)|| IF  RHOLEN < 0  ON INPUT.
+C    OTHERWISE  RHOLEN  IS UNCHANGED.
+C
+C Y, YPOLD, A, N  ARE UNCHANGED.
+C
+C YP(1:N+1) = DY/DS = UNIT TANGENT VECTOR TO INTEGRAL CURVE OF
+C    D(HOMOTOPY MAP)/DS = 0  AT  Y(S) = (X(S), LAMBDA(S)) .
+C
+C TZ(1:N+1) = THE NEWTON STEP = -(PSEUDO INVERSE OF  (D RHO(A,Y(S))/DX ,
+C    D RHO(A,Y(S))/D LAMBDA)) * RHO(A,Y(S)) .  THE NEWTON STEP IS
+C    CALCULATED ONLY IF RHOLEN < 0 ON INPUT.
+C
+C NFE  HAS BEEN INCRMENTED BY 1.
+C
+C IFLAG  IS UNCHANGED, UNLESS THE PRECONDITIONED CONJUGATE GRADIENT
+C    ITERATION FAILS TO CONVERGE, IN WHICH CASE THE TANGENT AND NEWTON 
+C    STEP VECTORS ARE NOT COMPUTED AND  TANGNS  RETURNS WITH  IFLAG = 4 .
+C
+C
+C CALLS  F (OR  RHO ), FJACS (OR  RHOJS ), PCGDS , GMRILUDS , AND THE
+C    BLAS ROUTINE  DNRM2 .
+C
+      USE HOMPACK_KINDS, ONLY: ZERO, ONE
+      USE HOMPACK_GLOBAL_LEGACY, ONLY: QR => QRSPARSE, ROWPOS, PP,
+     & COLPOS
+      USE BLAS_INTERFACES, ONLY: DNRM2
+      IMPLICIT NONE
+C
+      REAL(DP), INTENT(IN), DIMENSION(:):: A,Y,YPOLD
+      REAL(DP), INTENT(IN OUT):: RHOLEN
+      REAL(DP), INTENT(OUT), DIMENSION(:):: TZ,YP
+      INTEGER, INTENT(IN):: LENQR,MODE,N
+      INTEGER, INTENT(IN OUT):: IFLAG,NFE
+C
+C ***** LOCAL VARIABLES AND AUTOMATIC WORK ARRAYS. *****
+C
+      REAL(DP):: LAMBDA,RHOVEC(N),SIGMA,YPNORM
+      INTEGER:: J,NP1,JPOS
+C
+C *****  END OF SPECIFICATION INFORMATION.  *****
+C
+      NP1=N+1
+      NFE=NFE+1
+C NFE CONTAINS THE NUMBER OF JACOBIAN EVALUATIONS.
+      LAMBDA=Y(NP1)
+      ROWPOS(NP1)=LENQR+1
+C   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *
+C MODE = 1 STORAGE FORMAT.
+C   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *
+C
+      IF (MODE .EQ. 1) THEN
+C COMPUTE THE JACOBIAN MATRIX, STORE IT IN  [QR | -PP] .
+C
+      IF (IFLAG .EQ. -2) THEN
+C
+C  [QR | -PP] = [ D RHO(A,X,LAMBDA)/DX | D RHO(A,X,LAMBDA)/D LAMBDA ]  .
+C  RHOVEC = RHO(A,X,LAMBDA) .
+C
+C  PP = - (D RHO(A,X,LAMBDA)/D LAMBDA) .
+        CALL RHOJS(A,LAMBDA,Y(1:N))
+        IF (RHOLEN < 0) CALL RHO(A,LAMBDA,Y(1:N),RHOVEC)
+C
+      ELSE
+        CALL F(Y(1:N),PP)
+        IF (IFLAG .EQ. 0) THEN
+C
+C      [QR | -PP] = [ I - LAMBDA*DF(X) | A - F(X) ]  .
+C      RHOVEC = X - A + LAMBDA*(A - F(X)) .
+C
+          PP = PP - A(1:N)
+          IF (RHOLEN < 0) RHOVEC = Y(1:N) - A(1:N) - LAMBDA*PP
+          CALL FJACS(Y(1:N))
+          QR = (-LAMBDA)*QR
+          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + ONE
+        ELSE
+C
+C   [QR | -PP] = [ LAMBDA*DF(X) + (1 - LAMBDA)*I | F(X) - X + A ] .
+C   RHOVEC = X - A + LAMBDA*(F(X) - X + A) .
+C
+          PP = Y(1:N) - A(1:N) - PP
+          IF (RHOLEN < 0) RHOVEC = Y(1:N) - A(1:N) - LAMBDA*PP
+          CALL FJACS(Y(1:N))
+          QR = LAMBDA*QR
+          QR(ROWPOS(1:N)) = QR(ROWPOS(1:N)) + ONE - LAMBDA
+        ENDIF
+      ENDIF
+      ELSE
+C   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *
+C MODE = 2 STORAGE FORMAT.
+C   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *
+C
+      IF (IFLAG .EQ. -2) THEN
+C
+C  [QR] = [ D RHO(A,X,LAMBDA)/DX , D RHO(A,X,LAMBDA)/D LAMBDA ]  .
+C  RHOVEC = RHO(A,X,LAMBDA) .
+C
+        CALL RHOJS(A,LAMBDA,Y(1:N))
+        IF (RHOLEN < 0) CALL RHO(A,LAMBDA,Y(1:N),RHOVEC)
+C
+      ELSE
+        CALL F(Y(1:N),PP)
+        IF (IFLAG .EQ. 0) THEN
+C
+C      [QR | -PP] = [ I - LAMBDA*DF(X) | A - F(X) ]  .
+C      RHOVEC = X - A + LAMBDA*(A - F(X)) .
+C
+          PP = PP - A(1:N)
+          IF (RHOLEN < 0) RHOVEC = Y(1:N) - A(1:N) - LAMBDA*PP
+          CALL FJACS(Y(1:N))
+          QR = (-LAMBDA)*QR
+C FIND INDEX JPOS OF DIAGONAL ELEMENT IN JTH ROW OF QR.
+          DO J=1,N
+            JPOS=ROWPOS(J)
+            DO
+              IF (COLPOS(JPOS) .EQ. J) EXIT
+              JPOS=JPOS+1
+              IF (JPOS < ROWPOS(J+1)) CYCLE
+              IFLAG=4
+              RETURN
+            END DO
+            QR(JPOS) = QR(JPOS) + ONE
+          END DO
+        ELSE
+C
+C   [QR | -PP] = [ LAMBDA*DF(X) + (1 - LAMBDA)*I | F(X) - X + A ] .
+C   RHOVEC = X - A + LAMBDA*(F(X) - X + A) .
+C
+          PP = Y(1:N) - A(1:N) - PP
+          IF (RHOLEN < 0) RHOVEC = Y(1:N) - A(1:N) - LAMBDA*PP
+          CALL FJACS(Y(1:N))
+          QR = LAMBDA*QR
+C FIND INDEX JPOS OF DIAGONAL ELEMENT IN JTH ROW OF QR.
+          DO J=1,N
+            JPOS=ROWPOS(J)
+            DO
+              IF (COLPOS(JPOS) .EQ. J) EXIT
+              JPOS=JPOS+1
+              IF (JPOS < ROWPOS(J+1)) CYCLE
+              IFLAG=4
+              RETURN
+            END DO
+            QR(JPOS) = QR(JPOS) + ONE - LAMBDA
+          END DO
+        ENDIF
+      ENDIF
+      ENDIF
+C
+C   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *
+      YP=YPOLD
+C COMPUTE KERNEL OF JACOBIAN, WHICH SPECIFIES YP=DY/DS, USING A
+C PRECONDITIONED CONJUGATE GRADIENT ALGORITHM.
+      SELECT CASE (MODE)
+        CASE (1)
+        CALL PCGDS(N,LENQR,IFLAG,YP)
+        CASE (2)
+        CALL GMRILUDS(N,LENQR,IFLAG,YP)
+      END SELECT
+      IF (IFLAG .GT. 0) RETURN
+C
+C NORMALIZE TANGENT VECTOR YP.
+      YPNORM=DNRM2(NP1,YP,1)
+      YP = (ONE/YPNORM)*YP
+C
+C CHOOSE UNIT TANGENT VECTOR DIRECTION TO MAINTAIN CONTINUITY.
+      IF (DOT_PRODUCT(YP,YPOLD) .LT. ZERO) YP = -YP
+C
+C COMPUTE THE NORM OF THE HOMOTOPY MAP AND THE NEWTON STEP
+C IF IT WAS REQUESTED.
+      IF (RHOLEN < ZERO) THEN
+        RHOLEN=DNRM2(N,RHOVEC,1)
+C COMPUTE THE MINIMUM NORM SOLUTION OF [D RHO(Y(S))] V = -RHO(Y(S)).
+C V IS GIVEN BY  P - (P,Q)Q  , WHERE P IS ANY SOLUTION OF
+C [D RHO] V = -RHO  AND Q IS A UNIT VECTOR IN THE KERNEL OF [D RHO].
+        TZ=YPOLD
+        SELECT CASE (MODE)
+          CASE (1)
+          CALL PCGDS(N,LENQR,IFLAG,TZ,RHS=RHOVEC)
+          CASE (2)
+          CALL GMRILUDS(N,LENQR,IFLAG,TZ,RHS=RHOVEC)
+        END SELECT
+        IF (IFLAG .GT. 0) RETURN
+C TZ NOW CONTAINS A PARTICULAR SOLUTION P, AND YP CONTAINS A VECTOR Q
+C IN THE KERNEL(THE TANGENT).
+        SIGMA=DOT_PRODUCT(TZ(1:NP1),YP(1:NP1))
+        TZ = TZ - SIGMA*YP
+C TZ IS THE NEWTON STEP FROM THE CURRENT POINT Y(S) = (X(S), LAMBDA(S)).
+      END IF
+C
+      END SUBROUTINE TANGNS
+C
+      SUBROUTINE ROOT(T,FT,B,C,RELERR,ABSERR,IFLAG)
+C
+C  ROOT COMPUTES A ROOT OF THE NONLINEAR EQUATION F(X)=0
+C  WHERE F(X) IS A CONTINOUS REAL FUNCTION OF A SINGLE REAL
+C  VARIABLE X.  THE METHOD USED IS A COMBINATION OF BISECTION
+C  AND THE SECANT RULE.
+C
+C  NORMAL INPUT CONSISTS OF A CONTINUOS FUNCTION F AND AN
+C  INTERVAL (B,C) SUCH THAT F(B)*F(C).LE.0.0.  EACH ITERATION
+C  FINDS NEW VALUES OF B AND C SUCH THAT THE INTERVAL(B,C) IS
+C  SHRUNK AND F(B)*F(C).LE.0.0.  THE STOPPING CRITERION IS
+C
+C          DABS(B-C).LE.2.0*(RELERR*DABS(B)+ABSERR)
+C
+C  WHERE RELERR=RELATIVE ERROR AND ABSERR=ABSOLUTE ERROR ARE
+C  INPUT QUANTITIES.  SET THE FLAG, IFLAG, POSITIVE TO INITIALIZE
+C  THE COMPUTATION.  AS B,C AND IFLAG ARE USED FOR BOTH INPUT AND
+C  OUTPUT, THEY MUST BE VARIABLES IN THE CALLING PROGRAM.
+C
+C  IF 0 IS A POSSIBLE ROOT, ONE SHOULD NOT CHOOSE ABSERR=0.0.
+C
+C  THE OUTPUT VALUE OF B IS THE BETTER APPROXIMATION TO A ROOT
+C  AS B AND C ARE ALWAYS REDEFINED SO THAT DABS(F(B)).LE.DABS(F(C)).
+C
+C  TO SOLVE THE EQUATION, ROOT MUST EVALUATE F(X) REPEATEDLY. THIS
+C  IS DONE IN THE CALLING PROGRAM.  WHEN AN EVALUATION OF F IS
+C  NEEDED AT T, ROOT RETURNS WITH IFLAG NEGATIVE.  EVALUATE FT=F(T)
+C  AND CALL ROOT AGAIN.  DO NOT ALTER IFLAG.
+C
+C  WHEN THE COMPUTATION IS COMPLETE, ROOT RETURNS TO THE CALLING
+C  PROGRAM WITH IFLAG POSITIVE=
+C
+C     IFLAG=1  IF F(B)*F(C).LT.0 AND THE STOPPING CRITERION IS MET.
+C
+C          =2  IF A VALUE B IS FOUND SUCH THAT THE COMPUTED VALUE
+C              F(B) IS EXACTLY ZERO.  THE INTERVAL (B,C) MAY NOT
+C              SATISFY THE STOPPING CRITERION.
+C
+C          =3  IF DABS(F(B)) EXCEEDS THE INPUT VALUES DABS(F(B)),
+C              DABS(F(C)).  IN THIS CASE IT IS LIKELY THAT B IS CLOSE
+C              TO A POLE OF F.
+C
+C          =4  IF NO ODD ORDER ROOT WAS FOUND IN THE INTERVAL.  A
+C              LOCAL MINIMUM MAY HAVE BEEN OBTAINED.
+C
+C          =5  IF TOO MANY FUNCTION EVALUATIONS WERE MADE.
+C              (AS PROGRAMMED, 500 ARE ALLOWED.)
+C
+C  THIS CODE IS A MODIFICATION OF THE CODE ZEROIN WHICH IS COMPLETELY
+C  EXPLAINED AND DOCUMENTED IN THE TEXT  NUMERICAL COMPUTING:  AN
+C  INTRODUCTION,  BY L. F. SHAMPINE AND R. C. ALLEN.
+C
+C
+      REAL(DP):: A,ABSERR,ACBS,ACMB,AE,B,C,CMB,FA,FB,
+     &  FC,FT,FX,P,Q,RE,RELERR,T,TOL,U
+      INTEGER IC,IFLAG,KOUNT
+      SAVE
+C
+      IF(IFLAG.GE.0) GO TO 100
+      IFLAG=ABS(IFLAG)
+      GO TO (200,300,400), IFLAG
+  100 U=EPSILON(1.0_DP)
+      RE=MAX(RELERR,U)
+      AE=MAX(ABSERR,0.0_DP)
+      IC=0
+      ACBS=ABS(B-C)
+      A=C
+      T=A
+      IFLAG=-1
+      RETURN
+  200 FA=FT
+      T=B
+      IFLAG=-2
+      RETURN
+  300 FB=FT
+      FC=FA
+      KOUNT=2
+      FX=MAX(ABS(FB),ABS(FC))
+    1 IF(ABS(FC).GE.ABS(FB))GO TO 2
+C
+C  INTERCHANGE B AND C SO THAT ABS(F(B)).LE.ABS(F(C)).
+C
+      A=B
+      FA=FB
+      B=C
+      FB=FC
+      C=A
+      FC=FA
+    2 CMB=0.5*(C-B)
+      ACMB=ABS(CMB)
+      TOL=RE*ABS(B)+AE
+C
+C  TEST STOPPING CRITERION AND FUNCTION COUNT.
+C
+      IF(ACMB.LE.TOL)GO TO 8
+      IF(KOUNT.GE.500)GO TO 12
+C
+C  CALCULATE NEW ITERATE EXPLICITLY AS B+P/Q
+C  WHERE WE ARRANGE P.GE.0.  THE IMPLICIT
+C  FORM IS USED TO PREVENT OVERFLOW.
+C
+      P=(B-A)*FB
+      Q=FA-FB
+      IF(P.GE.0.0)GO TO 3
+      P=-P
+      Q=-Q
+C
+C  UPDATE A, CHECK IF REDUCTION IN THE SIZE OF BRACKETING
+C  INTERVAL IS SATISFACTORY.  IF NOT BISECT UNTIL IT IS.
+C
+    3 A=B
+      FA=FB
+      IC=IC+1
+      IF(IC.LT.4)GO TO 4
+      IF(8.0*ACMB.GE.ACBS)GO TO 6
+      IC=0
+      ACBS=ACMB
+C
+C  TEST FOR TOO SMALL A CHANGE.
+C
+    4 IF(P.GT.ABS(Q)*TOL)GO TO 5
+C
+C  INCREMENT BY TOLERANCE
+C
+      B=B+SIGN(TOL,CMB)
+      GO TO 7
+C
+C  ROOT OUGHT TO BE BETWEEN B AND (C+B)/2
+C
+    5 IF(P.GE.CMB*Q)GO TO 6
+C
+C  USE SECANT RULE.
+C
+      B=B+P/Q
+      GO TO 7
+C
+C  USE BISECTION.
+C
+    6 B=0.5*(C+B)
+C
+C  HAVE COMPLETED COMPUTATION FOR NEW ITERATE B.
+C
+    7 T=B
+      IFLAG=-3
+      RETURN
+  400 FB=FT
+      IF(FB.EQ.0.0)GO TO 9
+      KOUNT=KOUNT+1
+      IF(SIGN(1.0_DP,FB).NE.SIGN(1.0_DP,FC))GO TO 1
+      C=A
+      FC=FA
+      GO TO 1
+C
+C FINISHED.  SET IFLAG.
+C
+    8 IF(SIGN(1.0_DP,FB).EQ.SIGN(1.0_DP,FC))GO TO 11
+      IF(ABS(FB).GT.FX)GO TO 10
+      IFLAG=1
+      RETURN
+    9 IFLAG=2
+      RETURN
+   10 IFLAG=3
+      RETURN
+   11 IFLAG=4
+      RETURN
+   12 IFLAG=5
+      RETURN
+      END SUBROUTINE ROOT
+C
+      END MODULE HOMPACK_CORE_LEGACY

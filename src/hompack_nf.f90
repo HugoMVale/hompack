@@ -50,7 +50,7 @@ module hompack_nf
    end type hompack_callbacks
 
    type fixnpf_workspace
-   !! Linear-algebra workspace for 'fixpnf'.
+   !! Linear-algebra workspace for [[fixpnf]].
       real(dp), allocatable :: alpha(:)
          !! Array used during interpolation and Newton-step calculations.
       real(dp), allocatable :: qr(:, :)
@@ -72,7 +72,7 @@ module hompack_nf
    end type fixnpf_workspace
 
    type fixnpf_state
-   !! State variables for 'fixpnf'.
+   !! State variables for [[fixpnf]].
       real(dp) :: abserr
       real(dp) :: relerr
       real(dp) :: curtol
@@ -89,7 +89,7 @@ module hompack_nf
       real(dp), allocatable :: yold(:)
       real(dp), allocatable :: yp(:)
       real(dp), allocatable :: ypold(:)
-      type(fixnpf_workspace) :: ws
+      type(fixnpf_workspace) :: workspace
    contains
       procedure :: alloc => allocate_state
    end type fixnpf_state
@@ -345,7 +345,7 @@ contains
       type(fixnpf_state), intent(inout), optional :: istate
          !! State variables for 'fixpnf'.
       logical, intent(in), optional :: ispoly
-         !! Optional flag used only by the polynomial-system driver `POLSYS1H`.
+         !! Optional flag used only by the polynomial-system driver [[POLSYS1H]].
 
       type(fixnpf_state) :: state
 
@@ -522,20 +522,24 @@ contains
          ! answer at lambda = 1.0
          if (y(1) >= one) then
 
-            ! Save 'yold' for arc length calculation later
-            state%ws%z0 = state%yold
-            call rootnf(callbacks, state, ansre, ansae, y, a)
-            nfe = state%nfe
-            iflag = 1
+            associate (ws => state%workspace)
 
-            ! Set error flag if 'rootnf' could not get the point on the zero
-            ! curve at lambda = 1.0
-            if (state%iflag > 0) iflag = state%iflag
+               ! Save 'yold' for arc length calculation later
+               ws%z0 = state%yold
+               call rootnf(callbacks, state, ansre, ansae, y, a)
+               nfe = state%nfe
+               iflag = 1
 
-            ! Calculate final arc length
-            state%ws%w = y - state%ws%z0
-            arclen = state%s - state%hold + norm2(state%ws%w)
-            return
+               ! Set error flag if 'rootnf' could not get the point on the zero
+               ! curve at lambda = 1.0
+               if (state%iflag > 0) iflag = state%iflag
+
+               ! Calculate final arc length
+               ws%w = y - ws%z0
+               arclen = state%s - state%hold + norm2(ws%w)
+               return
+
+            end associate
 
          end if
 
@@ -601,109 +605,113 @@ contains
       ! following parameter statement
       limit = 2*(int(abs(log10(aerr + rerr))) + 1)
 
-      state%ws%tz = y - state%yold
-      dels = norm2(state%ws%tz)
+      associate (ws => state%workspace)
 
-      ! Using two points and tangents on the homotopy zero curve, construct the Hermite
-      ! cubic interpolant q(s). Then use 'root' to find the 's' corresponding to
-      ! 'lambda=1'. The two points on the zero curve are always chosen to bracket
-      ! 'lambda=1', with the bracketing interval always being [0, dels].
-      sa = zero
-      sb = dels
-      lcode = 1
-130   call root(sout, qsout, sa, sb, rerr, aerr, lcode)
-      if (lcode > 0) go to 140
-      qsout = qofs(state%yold(1), state%ypold(1), y(1), state%yp(1), dels, sout) - one
-      go to 130
+         ws%tz = y - state%yold
+         dels = norm2(ws%tz)
 
-      ! If lambda=1 were bracketed, root cannot fail
-140   if (lcode > 2) then
-         state%iflag = 6
-         return
-      end if
+         ! Using two points and tangents on the homotopy zero curve, construct the Hermite
+         ! cubic interpolant q(s). Then use 'root' to find the 's' corresponding to
+         ! 'lambda=1'. The two points on the zero curve are always chosen to bracket
+         ! 'lambda=1', with the bracketing interval always being [0, dels].
+         sa = zero
+         sb = dels
+         lcode = 1 ! forces initialization of 'root'
+130      call root(sout, qsout, sa, sb, rerr, aerr, lcode)
+         if (lcode > 0) go to 140
+         qsout = qofs(state%yold(1), state%ypold(1), y(1), state%yp(1), dels, sout) - one
+         go to 130
 
-      ! Calculate q(sa) as the initial point for a Newton iteration
-      do jw = 1, np1
-         state%ws%w(jw) = qofs(state%yold(jw), state%ypold(jw), y(jw), state%yp(jw), dels, sa)
-      end do
-
-      ! Tangent information 'yp' is no longer needed. Hereafter, 'yp' represents the most
-      ! recent point which is on the opposite side of the hyperplane 'lambda=1' from 'y'
-
-      ! Prepare for main loop
-      state%yp = state%yold
-
-      ! Initialize bracket to indicate that the points 'y' and 'yold' bracket 'lambda=1',
-      ! thus 'yold = yp'
-      bracket = .true.
-
-      ! Main loop
-      do judy = 1, limit
-
-         ! Calculate Newton step at current estimate 'w'
-         call tangnf(callbacks, &
-                     sa, state%ws%w, state%ws%wp, state%ypold, a, state%ws%qr, state%ws%alpha, state%ws%tz, state%ws%pivot, &
-                     state%nfe, state%n, state%iflag)
-         if (state%iflag > 0) return
-
-         ! Next point = current point + Newton step
-         state%ws%w = state%ws%w + state%ws%tz
-
-         ! Check for convergence
-         if ((abs(state%ws%w(1) - one) <= rerr + aerr) .and. &
-             (norm2(state%ws%tz) <= rerr*norm2(state%ws%w(2:np1)) + aerr)) then
-            y = state%ws%w
+         ! If lambda=1 were bracketed, root cannot fail
+140      if (lcode > 2) then
+            state%iflag = 6
             return
          end if
 
-         ! Prepare for next iteration
-         if (abs(state%ws%w(1) - one) <= rerr + aerr) then
-            state%ypold = state%ws%wp
-            cycle
-         end if
+         ! Calculate q(sa) as the initial point for a Newton iteration
+         do jw = 1, np1
+            ws%w(jw) = qofs(state%yold(jw), state%ypold(jw), y(jw), state%yp(jw), dels, sa)
+         end do
 
-         ! Update 'y' and 'yold'
-         state%yold = y
-         y = state%ws%w
+         ! Tangent information 'yp' is no longer needed. Hereafter, 'yp' represents the most
+         ! recent point which is on the opposite side of the hyperplane 'lambda=1' from 'y'
 
-         ! Update 'yp' such that 'yp' is the most recent point opposite of 'lambda=1'
-         ! from 'y'. Set bracket=.true. iff 'y' and 'yold' bracket 'lambda=1' so that
-         ! yp = yold .
-         if ((y(1) - one)*(state%yold(1) - one) > 0) then
-            bracket = .false.
-         else
-            bracket = .true.
-            state%yp = state%yold
-         end if
+         ! Prepare for main loop
+         state%yp = state%yold
 
-         ! Compute dels=||y-yp||
-         state%ws%tz = y - state%yp
-         dels = norm2(state%ws%tz)
+         ! Initialize bracket to indicate that the points 'y' and 'yold' bracket 'lambda=1',
+         ! thus 'yold = yp'
+         bracket = .true.
 
-         ! Compute tz for the linear predictor w = y + tz, where tz = sa*(yold-y).
-         sa = (one - y(1))/(state%yold(1) - y(1))
-         state%ws%tz = sa*(state%yold - y)
+         ! Main loop
+         do judy = 1, limit
 
-         ! To insure stability, the linear prediction must be no farther from y than yp is.
-         ! This is guaranteed if bracket=true. If linear prediction is too far away, use
-         ! bracketing points to compute linear prediction.
-         if (.not. bracket) then
-            if (norm2(state%ws%tz) > dels) then
-               ! Compute tz = sa*(yp-y)
-               sa = (one - y(1))/(state%yp(1) - y(1))
-               state%ws%tz = sa*(state%yp - y)
+            ! Calculate Newton step at current estimate 'w'
+            call tangnf(callbacks, sa, &
+                        ws%w, ws%wp, state%ypold, a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
+                        state%nfe, state%n, state%iflag)
+            if (state%iflag > 0) return
+
+            ! Next point = current point + Newton step
+            ws%w = ws%w + ws%tz
+
+            ! Check for convergence
+            if ((abs(ws%w(1) - one) <= rerr + aerr) .and. &
+                (norm2(ws%tz) <= rerr*norm2(ws%w(2:np1)) + aerr)) then
+               y = ws%w
+               return
             end if
-         end if
 
-         ! Compute estimate w = y + tz  and save old tangent vector.
-         state%ws%w = state%ws%w + state%ws%tz
-         state%ypold = state%ws%wp
+            ! Prepare for next iteration
+            if (abs(ws%w(1) - one) <= rerr + aerr) then
+               state%ypold = ws%wp
+               cycle
+            end if
 
-      end do
+            ! Update 'y' and 'yold'
+            state%yold = y
+            y = ws%w
 
-      ! The alternating secant estimation and Newton iteration has not converged in limit
-      ! steps. Error return.
-      state%iflag = 6
+            ! Update 'yp' such that 'yp' is the most recent point opposite of 'lambda=1'
+            ! from 'y'. Set bracket=.true. iff 'y' and 'yold' bracket 'lambda=1' so that
+            ! yp = yold .
+            if ((y(1) - one)*(state%yold(1) - one) > 0) then
+               bracket = .false.
+            else
+               bracket = .true.
+               state%yp = state%yold
+            end if
+
+            ! Compute dels=||y-yp||
+            ws%tz = y - state%yp
+            dels = norm2(ws%tz)
+
+            ! Compute tz for the linear predictor w = y + tz, where tz = sa*(yold-y).
+            sa = (one - y(1))/(state%yold(1) - y(1))
+            ws%tz = sa*(state%yold - y)
+
+            ! To insure stability, the linear prediction must be no farther from y than
+            ! yp is. This is guaranteed if bracket=true. If linear prediction is too far
+            ! away, use bracketing points to compute linear prediction.
+            if (.not. bracket) then
+               if (norm2(ws%tz) > dels) then
+                  ! Compute tz = sa*(yp-y)
+                  sa = (one - y(1))/(state%yp(1) - y(1))
+                  ws%tz = sa*(state%yp - y)
+               end if
+            end if
+
+            ! Compute estimate w = y + tz  and save old tangent vector.
+            ws%w = ws%w + ws%tz
+            state%ypold = ws%wp
+
+         end do
+
+         ! The alternating secant estimation and Newton iteration has not converged in
+         ! limit Error return.
+         state%iflag = 6
+
+      end associate
 
    end subroutine rootnf
 
@@ -711,8 +719,8 @@ contains
    !! This subroutine takes one step along the zero curve of the homotopy map using a
    !! predictor-corrector algorithm. The predictor uses a Hermite cubic interpolant, and
    !! the corrector returns to the zero curve along the flow normal to the Davidenko flow.
-   !! `stepnf` also estimates a step size `h` for the next step along the zero curve.
-   !! Normally, `stepnf` is used indirectly through `fixpnf`, and should be called
+   !! [[stepnf]] also estimates a step size `h` for the next step along the zero curve.
+   !! Normally, [[stepnf]] is used indirectly through [[fixpnf]], and should be called
    !! directly only if it is necessary to modify the stepping algorithm's parameters.
 
       use hompack_kinds, only: one, zero
@@ -746,227 +754,203 @@ contains
       np1 = state%n + 1
       state%crash = .true.
 
-      ! The arclength 's' must be nonnegative
-      if (state%s < zero) return
+      associate (ws => state%workspace)
 
-      ! If step size is too small, determine an acceptable one
-      if (state%h < fouru*(one + state%s)) then
-         state%h = fouru*(one + state%s)
-         return
-      end if
+         ! The arclength 's' must be nonnegative
+         if (state%s < zero) return
 
-      ! If error tolerances are too small, increase them to acceptable values
-      temp = norm2(y) + one
-      if (0.5_dp*(state%relerr*temp + state%abserr) < twou*temp) then
-         if (state%relerr /= zero) then
-            state%relerr = fouru*(one + fouru)
-            state%abserr = max(state%abserr, zero)
-         else
-            state%abserr = fouru*temp
+         ! If step size is too small, determine an acceptable one
+         if (state%h < fouru*(one + state%s)) then
+            state%h = fouru*(one + state%s)
+            return
          end if
-         return
-      end if
 
-      ! STARTUP SECTION (FIRST STEP ALONG ZERO CURVE)
+         ! If error tolerances are too small, increase them to acceptable values
+         temp = norm2(y) + one
+         if (0.5_dp*(state%relerr*temp + state%abserr) < twou*temp) then
+            if (state%relerr /= zero) then
+               state%relerr = fouru*(one + fouru)
+               state%abserr = max(state%abserr, zero)
+            else
+               state%abserr = fouru*temp
+            end if
+            return
+         end if
 
-      state%crash = .false.
-      startup: if (state%start) then
+         ! STARTUP SECTION (FIRST STEP ALONG ZERO CURVE)
+
+         state%crash = .false.
+         if (state%start) then
+            fail = .false.
+            state%start = .false.
+
+            ! Determine suitable initial step size
+            state%h = min(state%h, 0.1_dp, sqrt(sqrt(state%relerr*temp + state%abserr)))
+
+            ! Use linear predictor along tangent direction to start Newton iteration
+            state%ypold(1) = one
+            state%ypold(2:np1) = zero
+            call tangnf(callbacks, state%s, y, state%yp, state%ypold, a, &
+                        ws%qr, ws%alpha, ws%tz, ws%pivot, &
+                        state%nfe, state%n, state%iflag)
+
+            if (state%iflag > 0) return
+
+            do
+               ws%w = y + state%h*state%yp
+               ws%z0 = ws%w
+               do judy = 1, litfh
+                  rholen = -one
+
+                  ! Calculate the Newton step 'tz' at the current point 'w'
+                  call tangnf(callbacks, &
+                              rholen, ws%w, ws%wp, state%ypold, a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
+                              state%nfe, state%n, state%iflag)
+                  if (state%iflag > 0) return
+
+                  ! Take Newton step and check convergence
+                  ws%w = ws%w + ws%tz
+                  itnum = judy
+
+                  ! Compute quantities used for optimal step size estimation
+                  if (judy == 1) then
+                     lcalc = norm2(ws%tz)
+                     rcalc = rholen
+                     ws%z1 = ws%w
+                  else if (judy == 2) then
+                     lcalc = norm2(ws%tz)/lcalc
+                     rcalc = rholen/rcalc
+                  end if
+
+                  ! Go to mop-up section after convergence
+                  if (norm2(ws%tz) <= state%relerr*norm2(ws%w) + state%abserr) go to 600
+
+               end do
+
+               ! No convergence in litfh iterations. Reduce h and try again.
+               if (state%h <= fouru*(one + state%s)) then
+                  state%iflag = 6
+                  return
+               end if
+               state%h = state%h/2
+
+            end do
+
+         end if
+
+         ! PREDICTOR SECTION
+
          fail = .false.
-         state%start = .false.
+         do
 
-         ! Determine suitable initial step size
-         state%h = min(state%h, 0.1_dp, sqrt(sqrt(state%relerr*temp + state%abserr)))
+            ! Compute point predicted by Hermite interpolant. Use step size 'h' computed on
+            ! last call to 'stepnf'.
+            do j = 1, np1
+               ws%w(j) = qofs(state%yold(j), state%ypold(j), y(j), state%yp(j), &
+                              state%hold, state%hold + state%h)
+            end do
+            ws%z0 = ws%w
 
-         ! Use linear predictor along tangent direction to start Newton iteration
-         state%ypold(1) = one
-         state%ypold(2:np1) = zero
-         call tangnf(callbacks, state%s, y, state%yp, state%ypold, a, &
-                     state%ws%qr, state%ws%alpha, state%ws%tz, state%ws%pivot, &
-                     state%nfe, state%n, state%iflag)
-
-         if (state%iflag > 0) return
-
-         lp: do
-            state%ws%w = y + state%h*state%yp
-            state%ws%z0 = state%ws%w
+            ! CORRECTOR SECTION
             do judy = 1, litfh
-               rholen = -one
 
                ! Calculate the Newton step 'tz' at the current point 'w'
+               rholen = -one
                call tangnf(callbacks, &
-                        rholen, state%ws%w, state%ws%wp, state%ypold, a, state%ws%qr, state%ws%alpha, state%ws%tz, state%ws%pivot, &
+                           rholen, ws%w, ws%wp, state%yp, a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
                            state%nfe, state%n, state%iflag)
                if (state%iflag > 0) return
 
                ! Take Newton step and check convergence
-               state%ws%w = state%ws%w + state%ws%tz
+               ws%w = ws%w + ws%tz
                itnum = judy
 
-               ! Compute quantities used for optimal step size estimation
+               ! Compute quantities used for optimal step size estimation.
                if (judy == 1) then
-                  lcalc = norm2(state%ws%tz)
+                  lcalc = norm2(ws%tz)
                   rcalc = rholen
-                  state%ws%z1 = state%ws%w
+                  ws%z1 = ws%w
                else if (judy == 2) then
-                  lcalc = norm2(state%ws%tz)/lcalc
+                  lcalc = norm2(ws%tz)/lcalc
                   rcalc = rholen/rcalc
                end if
 
-               ! Go to mop-up section after convergence
-               if (norm2(state%ws%tz) <= state%relerr*norm2(state%ws%w) + state%abserr) go to 600
+               ! Go to mop-up section after convergence.
+               if (norm2(ws%tz) <= state%relerr*norm2(ws%w) + state%abserr) go to 600
 
             end do
 
-            ! No convergence in litfh iterations. Reduce h and try again.
+            ! No convergence in 'litfh' iterations. Record failure at calculated 'h'
+            ! Save this step size, reduce 'h' and try again.
+            fail = .true.
+            hfail = state%h
             if (state%h <= fouru*(one + state%s)) then
                state%iflag = 6
                return
             end if
             state%h = state%h/2
 
-         end do lp
-      end if startup
-
-      ! PREDICTOR SECTION
-
-      fail = .false.
-      hp: do
-
-         ! Compute point predicted by Hermite interpolant. Use step size 'h' computed on
-         ! last call to 'stepnf'.
-         do j = 1, np1
-            state%ws%w(j) = qofs(state%yold(j), state%ypold(j), y(j), state%yp(j), &
-                                 state%hold, state%hold + state%h)
          end do
-         state%ws%z0 = state%ws%w
 
-         ! CORRECTOR SECTION
-         corrector: do judy = 1, litfh
+         ! MOP-UP SECTION
 
-            ! Calculate the Newton step 'tz' at the current point 'w'
-            rholen = -one
-            call tangnf(callbacks, &
-                        rholen, state%ws%w, state%ws%wp, state%yp, a, state%ws%qr, state%ws%alpha, state%ws%tz, state%ws%pivot, &
-                        state%nfe, state%n, state%iflag)
-            if (state%iflag > 0) return
+         ! 'yold'  and  'y'  always contain the last two points found on the zero curve of
+         ! the homotopy map. 'ypold' and 'yp' contain the tangent vectors to the zero curve
+         ! at  'yold'  and  'y' , respectively.
+600      state%ypold = state%yp
+         state%yold = y
+         y = ws%w
+         state%yp = ws%wp
+         ws%w = y - state%yold
 
-            ! Take Newton step and check convergence
-            state%ws%w = state%ws%w + state%ws%tz
-            itnum = judy
+         ! Update arc length
+         state%hold = norm2(ws%w)
+         state%s = state%s + state%hold
 
-            ! Compute quantities used for optimal step size estimation.
-            if (judy == 1) then
-               lcalc = norm2(state%ws%tz)
-               rcalc = rholen
-               state%ws%z1 = state%ws%w
-            else if (judy == 2) then
-               lcalc = norm2(state%ws%tz)/lcalc
-               rcalc = rholen/rcalc
-            end if
+         ! OPTIMAL STEP SIZE ESTIMATION SECTION
 
-            ! Go to mop-up section after convergence.
-            if (norm2(state%ws%tz) <= state%relerr*norm2(state%ws%w) + state%abserr) go to 600
+         ! Calculate the distance factor 'dcalc'
+         ws%tz = ws%z0 - y
+         ws%w = ws%z1 - y
+         dcalc = norm2(ws%tz)
+         if (dcalc /= zero) dcalc = norm2(ws%w)/dcalc
 
-         end do corrector
+         ! The optimal step size hbar is defined by
+         !
+         !   ht = hold * [min(lideal/lcalc, rideal/rcalc, dideal/dcalc)]**(1/p)
+         !
+         !   hbar = min [ max(ht, bmin*hold, hmin), bmax*hold, hmax ]
 
-         ! No convergence in 'litfh' iterations. Record failure at calculated 'h'
-         ! Save this step size, reduce 'h' and try again.
-         fail = .true.
-         hfail = state%h
-         if (state%h <= fouru*(one + state%s)) then
-            state%iflag = 6
-            return
+         ! If convergence had occurred after 1 iteration, set the contraction factor 'lcalc'
+         ! to zero.
+         if (itnum == 1) lcalc = zero
+
+         ! Formula for optimal step size
+         if (lcalc + rcalc + dcalc == zero) then
+            ht = sspar(7)*state%hold
+         else
+            ht = (one/max(lcalc/sspar(1), rcalc/sspar(2), dcalc/sspar(3))) &
+                 **(one/sspar(8))*state%hold
          end if
-         state%h = state%h/2
 
-      end do hp
+         ! 'ht' contains the estimated optimal step size. Now put it within reasonable bounds
+         state%h = min(max(ht, sspar(6)*state%hold, sspar(4)), sspar(7)*state%hold, sspar(5))
 
-      ! MOP-UP SECTION
+         if (itnum == 1) then
+            ! If convergence had occurred after 1 iteration, don't decrease 'h'.
+            state%h = max(state%h, state%hold)
+         else if (itnum == litfh) then
+            ! If convergence required the maximum 'litfh' iterations, don't increase 'h'.
+            state%h = min(state%h, state%hold)
+         end if
 
-      ! 'yold'  and  'y'  always contain the last two points found on the zero curve of
-      ! the homotopy map. 'ypold' and 'yp' contain the tangent vectors to the zero curve
-      ! at  'yold'  and  'y' , respectively.
-600   state%ypold = state%yp
-      state%yold = y
-      y = state%ws%w
-      state%yp = state%ws%wp
-      state%ws%w = y - state%yold
+         ! If convergence did not occur in 'litfh' iterations for a particular 'h = hfail',
+         ! don't choose the new step size larger than 'hfail'.
+         if (fail) state%h = min(state%h, hfail)
 
-      ! Update arc length
-      state%hold = norm2(state%ws%w)
-      state%s = state%s + state%hold
-
-      ! OPTIMAL STEP SIZE ESTIMATION SECTION
-
-      ! Calculate the distance factor 'dcalc'
-      state%ws%tz = state%ws%z0 - y
-      state%ws%w = state%ws%z1 - y
-      dcalc = norm2(state%ws%tz)
-      if (dcalc /= zero) dcalc = norm2(state%ws%w)/dcalc
-
-      ! The optimal step size hbar is defined by
-      !
-      !   ht = hold * [min(lideal/lcalc, rideal/rcalc, dideal/dcalc)]**(1/p)
-      !
-      !   hbar = min [ max(ht, bmin*hold, hmin), bmax*hold, hmax ]
-
-      ! If convergence had occurred after 1 iteration, set the contraction factor 'lcalc'
-      ! to zero.
-      if (itnum == 1) lcalc = zero
-
-      ! Formula for optimal step size
-      if (lcalc + rcalc + dcalc == zero) then
-         ht = sspar(7)*state%hold
-      else
-         ht = (one/max(lcalc/sspar(1), rcalc/sspar(2), dcalc/sspar(3))) &
-              **(one/sspar(8))*state%hold
-      end if
-
-      ! 'ht' contains the estimated optimal step size. Now put it within reasonable bounds
-      state%h = min(max(ht, sspar(6)*state%hold, sspar(4)), sspar(7)*state%hold, sspar(5))
-
-      if (itnum == 1) then
-         ! If convergence had occurred after 1 iteration, don't decrease 'h'.
-         state%h = max(state%h, state%hold)
-      else if (itnum == litfh) then
-         ! If convergence required the maximum 'litfh' iterations, don't increase 'h'.
-         state%h = min(state%h, state%hold)
-      end if
-
-      ! If convergence did not occur in 'litfh' iterations for a particular 'h = hfail',
-      ! don't choose the new step size larger than 'hfail'.
-      if (fail) state%h = min(state%h, hfail)
+      end associate
 
    end subroutine stepnf
-
-   elemental pure function qofs(f0, fp0, f1, fp1, dels, s) result(res)
-   !! Computes the Hermite cubic interpolant at a point s.
-      real(dp), intent(in) :: f0
-         !! Function value at the start of the interval.
-      real(dp), intent(in) :: fp0
-         !! Derivative value at the start of the interval.
-      real(dp), intent(in) :: f1
-         !! Function value at the end of the interval.
-      real(dp), intent(in) :: fp1
-         !! Derivative value at the end of the interval.
-      real(dp), intent(in) :: dels
-         !! Width of the interpolation interval.
-      real(dp), intent(in) :: s
-         !! Local coordinate of the interpolation point to the start.
-      real(dp) :: res
-
-      real(8) :: dd01, dd001, dd011, dd0011
-
-      ! Calculate divided differences sequentially
-      dd01 = (f1 - f0)/dels
-      dd001 = (dd01 - fp0)/dels
-      dd011 = (fp1 - dd01)/dels
-      dd0011 = (dd011 - dd001)/dels
-
-      ! Evaluate the cubic polynomial using Horner's method
-      res = ((dd0011*(s - dels) + dd001)*s + fp0)*s + f0
-
-   end function qofs
 
    subroutine tangnf( &
       callbacks, &
@@ -1129,6 +1113,35 @@ contains
 
    end subroutine tangnf
 
+   elemental pure function qofs(f0, fp0, f1, fp1, dels, s) result(res)
+   !! Computes the Hermite cubic interpolant at a point s.
+      real(dp), intent(in) :: f0
+         !! Function value at the start of the interval.
+      real(dp), intent(in) :: fp0
+         !! Derivative value at the start of the interval.
+      real(dp), intent(in) :: f1
+         !! Function value at the end of the interval.
+      real(dp), intent(in) :: fp1
+         !! Derivative value at the end of the interval.
+      real(dp), intent(in) :: dels
+         !! Width of the interpolation interval.
+      real(dp), intent(in) :: s
+         !! Local coordinate of the interpolation point to the start.
+      real(dp) :: res
+
+      real(8) :: dd01, dd001, dd011, dd0011
+
+      ! Calculate divided differences sequentially
+      dd01 = (f1 - f0)/dels
+      dd001 = (dd01 - fp0)/dels
+      dd011 = (fp1 - dd01)/dels
+      dd0011 = (dd011 - dd001)/dels
+
+      ! Evaluate the cubic polynomial using Horner's method
+      res = ((dd0011*(s - dels) + dd001)*s + fp0)*s + f0
+
+   end function qofs
+
    pure subroutine allocate_workspace(self, n, stat)
    !! Allocates workspace arrays in the [[fixnpf_workspace]] type.
       class(fixnpf_workspace), intent(inout) :: self
@@ -1164,8 +1177,8 @@ contains
 
    end subroutine allocate_workspace
 
-   !! Initializes scalar options, flags, and allocates state vectors and internal workspace.
    pure subroutine allocate_state(self, n, stat)
+   !! Allocates internal arrays in the [[fixnpf_state]] type.
 
       class(fixnpf_state), intent(inout) :: self
          !! State.
@@ -1199,7 +1212,7 @@ contains
       end if
 
       ! Deep-allocate the internal workspace
-      call self%ws%alloc(n)
+      call self%workspace%alloc(n)
 
    end subroutine allocate_state
 

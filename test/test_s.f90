@@ -57,7 +57,9 @@ program test_s
 
    use switch
    use hompack_kinds, only: dp, zero, one
-   use hompack, only: fixpds, fixpns, fixpqs
+   use hompack_ds, only: fixpds
+   use hompack_ns, only: fixpns
+   use hompack_qs, only: fixpqs
    implicit none
 
    integer, parameter :: n = 8, ndima = 8
@@ -166,7 +168,7 @@ subroutine fjacs(x)
 !! packed skyline form (`mode=1`) in the arrays `qrsparse` and `rowpos`.
 
    use hompack_kinds, only: dp
-   use hompack_global, only: qrsparse, rowpos
+   use hompack_global_legacy, only: qrsparse, rowpos
    use switch
    implicit none
 
@@ -220,7 +222,7 @@ end subroutine fjacs
 subroutine rho(a, lambda, x, v)
 !! Evaluate `rho(a,lambda,x)` and return in the vector `v`.
    use hompack_kinds, only: dp
-   use hompack_interfaces, only: f
+   use hompack_core_legacy, only: f
    implicit none
 
    real(dp), intent(in):: a(:), x(:)
@@ -238,7 +240,7 @@ subroutine rhoa(a, lambda, x)
 !! Calculate and return in `a` the vector `z` such that `rho(z,lambda,x) = 0`.
 
    use hompack_kinds, only: dp
-   use hompack_interfaces, only: f
+   use hompack_core_legacy, only: f
    implicit none
 
    real(dp), intent(out) :: a(:)
@@ -258,8 +260,8 @@ subroutine rhojs(a, lambda, x)
 !! (`mode=2`) in the arrays `qrsparse`, `rowpos`, and `colpos`.
 
    use hompack_kinds, only: dp, zero
-   use hompack_interfaces, only: f
-   use hompack_global, only: qrsparse, rowpos, colpos
+   use hompack_core_legacy, only: f
+   use hompack_global_legacy, only: qrsparse, rowpos, colpos
    use switch
    implicit none
 
@@ -378,8 +380,8 @@ subroutine rhojac(a, lambda, x, v, k)
 !! `[d rho / d lambda, d rho / d x]` evaluated at the point `(a, lambda, x)`.
 
    use hompack_kinds, only: dp, zero
-   use hompack_core, only: hfunp
-   use hompack_global, only: par, ipar
+   use hompack_core_legacy, only: hfunp
+   use hompack_global_legacy, only: par, ipar
    implicit none
 
    real(dp), intent(in) :: a(:), x(:)
