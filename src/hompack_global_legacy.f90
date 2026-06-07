@@ -1,6 +1,6 @@
 module hompack_global_legacy
-!! Global allocatable arrays used for the sparse matrix data structures
-!! and by the polynomial system solver.  Used by module homotopy.
+!! Global allocatable arrays used for the sparse matrix data structures and by the
+!! polynomial system solver.
 
    use hompack_kinds, only: dp
    implicit none
