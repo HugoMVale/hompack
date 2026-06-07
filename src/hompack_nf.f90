@@ -1,6 +1,7 @@
 module hompack_nf
    use hompack_kinds, only: dp
    use iso_c_binding, only: c_ptr, c_null_ptr
+   use hompack_core, only: root_state
    implicit none
 
    abstract interface
@@ -90,6 +91,7 @@ module hompack_nf
       real(dp), allocatable :: yp(:)
       real(dp), allocatable :: ypold(:)
       type(fixnpf_workspace) :: workspace
+      type(root_state) :: root
    contains
       procedure :: alloc => allocate_state
    end type fixnpf_state
@@ -617,7 +619,7 @@ contains
          sa = zero
          sb = dels
          lcode = 1 ! forces initialization of 'root'
-130      call root(sout, qsout, sa, sb, rerr, aerr, lcode)
+130      call root(sout, qsout, sa, sb, rerr, aerr, lcode, state%root)
          if (lcode > 0) go to 140
          qsout = qofs(state%yold(1), state%ypold(1), y(1), state%yp(1), dels, sout) - one
          go to 130
