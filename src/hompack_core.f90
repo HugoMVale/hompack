@@ -4,6 +4,7 @@ module hompack_core
    implicit none
 
    type root_state
+   !! State variables for [[root]].
       real(dp) :: a
          !! Previous iterate point used for secant step calculation.
       real(dp) :: acbs
