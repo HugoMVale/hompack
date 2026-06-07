@@ -4,13 +4,22 @@ module hompack_core
    implicit none
 
    type root_state
-      real(dp) :: t
-      real(dp) :: ft
-      real(dp) :: b
-      real(dp) :: c
-      real(dp) :: relerr
-      real(dp) :: abserr
-      integer :: iflag
+      real(dp) :: a
+      real(dp) :: acbs
+      real(dp) :: acmb
+      real(dp) :: ae
+      real(dp) :: cmb
+      real(dp) :: fa
+      real(dp) :: fb
+      real(dp) :: fc
+      real(dp) :: fx
+      real(dp) :: p
+      real(dp) :: q
+      real(dp) :: re
+      real(dp) :: tol
+      real(dp) :: u
+      integer  :: ic
+      integer  :: kount
    end type root_state
 
 contains
@@ -98,9 +107,11 @@ contains
       integer ic, kount
       save
 
-      if (iflag .ge. 0) go to 100
+      if (iflag >= 0) go to 100
       iflag = abs(iflag)
-      go to(200, 300, 400), iflag
+      if (iflag == 1) go to 200
+      if (iflag == 2) go to 300
+      if (iflag == 3) go to 400
 
 100   u = epsilon(one)
       re = max(relerr, u)
@@ -119,9 +130,9 @@ contains
       fc = fa
       kount = 2
       fx = max(abs(fb), abs(fc))
-1     if (abs(fc) .ge. abs(fb)) go to 2
+1     if (abs(fc) >= abs(fb)) go to 2
 
-      ! INTERCHANGE B AND C SO THAT ABS(F(B)).LE.ABS(F(C)).
+      ! INTERCHANGE B AND C SO THAT ABS(F(B))<=ABS(F(C)).
       a = b
       fa = fb
       b = c
@@ -133,15 +144,15 @@ contains
       tol = re*abs(b) + ae
 
       ! TEST STOPPING CRITERION AND FUNCTION COUNT
-      if (acmb .le. tol) go to 8
-      if (kount .ge. 500) go to 12
+      if (acmb <= tol) go to 8
+      if (kount >= 500) go to 12
 
       ! CALCULATE NEW ITERATE EXPLICITLY AS B+P/Q
-      ! WHERE WE ARRANGE P.GE.0.  THE IMPLICIT
+      ! WHERE WE ARRANGE P>=0.  THE IMPLICIT
       ! FORM IS USED TO PREVENT OVERFLOW.
       p = (b - a)*fb
       q = fa - fb
-      if (p .ge. zero) go to 3
+      if (p >= zero) go to 3
       p = -p
       q = -q
 
@@ -150,20 +161,20 @@ contains
 3     a = b
       fa = fb
       ic = ic + 1
-      if (ic .lt. 4) go to 4
-      if (8*acmb .ge. acbs) go to 6
+      if (ic < 4) go to 4
+      if (8*acmb >= acbs) go to 6
       ic = 0
       acbs = acmb
 
       ! TEST FOR TOO SMALL A CHANGE
-4     if (p .gt. abs(q)*tol) go to 5
+4     if (p > abs(q)*tol) go to 5
 
       ! INCREMENT BY TOLERANCE
       b = b + sign(tol, cmb)
       go to 7
 
       !  ROOT OUGHT TO BE BETWEEN B AND (C+B)/2
-5     if (p .ge. cmb*q) go to 6
+5     if (p >= cmb*q) go to 6
 
       ! USE SECANT RULE
       b = b + p/q
@@ -177,7 +188,7 @@ contains
       iflag = -3
       return
 400   fb = ft
-      if (fb .eq. zero) go to 9
+      if (fb == zero) go to 9
       kount = kount + 1
       if (sign(one, fb) .ne. sign(one, fc)) go to 1
       c = a
@@ -185,8 +196,8 @@ contains
       go to 1
 
       ! FINISHED. SET IFLAG.
-8     if (sign(one, fb) .eq. sign(one, fc)) go to 11
-      if (abs(fb) .gt. fx) go to 10
+8     if (sign(one, fb) == sign(one, fc)) go to 11
+      if (abs(fb) > fx) go to 10
       iflag = 1
       return
 9     iflag = 2
