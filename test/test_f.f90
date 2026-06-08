@@ -76,7 +76,7 @@ program test_f
    use hompack_kinds, only: dp
    use hompack_df, only: fixpdf
    use hompack_qf, only: fixpqf
-   use hompack_nf, only: fixpnf, hompack_callbacks
+   use hompack_nf, only: fixpnf, hompack_callbacks, fixnpf_state
    use hompack_core_legacy, only: f, fjac
    use test_f_mod, only: f2, fjac2
    implicit none
@@ -87,6 +87,7 @@ program test_f
    integer :: iflag, ii, j, nfe, np1, timenew(8), timeold(8), trace
    character(len=6) :: name
    type(hompack_callbacks) :: callbacks
+   type(fixnpf_state) :: istate
 
    interface
       subroutine mainx
@@ -119,8 +120,10 @@ program test_f
          name = 'FIXPNF'
          callbacks%f => f2
          callbacks%fjac => fjac2
-         call fixpnf(callbacks, &
-                     n, y, iflag, arcre, arcae, ansre, ansae, trace, a, sspar, nfe, arclen)
+         call fixpnf(callbacks, n, y, iflag, &
+                     arcre, arcae, ansre, ansae, a, sspar, trace, istate)
+         nfe = istate%nfe
+         arclen = istate%s
       else
          name = 'FIXPDF'
          call fixpdf(n, y, iflag, arcre, ansre, trace, a, ndima, nfe, arclen)

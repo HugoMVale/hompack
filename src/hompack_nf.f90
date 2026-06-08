@@ -1,8 +1,9 @@
 module hompack_nf
-!! Specific routines for the `fixpnf` solver.
+!! Specific routines for the [[fixpnf]] solver.
 
-   use hompack_kinds, only: dp
    use iso_c_binding, only: c_ptr, c_null_ptr
+   use iso_fortran_env, only: output_unit
+   use hompack_kinds, only: dp
    use hompack_core, only: root_state
    implicit none
 
@@ -77,23 +78,51 @@ module hompack_nf
    type fixnpf_state
    !! State variables for [[fixpnf]].
       real(dp) :: abserr
+         !! Absolute error tolerance.
       real(dp) :: relerr
+         !! Relative error tolerance.
       real(dp) :: curtol
+         !! Curvature-based error tolerance.
       real(dp) :: h
+         !! Optimal step size for the next step to be attempted by [[stepnf]].
       real(dp) :: hold
+         !! ||yp - ypold|| at the previous step.
       real(dp) :: s
+         !! Total arc length of the solution path followed by the algorithm.
       integer :: iflag
+         !! Problem type and status flag.
       integer :: limit
+         !! Limit on the number of steps allowed in the main loop of [[fixpnf]].
       integer :: n
+         !! Problem dimension.
       integer :: nfe
+         !! Number of homotopy/Jacobian evaluations performed.
+         !! This counter is incremented once for each call to `tangnf`, where the
+         !! homotopy map and its Jacobian are assembled and used to compute a tangent
+         !! vector and Newton correction.
+      integer :: trace
+         !! Logical I/O unit for intermediate output.
       logical :: start
+         !! Flag to indicate the first call to [[stepnf]].
       logical :: crash
+         !! Flag to indicate that the return state of [[stepnf]] is a crash.
       logical :: ispoly
+      real(dp) :: sspar(8)
+         !! Step-size control parameters.
+         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`
+      real(dp), allocatable :: a(:)
+      real(dp), allocatable :: y(:)
+         !! Current point on the zero curve.
       real(dp), allocatable :: yold(:)
+         !! Previous point found on the zero curve.
       real(dp), allocatable :: yp(:)
+         !! Unit tangent vector to the zero curve at `y`.
       real(dp), allocatable :: ypold(:)
+         !! Unit tangent vector to the zero curve at `yold`.
       type(fixnpf_workspace) :: workspace
+         !! Linear-algebra workspace.
       type(root_state) :: root
+         !! State variables for [[root]].
    contains
       procedure :: alloc => allocate_state
    end type fixnpf_state
@@ -102,7 +131,7 @@ contains
 
    impure subroutine fixpnf( &
       callbacks, n, y, iflag, &
-      arcre, arcae, ansre, ansae, trace, a, sspar, nfe, arclen, istate, ispoly)
+      arcre, arcae, ansre, ansae, a, sspar, trace, istate, ispoly)
    !! This subroutine finds a fixed point or zero of the N-dimensional vector function
    !! \( F(x) \), or tracks a zero curve of a general homotopy map \( \rho(a,\lambda,x) \).
    !!
@@ -278,13 +307,17 @@ contains
       !    WP(1:N+1), Z0(1:N+1), Z1(1:N+1)  are all work arrays used by
       !    STEPNF  to calculate the tangent vectors and Newton steps.
 
-      use hompack_kinds, only: zero, one
+      use hompack_kinds, only: zero, one, eps64
       implicit none
 
       type(hompack_callbacks), intent(in) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
       integer, intent(in) :: n
-         !! Dimension of `x`, `f(x)`, and `rho(a,lambda,x)`.
+         !! Problem dimension.
+      ! real(dp), intent(inout) :: x(:)
+      !    !! On input, `x` is the initial point `a` for the fixed-point and zero-finding
+      !    !! problems, and the initial solution `x0` for the curve-tracking problem.
+      !    !! On output, `x` is the approximate of the problem at `lambda = 1`.
       real(dp), intent(inout) :: y(:)
          !! Homotopy solution vector. `Shape: (n+1)`.
          !! On input, `y(2:n+1)` contains the starting point:
@@ -325,41 +358,38 @@ contains
       real(dp), intent(inout) :: ansae
          !! Absolute error tolerance required of the final solution at `lambda = 1`.
          !! May be increased when `iflag=2`.
-      integer, intent(in) :: trace
-         !! Logical I/O unit for intermediate output. If `trace > 0`, points
-         !! computed along the zero curve are written to this unit.
-      real(dp), intent(inout) :: a(:)
+      real(dp), intent(inout), optional :: a(:)
          !! Parameter vector `a`.
          !! For fixed-point and zero-finding problems, the array is assumed to have
          !! length `n` and need not be initialized by the user.
          !! For curve-tracking problems, it must be initialized on input.
          !! Unchanged on output.
-      real(dp), intent(inout) :: sspar(8)
+      real(dp), intent(inout), optional :: sspar(8)
          !! Step-size control parameters:
-         !! `(LIDEAL, RIDEAL, DIDEAL, HMIN, HMAX, BMIN, BMAX, P)`.
+         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
          !! Parameters used by the optimal step-size estimation algorithm.
          !! Elements that are nonpositive on input are replaced by default values.
-      integer, intent(out) :: nfe
-         !! Number of homotopy/Jacobian evaluations performed.
-         !! This counter is incremented once for each call to `tangnf`, where the
-         !! homotopy map and its Jacobian are assembled and used to compute a tangent
-         !! vector and Newton correction.
-      real(dp), intent(out) :: arclen
-         !! Total arc length of the solution path followed by the algorithm.
+      ! real(dp), intent(out), optional :: lambda
+      !    !! The value of `lambda` at the final point on the zero curve. Normally this
+      !    !! is 1, but in abnormal situations it may be less than 1.
+      integer, intent(in), optional :: trace
+         !! Logical I/O unit for intermediate output.
+         !! * `0` : No output is printed (default).
+         !! * `6` : Standard output (mapped internally to `output_unit`)
+         !! * otherwise : Output to the specified I/O unit.
       type(fixnpf_state), intent(inout), optional :: istate
          !! State variables for 'fixpnf'.
       logical, intent(in), optional :: ispoly
          !! Optional flag used only by the polynomial-system driver [[POLSYS1H]].
 
-      type(fixnpf_state) :: state
-
-      ! Upper bound on the number of steps
-      integer, parameter :: limitd = 1000
-
       ! Switch from the tolerance arc?e to the (finer) tolerance ans?e if the curvature
       ! of any component of y exceeds cursw
       real(dp), parameter :: cursw = 10.0_dp
 
+      ! Upper bound on the number of steps
+      integer, parameter :: limitd = 1000
+
+      type(fixnpf_state) :: state ! temporary
       integer :: info, iter, np1
 
       np1 = n + 1
@@ -406,7 +436,7 @@ contains
          error stop "This should never happen."
       end if
 
-      ! Allocate internal arrays
+      ! Allocate internal state arrays (no initialization)
       call state%alloc(n, info)
 
       if (info /= 0) then
@@ -419,9 +449,11 @@ contains
       state%iflag = iflag
       state%start = .true.
       state%crash = .false.
-      state%hold = one
+      state%trace = 0
       state%h = 0.1_dp
+      state%hold = one
       state%s = zero
+
       state%yp(1) = one
       state%yp(2:np1) = zero
       state%ypold(1) = one
@@ -429,30 +461,41 @@ contains
 
       y(1) = zero
 
+      ! Optionally set the trace output unit
+      if (present(trace)) then
+         if (trace == 6) then
+            state%trace = output_unit
+         else
+            state%trace = trace
+         end if
+      end if
+
       ! Default arc tolerances
-      arclen = zero
       if (arcre <= zero) arcre = sqrt(ansre)/2
       if (arcae <= zero) arcae = sqrt(ansae)/2
 
-      ! Set optimal step size estimation parameters
-      ! Let z[k] denote the Newton iterates along the flow normal to the Davidenko flow
-      ! and y their limit
+      ! Set optimal step size estimation parameters:
+      ! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
+      ! Let 'z[k]' denote the Newton iterates along the flow normal to the Davidenko flow
+      ! and 'y' their limit
+      state%sspar = -one
+      if (present(sspar)) state%sspar = sspar
       ! Ideal contraction factor: ||z[2] - z[1]|| / ||z[1] - z[0]||
-      if (sspar(1) <= zero) sspar(1) = 0.5_dp
-      ! Ideal residual factor:  ||rho(A, z[1])|| / ||rho(a, z[0])||
-      if (sspar(2) <= zero) sspar(2) = 0.01_dp
-      ! Ideal distance factor:  ||z[1] - y|| / ||z[0] - y||
-      if (sspar(3) <= zero) sspar(3) = 0.5_dp
-      ! Minimum step size HMIN
-      if (sspar(4) <= zero) sspar(4) = (sqrt(real(n + 1, dp)) + 4.0_dp)*epsilon(one)
-      ! Maximum step size HMAX
-      if (sspar(5) <= zero) sspar(5) = one
-      ! Minimum step size reduction factor BMIN
-      if (sspar(6) <= zero) sspar(6) = 0.1_dp
-      ! Maximum step size expansion factor BMAX
-      if (sspar(7) <= zero) sspar(7) = 3.0_dp
-      ! Assumed operating order P
-      if (sspar(8) <= zero) sspar(8) = 2.0_dp
+      if (state%sspar(1) <= zero) state%sspar(1) = 0.5_dp
+      ! Ideal residual factor: ||rho(A, z[1])|| / ||rho(a, z[0])||
+      if (state%sspar(2) <= zero) state%sspar(2) = 0.01_dp
+      ! Ideal distance factor: ||z[1] - y|| / ||z[0] - y||
+      if (state%sspar(3) <= zero) state%sspar(3) = 0.5_dp
+      ! Minimum step size 'hmin'
+      if (state%sspar(4) <= zero) state%sspar(4) = (sqrt(real(n + 1, dp)) + 4.0_dp)*eps64
+      ! Maximum step size 'hmax'
+      if (state%sspar(5) <= zero) state%sspar(5) = one
+      ! Minimum step size reduction factor 'bmin'
+      if (state%sspar(6) <= zero) state%sspar(6) = 0.1_dp
+      ! Maximum step size expansion factor 'bmax'
+      if (state%sspar(7) <= zero) state%sspar(7) = 3.0_dp
+      ! Assumed operating order 'p'
+      if (state%sspar(8) <= zero) state%sspar(8) = 2.0_dp
 
       ! Load 'a' for the fixed point and zero finding problems
       if (state%iflag == 0 .or. state%iflag == -1) then
@@ -476,7 +519,6 @@ contains
 
          ! Tracking algorithm lost the zero curve
          if (y(1) < zero) then
-            arclen = state%s
             iflag = 5
             return
          end if
@@ -492,20 +534,19 @@ contains
          end if
 
          ! Take a step along the curve
-         call stepnf(callbacks, state, y, a, sspar)
+         call stepnf(callbacks, state, y, a)
 
          ! Print latest point on curve if requested
-         if (trace > 0) then
+         if (trace /= 0) then
             write (trace, 217) iter, state%nfe, state%s, y(1), y(2:np1)
 217         format(/' STEP', i5, 3x, 'NFE =', i5, 3x, 'ARC LENGTH =', f9.4, 3x, &
                     'LAMBDA =', f7.4, 5x, 'X VECTOR:'/(1x, 6es12.4))
          end if
-         nfe = state%nfe
 
          ! Check if the step was successful
          if (state%iflag > 0) then
-            arclen = state%s
             iflag = state%iflag
+            istate = state ! TEMPORARY
             return
          end if
 
@@ -531,7 +572,6 @@ contains
                ! Save 'yold' for arc length calculation later
                ws%z0 = state%yold
                call rootnf(callbacks, state, ansre, ansae, y, a)
-               nfe = state%nfe
                iflag = 1
 
                ! Set error flag if 'rootnf' could not get the point on the zero
@@ -540,7 +580,8 @@ contains
 
                ! Calculate final arc length
                ws%w = y - ws%z0
-               arclen = state%s - state%hold + norm2(ws%w)
+               state%s = state%s - state%hold + norm2(ws%w)
+               istate = state ! TEMPORARY
                return
 
             end associate
@@ -563,7 +604,6 @@ contains
 
       ! Lambda has not reached 1 in 'limitd' steps
       iflag = 3
-      arclen = state%s
 
    end subroutine fixpnf
 
@@ -573,7 +613,7 @@ contains
    !! that `lambdaold < 1 <= lambda` , and alternates between secant estimates of `ybar`
    !! and Newton iteration until convergence.
 
-      use hompack_kinds, only: zero, one
+      use hompack_kinds, only: zero, one, eps64
       use hompack_core, only: root
       implicit none
 
@@ -596,12 +636,11 @@ contains
       real(dp), intent(in) :: a(:)
          !! Parameter vector used in the homotopy map.
 
-      real(dp) :: dels, qsout, aerr, rerr, sa, sb, sout, u
+      real(dp) :: dels, qsout, aerr, rerr, sa, sb, sout
       integer :: judy, jw, lcode, limit, np1
       logical :: bracket
 
-      u = epsilon(one)
-      rerr = max(relerr, u)
+      rerr = max(relerr, eps64)
       aerr = max(abserr, zero)
       np1 = state%n + 1
 
@@ -719,7 +758,7 @@ contains
 
    end subroutine rootnf
 
-   subroutine stepnf(callbacks, state, y, a, sspar)
+   subroutine stepnf(callbacks, state, y, a)
    !! This subroutine takes one step along the zero curve of the homotopy map using a
    !! predictor-corrector algorithm. The predictor uses a Hermite cubic interpolant, and
    !! the corrector returns to the zero curve along the flow normal to the Davidenko flow.
@@ -727,7 +766,7 @@ contains
    !! Normally, [[stepnf]] is used indirectly through [[fixpnf]], and should be called
    !! directly only if it is necessary to modify the stepping algorithm's parameters.
 
-      use hompack_kinds, only: one, zero
+      use hompack_kinds, only: one, zero, eps64
       implicit none
 
       type(hompack_callbacks), intent(in) :: callbacks
@@ -740,12 +779,9 @@ contains
          !! On output, updated to the latest point found by the continuation algorithm.
       real(dp), intent(in) :: a(:)
          !! Parameter vector used in the homotopy map.
-      real(dp), intent(in) :: sspar(8)
-         !! Step-size estimation parameters:
-         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
-         !! Controls the adaptive continuation step-size strategy.
 
-      real(dp) :: dcalc, fouru, hfail, ht, lcalc, rcalc, rholen, temp, twou
+      real(dp), parameter :: twou = 2*eps64, fouru = 4*eps64
+      real(dp) :: dcalc, hfail, ht, lcalc, rcalc, rholen, temp
       integer :: itnum, j, judy, np1
       logical :: fail
 
@@ -753,12 +789,10 @@ contains
       ! size 'h' may be changed by changing the following parameter
       integer, parameter:: litfh = 4
 
-      twou = 2*epsilon(one)
-      fouru = 2*twou
       np1 = state%n + 1
       state%crash = .true.
 
-      associate (ws => state%workspace)
+      associate (ws => state%workspace, sspar => state%sspar)
 
          ! The arclength 's' must be nonnegative
          if (state%s < zero) return
@@ -807,8 +841,9 @@ contains
                   rholen = -one
 
                   ! Calculate the Newton step 'tz' at the current point 'w'
-                  call tangnf(callbacks, &
-                              rholen, ws%w, ws%wp, state%ypold, a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
+                  call tangnf(callbacks, rholen, &
+                              ws%w, ws%wp, state%ypold, a, &
+                              ws%qr, ws%alpha, ws%tz, ws%pivot, &
                               state%nfe, state%n, state%iflag)
                   if (state%iflag > 0) return
 
@@ -933,12 +968,16 @@ contains
          if (lcalc + rcalc + dcalc == zero) then
             ht = sspar(7)*state%hold
          else
-            ht = (one/max(lcalc/sspar(1), rcalc/sspar(2), dcalc/sspar(3))) &
-                 **(one/sspar(8))*state%hold
+            ht = (one/max(lcalc/sspar(1), rcalc/sspar(2), &
+                          dcalc/sspar(3)))**(one/sspar(8))*state%hold
          end if
 
-         ! 'ht' contains the estimated optimal step size. Now put it within reasonable bounds
-         state%h = min(max(ht, sspar(6)*state%hold, sspar(4)), sspar(7)*state%hold, sspar(5))
+         ! 'ht' contains the estimated optimal step size. Put it within reasonable bounds
+         state%h = min( &
+                   max(ht, sspar(6)*state%hold, sspar(4)), &
+                   sspar(7)*state%hold, &
+                   sspar(5) &
+                   )
 
          if (itnum == 1) then
             ! If convergence had occurred after 1 iteration, don't decrease 'h'.
@@ -963,7 +1002,7 @@ contains
    !! decomposition of that matrix, and then calculates the (unit) tangent vector and the
    !! Newton step.
 
-      use hompack_kinds, only: zero, one
+      use hompack_kinds, only: zero, one, eps64
       use lapack_interfaces, only: dgeqpf, dormqr
       implicit none
 
@@ -1075,7 +1114,7 @@ contains
       pivot = 0
       call dgeqpf(n, np1, qr, n, pivot, yp, alpha, k)
 
-      if (abs(qr(n, n)) <= abs(qr(1, 1))*epsilon(one)) then
+      if (abs(qr(n, n)) <= abs(qr(1, 1))*eps64) then
          iflag = 4
          return
       end if
