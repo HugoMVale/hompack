@@ -9,5 +9,6 @@ module hompack_kinds
    real(dp), parameter :: zero = 0.0_dp
    real(dp), parameter :: one = 1.0_dp
    real(dp), parameter :: pi = 4*atan(one)
+   real(dp), parameter :: eps64 = epsilon(one)
 
 end module hompack_kinds
