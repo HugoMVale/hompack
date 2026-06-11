@@ -1,20 +1,10 @@
       MODULE HOMPACK_QS
-!
-!  This MODULE is an encapsulation of the HOMPACK90 drivers, and uses
-!  the modules REAL_PRECISION (defines real precision for all
-!  routines), HOMPACK_GLOBAL_LEGACY (allocatable global data structures for
-!  sparse matrices), and HOMOTOPY (interfaces to user written routines
-!  defining the problem).
-!
-!  The intended usage is that the calling program would include a
-!  statement like, for example,
-!     USE HOMPACK90, ONLY: FIXPNF
-!
+C
       USE HOMPACK_KINDS, ONLY: DP
       IMPLICIT NONE
 C
       CONTAINS
-!
+C
       SUBROUTINE FIXPQS(N,Y,IFLAG,ARCRE,ARCAE,ANSRE,ANSAE,TRACE,A,
      &     NFE,ARCLEN,MODE,LENQR,SSPAR)
 C
