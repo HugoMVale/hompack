@@ -71,7 +71,7 @@ contains
    !! documented in the text: "Numerical Computing: An Introduction", by L. F. Shampine and
    !! R. C. Allen.
 
-      use hompack_kinds, only: one, zero
+      use hompack_kinds, only: one, zero, eps64
       implicit none
 
       real(dp), intent(inout) :: t
@@ -122,7 +122,6 @@ contains
          !! Internal state of the root-finding iteration. The caller should not modify it.
          !! Used internally by `root` to maintain the state of the iteration across calls.
 
-      real(dp), parameter :: u = epsilon(one)
       integer, parameter :: max_fcount = 500
 
       associate (a => state%a, acbs => state%acbs, acmb => state%acmb, &
@@ -137,7 +136,7 @@ contains
          if (iflag == 2) go to 300
          if (iflag == 3) go to 400
 
-100      re = max(relerr, u)
+100      re = max(relerr, eps64)
          ae = max(abserr, zero)
          ic = 0
          acbs = abs(b - c)
@@ -212,7 +211,7 @@ contains
 400      fb = ft
          if (fb == zero) go to 9
          fcount = fcount + 1
-         if (sign(one, fb) .ne. sign(one, fc)) go to 1
+         if (sign(one, fb) /= sign(one, fc)) go to 1
          c = a
          fc = fa
          go to 1
@@ -234,5 +233,35 @@ contains
       end associate
 
    end subroutine root
+
+   elemental pure function qofs(f0, fp0, f1, fp1, dels, s) result(res)
+   !! Computes the Hermite cubic interpolant at a point `s`.
+
+      real(dp), intent(in) :: f0
+         !! Function value at the start of the interval.
+      real(dp), intent(in) :: fp0
+         !! Derivative value at the start of the interval.
+      real(dp), intent(in) :: f1
+         !! Function value at the end of the interval.
+      real(dp), intent(in) :: fp1
+         !! Derivative value at the end of the interval.
+      real(dp), intent(in) :: dels
+         !! Width of the interpolation interval.
+      real(dp), intent(in) :: s
+         !! Local coordinate of the interpolation point to the start.
+      real(dp) :: res
+
+      real(8) :: dd01, dd001, dd011, dd0011
+
+      ! Calculate divided differences sequentially
+      dd01 = (f1 - f0)/dels
+      dd001 = (dd01 - fp0)/dels
+      dd011 = (fp1 - dd01)/dels
+      dd0011 = (dd011 - dd001)/dels
+
+      ! Evaluate the cubic polynomial using Horner's method
+      res = ((dd0011*(s - dels) + dd001)*s + fp0)*s + f0
+
+   end function qofs
 
 end module hompack_core
