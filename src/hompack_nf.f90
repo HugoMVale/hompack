@@ -4,7 +4,6 @@ module hompack_nf
    use iso_c_binding, only: c_ptr, c_null_ptr
    use iso_fortran_env, only: output_unit
    use hompack_kinds, only: dp
-   use hompack_core, only: root_state
    implicit none
 
    abstract interface
@@ -72,7 +71,7 @@ module hompack_nf
       integer, allocatable :: pivot(:)
          !! Pivot indices used by the QR factorization.
    contains
-      procedure :: alloc => allocate_workspace
+      procedure :: init => init_workspace
    end type fixnpf_workspace
 
    type fixnpf_state
@@ -107,6 +106,8 @@ module hompack_nf
       logical :: crash
          !! Flag to indicate that the return state of [[stepnf]] is a crash.
       logical :: ispoly
+      character(:), allocatable :: message
+         !! Error message.
       real(dp) :: sspar(8)
          !! Step-size control parameters.
          !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`
@@ -121,10 +122,8 @@ module hompack_nf
          !! Unit tangent vector to the zero curve at `yold`.
       type(fixnpf_workspace) :: workspace
          !! Linear-algebra workspace.
-      type(root_state) :: root
-         !! State variables for [[root]].
    contains
-      procedure :: alloc => allocate_state
+      procedure :: init => init_state
    end type fixnpf_state
 
 contains
@@ -437,7 +436,7 @@ contains
       end if
 
       ! Allocate internal state arrays (no initialization)
-      call state%alloc(n, info)
+      call state%init(n, info)
 
       if (info /= 0) then
          iflag = 8
@@ -534,7 +533,7 @@ contains
          end if
 
          ! Take a step along the curve
-         call stepnf(callbacks, state, y, a)
+         call stepnf(state, callbacks, y, a)
 
          ! Print latest point on curve if requested
          if (trace /= 0) then
@@ -571,7 +570,7 @@ contains
 
                ! Save 'yold' for arc length calculation later
                ws%z0 = state%yold
-               call rootnf(callbacks, state, ansre, ansae, y, a)
+               call rootnf(state, callbacks, ansre, ansae, y, a)
                iflag = 1
 
                ! Set error flag if 'rootnf' could not get the point on the zero
@@ -607,20 +606,20 @@ contains
 
    end subroutine fixpnf
 
-   subroutine rootnf(callbacks, state, relerr, abserr, y, a)
+   subroutine rootnf(state, callbacks, relerr, abserr, y, a)
    !! This subroutine finds the point `ybar = (1, xbar)` on the zero curve of the homotopy
    !! map. It starts with two points `yold = (lambdaold, xold)` and `y = (lambda, x)` such
    !! that `lambdaold < 1 <= lambda` , and alternates between secant estimates of `ybar`
    !! and Newton iteration until convergence.
 
       use hompack_kinds, only: zero, one, eps64
-      use hompack_core, only: root
+      use hompack_core, only: root, root_state, qofs
       implicit none
 
+      type(fixnpf_state), intent(inout) :: state
+         !! State variables for [[fixpnf]].
       type(hompack_callbacks) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
-      type(fixnpf_state), intent(inout) :: state
-         !! State variables for 'fixpnf'.
       real(dp), intent(in) :: relerr
          !! Relative convergence tolerance.
          !! Iteration is considered converged when `|y(1)-1| <= relerr + abserr` and the
@@ -639,6 +638,7 @@ contains
       real(dp) :: dels, qsout, aerr, rerr, sa, sb, sout
       integer :: judy, jw, lcode, limit, np1
       logical :: bracket
+      type(root_state) :: state_root
 
       rerr = max(relerr, eps64)
       aerr = max(abserr, zero)
@@ -660,7 +660,7 @@ contains
          sa = zero
          sb = dels
          lcode = 1 ! forces initialization of 'root'
-130      call root(sout, qsout, sa, sb, rerr, aerr, lcode, state%root)
+130      call root(sout, qsout, sa, sb, rerr, aerr, lcode, state_root)
          if (lcode > 0) go to 140
          qsout = qofs(state%yold(1), state%ypold(1), y(1), state%yp(1), dels, sout) - one
          go to 130
@@ -758,7 +758,7 @@ contains
 
    end subroutine rootnf
 
-   subroutine stepnf(callbacks, state, y, a)
+   subroutine stepnf(state, callbacks, y, a)
    !! This subroutine takes one step along the zero curve of the homotopy map using a
    !! predictor-corrector algorithm. The predictor uses a Hermite cubic interpolant, and
    !! the corrector returns to the zero curve along the flow normal to the Davidenko flow.
@@ -767,12 +767,13 @@ contains
    !! directly only if it is necessary to modify the stepping algorithm's parameters.
 
       use hompack_kinds, only: one, zero, eps64
+      use hompack_core, only: qofs
       implicit none
 
+      type(fixnpf_state), intent(inout) :: state
+         !! State variables for [[fixpnf]].
       type(hompack_callbacks), intent(in) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
-      type(fixnpf_state), intent(inout) :: state
-         !! State variables for 'fixpnf'.
       real(dp), intent(inout) :: y(:)
          !! Current point on the zero curve. `Shape: (n+1)`.
          !! Contains `(lambda, x)` on input.
@@ -1073,6 +1074,7 @@ contains
          do k = 1, np1
             call callbacks%rhojac(a, lambda, y(2:np1), qr(:, k), k, callbacks%data)
          end do
+
          call callbacks%rho(a, lambda, y(2:np1), qr(:, np2), callbacks%data)
 
       else
@@ -1156,37 +1158,11 @@ contains
 
    end subroutine tangnf
 
-   elemental pure function qofs(f0, fp0, f1, fp1, dels, s) result(res)
-   !! Computes the Hermite cubic interpolant at a point s.
-      real(dp), intent(in) :: f0
-         !! Function value at the start of the interval.
-      real(dp), intent(in) :: fp0
-         !! Derivative value at the start of the interval.
-      real(dp), intent(in) :: f1
-         !! Function value at the end of the interval.
-      real(dp), intent(in) :: fp1
-         !! Derivative value at the end of the interval.
-      real(dp), intent(in) :: dels
-         !! Width of the interpolation interval.
-      real(dp), intent(in) :: s
-         !! Local coordinate of the interpolation point to the start.
-      real(dp) :: res
+   pure subroutine init_workspace(self, n, stat)
+   !! Initializes [[fixnpf_workspace]].
 
-      real(8) :: dd01, dd001, dd011, dd0011
+      use hompack_kinds, only: zero
 
-      ! Calculate divided differences sequentially
-      dd01 = (f1 - f0)/dels
-      dd001 = (dd01 - fp0)/dels
-      dd011 = (fp1 - dd01)/dels
-      dd0011 = (dd011 - dd001)/dels
-
-      ! Evaluate the cubic polynomial using Horner's method
-      res = ((dd0011*(s - dels) + dd001)*s + fp0)*s + f0
-
-   end function qofs
-
-   pure subroutine allocate_workspace(self, n, stat)
-   !! Allocates workspace arrays in the [[fixnpf_workspace]] type.
       class(fixnpf_workspace), intent(inout) :: self
          !! Workspace.
       integer, intent(in) :: n
@@ -1194,69 +1170,100 @@ contains
       integer, intent(out), optional :: stat
          !! Error status of the allocation.
 
-      integer :: ierr
+      integer :: ierr(8)
 
       if (present(stat)) stat = 0
 
-      allocate ( &
-         self%alpha(3*n + 3), &
-         self%qr(n, n + 2), &
-         self%tz(n + 1), &
-         self%w(n + 1), &
-         self%wp(n + 1), &
-         self%z0(n + 1), &
-         self%z1(n + 1), &
-         self%pivot(n + 1), &
-         stat=ierr &
-         )
+      ! Deallocate any previously allocated arrays
+      if (allocated(self%alpha)) deallocate (self%alpha)
+      if (allocated(self%qr)) deallocate (self%qr)
+      if (allocated(self%tz)) deallocate (self%tz)
+      if (allocated(self%w)) deallocate (self%w)
+      if (allocated(self%wp)) deallocate (self%wp)
+      if (allocated(self%z0)) deallocate (self%z0)
+      if (allocated(self%z1)) deallocate (self%z1)
+      if (allocated(self%pivot)) deallocate (self%pivot)
 
-      if (ierr /= 0) then
+      ! Allocate/initialize workspace arrays
+      allocate (self%alpha(3*n + 3), source=zero, stat=ierr(1))
+      allocate (self%qr(n, n + 2), source=zero, stat=ierr(2))
+      allocate (self%tz(n + 1), source=zero, stat=ierr(3))
+      allocate (self%w(n + 1), source=zero, stat=ierr(4))
+      allocate (self%wp(n + 1), source=zero, stat=ierr(5))
+      allocate (self%z0(n + 1), source=zero, stat=ierr(6))
+      allocate (self%z1(n + 1), source=zero, stat=ierr(7))
+      allocate (self%pivot(n + 1), source=0, stat=ierr(8))
+
+      if (any(ierr /= 0)) then
          if (present(stat)) then
-            stat = ierr
+            stat = ierr(findloc(ierr /= 0, .true., dim=1))
          else
             error stop "Error: Allocation failed in fixnpf_workspace%init()."
          end if
       end if
 
-   end subroutine allocate_workspace
+   end subroutine init_workspace
 
-   pure subroutine allocate_state(self, n, stat)
-   !! Allocates internal arrays in the [[fixnpf_state]] type.
+   pure subroutine init_state(self, n, dima, stat)
+   !! Initializes [[fixnpf_state]].
+
+      use hompack_kinds, only: zero
 
       class(fixnpf_state), intent(inout) :: self
          !! State.
       integer, intent(in)  :: n
          !! Problem dimension.
+      integer, intent(in)  :: dima
+         !! Dimension of the parameter vector `a`.
       integer, intent(out), optional   :: stat
          !! Error status of the allocation.
 
-      integer :: ierr
+      integer :: ierr(6)
 
       if (present(stat)) stat = 0
 
-      ! Assign problem structural dimensions and input specifications
+      ! Initialize scalar state variables
+      self%abserr = zero
+      self%curtol = zero
+      self%h = zero
+      self%hold = zero
+      self%s = zero
+      self%iflag = 0
+      self%limit = 0
       self%n = n
+      self%nfe = 0
+      self%trace = 0
+      self%ispoly = .false.
+      self%start = .true.
+      self%crash = .false.
+      self%sspar = zero
+      self%message = ""
 
-      ! Allocate state components
-      allocate ( &
-         self%yold(n + 1), &
-         self%yp(n + 1), &
-         self%ypold(n + 1), &
-         stat=ierr &
-         )
+      ! Deallocate any previously allocated arrays
+      if (allocated(self%y)) deallocate (self%y)
+      if (allocated(self%yold)) deallocate (self%yold)
+      if (allocated(self%yp)) deallocate (self%yp)
+      if (allocated(self%ypold)) deallocate (self%ypold)
+      if (allocated(self%a)) deallocate (self%a)
 
-      if (ierr /= 0) then
+      ! Allocate/initialize state arrays
+      allocate (self%y(n + 1), source=zero, stat=ierr(1))
+      allocate (self%yold(n + 1), source=zero, stat=ierr(2))
+      allocate (self%yp(n + 1), source=zero, stat=ierr(3))
+      allocate (self%ypold(n + 1), source=zero, stat=ierr(4))
+      allocate (self%a(dima), source=zero, stat=ierr(5))
+
+      ! Initialize workspace
+      call self%workspace%init(n, stat=ierr(6))
+
+      if (any(ierr /= 0)) then
          if (present(stat)) then
-            stat = ierr
-            return
+            stat = ierr(findloc(ierr /= 0, .true., dim=1))
          else
-            error stop "Error: Allocation of vectors failed in fixnpf_state%init()."
+            error stop "Error: Allocation failed in fixnpf_state%init()."
          end if
       end if
 
-      ! Deep-allocate the internal workspace
-      call self%workspace%alloc(n)
-
-   end subroutine allocate_state
+   end subroutine init_state
 
 end module hompack_nf
