@@ -360,7 +360,7 @@ contains
       real(dp), intent(inout) :: ansae
          !! Absolute error tolerance required of the final solution at `lambda = 1`.
          !! May be increased when `iflag=2`.
-      real(dp), intent(inout), optional :: a(:)
+      real(dp), intent(in), optional :: a(:)
          !! Parameter vector `a`.
          !! For fixed-point and zero-finding problems, the array is assumed to have
          !! length `n` and need not be initialized by the user.
@@ -520,7 +520,6 @@ contains
       ! Load 'a'
       if (state%iflag == 0 .or. state%iflag == -1) then
          state%a = y(2:np1)
-         a = y(2:np1)
       else
          state%a = a
       end if
