@@ -251,7 +251,7 @@ contains
          !! Local coordinate of the interpolation point to the start.
       real(dp) :: res
 
-      real(8) :: dd01, dd001, dd011, dd0011
+      real(dp) :: dd01, dd001, dd011, dd0011
 
       ! Calculate divided differences sequentially
       dd01 = (f1 - f0)/dels
