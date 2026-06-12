@@ -194,7 +194,7 @@ contains
          b = b + sign(tol, cmb)
          go to 7
 
-         ! Root ought to be between 'b' and '(c+b)/2'
+         ! Accept the secant step only if it remains within the interval
 5        if (p >= cmb*q) go to 6
 
          ! Use secant rule
