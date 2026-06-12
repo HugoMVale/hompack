@@ -689,18 +689,19 @@ contains
          sa = zero
          sb = dels
          lcode = 1 ! forces initialization of 'root'
-130      call root(sout, qsout, sa, sb, rerr, aerr, lcode, state_root)
-         if (lcode > 0) go to 140
-         qsout = qofs(state%yold(1), state%ypold(1), y(1), state%yp(1), dels, sout) - one
-         go to 130
+         do
+            call root(sout, qsout, sa, sb, rerr, aerr, lcode, state_root)
+            if (lcode > 0) exit
+            qsout = qofs(state%yold(1), state%ypold(1), y(1), state%yp(1), dels, sout) - one
+         end do
 
          ! If lambda=1 were bracketed, root cannot fail
-140      if (lcode > 2) then
+         if (lcode > 2) then
             state%iflag = 6
             return
          end if
 
-         ! Calculate q(sa) as the initial point for a Newton iteration
+         ! Calculate 'q(sa)' as the initial point for a Newton iteration
          do jw = 1, np1
             ws%w(jw) = qofs(state%yold(jw), state%ypold(jw), y(jw), state%yp(jw), dels, sa)
          end do
@@ -780,7 +781,7 @@ contains
          end do
 
          ! The alternating secant estimation and Newton iteration has not converged in
-         ! limit Error return.
+         ! 'limit' iterations
          state%iflag = 6
 
       end associate
