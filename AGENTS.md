@@ -81,3 +81,20 @@ Optional meson flags:
 - Do **not** edit files under `_site/`, `build/`, or `builddir/` — these are generated artifacts.
 - The file `src/HOMPACK90.f` is the original legacy source kept for reference while migration is in progress.
 - Tests use data files `test/INNHP.DAT` and `test/OUTHP.DAT`; do not delete them.
+
+## Token optimization
+
+Use these defaults unless the user explicitly asks for deep explanation:
+
+- Keep responses short and outcome-first. Prefer concise bullet points over long narrative text.
+- Minimize repeated summaries. Report only deltas after each change batch.
+- Read files in targeted ranges (relevant functions/sections) instead of full-file reads when possible.
+- Prefer fast, narrow searches (`rg` with specific patterns and include globs) before semantic exploration.
+- Batch independent read-only tool calls in parallel to reduce turn count.
+- Avoid re-reading unchanged files; cache context from earlier steps in the same task.
+- Edit only the smallest required region; avoid unrelated refactors and formatting churn.
+- Run focused verification first (single test/file/target), then broaden only if needed.
+- When diagnostics are long, report top actionable errors first and omit repetitive lines.
+- Do not include large command outputs verbatim; summarize key lines and conclusions.
+- For plans, use short actionable steps and update status briefly.
+- If uncertainty is low, act directly; ask clarifying questions only when blocked by ambiguity.
