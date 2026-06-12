@@ -121,7 +121,7 @@ program test_f
          callbacks%f => f2
          callbacks%fjac => fjac2
          call fixpnf(state, callbacks, n, y, iflag, arcre, arcae, ansre, ansae, &
-                     a=a, sspar=sspar, lunit=trace)
+                     sspar=sspar, a=a, lunit=trace)
          nfe = state%nfe
          arclen = state%s
       else

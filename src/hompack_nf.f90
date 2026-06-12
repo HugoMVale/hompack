@@ -131,7 +131,7 @@ contains
 
    impure subroutine fixpnf( &
       state, callbacks, n, y, iflag, &
-      arcre, arcae, ansre, ansae, a, sspar, lunit, ispoly)
+      arcre, arcae, ansre, ansae, sspar, a, lunit, ispoly)
    !! This subroutine finds a fixed point or zero of the N-dimensional vector function
    !! \( F(x) \), or tracks a zero curve of a general homotopy map \( \rho(a,\lambda,x) \).
    !!
@@ -360,20 +360,17 @@ contains
       real(dp), intent(inout) :: ansae
          !! Absolute error tolerance required of the final solution at `lambda = 1`.
          !! May be increased when `iflag=2`.
+      real(dp), intent(inout), optional :: sspar(8)
+         !! Step-size control parameters:
+         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
+         !! Parameters used by the optimal step-size estimation algorithm.
+         !! Elements that are nonpositive on input are replaced by default values.
       real(dp), intent(in), optional :: a(:)
          !! Parameter vector `a`.
          !! For fixed-point and zero-finding problems, the array is assumed to have
          !! length `n` and need not be initialized by the user.
          !! For curve-tracking problems, it must be initialized on input.
          !! Unchanged on output.
-      real(dp), intent(inout), optional :: sspar(8)
-         !! Step-size control parameters:
-         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
-         !! Parameters used by the optimal step-size estimation algorithm.
-         !! Elements that are nonpositive on input are replaced by default values.
-      ! real(dp), intent(out), optional :: lambda
-      !    !! The value of `lambda` at the final point on the zero curve. Normally this
-      !    !! is 1, but in abnormal situations it may be less than 1.
       integer, intent(in), optional :: lunit
          !! Logical I/O unit for intermediate output.
          !! * `0` : No output is printed (default).
