@@ -336,16 +336,16 @@ subroutine mainx
             cycle track
          end if
          rholen = 0d0
-         call tangnf(callbacks, &
-                     rholen, w, wp, ypold, a, qr, alpha, tz, pivot, nfec, n, iflag)
+         call tangnf(callbacks, rholen, n, w, wp, ypold, a, nfec, iflag, &
+                     qr, alpha, tz, pivot)
       case (-32:-20)   ! TANGENT VECTOR AND NEWTON STEP
          if (h > .1_dp) then
             iflag = iflag - 100
             cycle track
          end if
          rholen = -1d0
-         call tangnf(callbacks, &
-                     rholen, w, wp, ypold, a, qr, alpha, tz, pivot, nfec, n, iflag)
+         call tangnf(callbacks, rholen, n, w, wp, ypold, a, nfec, iflag, &
+                     qr, alpha, tz, pivot)
       case (4, 6, 7)
          write (6, 13) iflag
 13       format(/' FATAL ERROR OCCURRED DURING TRACKING WITH', &
@@ -373,8 +373,8 @@ subroutine mainx
          gofw = w(1) - 1d0
       case (-52:-50)   ! TANGENT VECTOR AND NEWTON STEP
          rholen = -1d0
-         call tangnf(callbacks, &
-                     rholen, w, wp, ypold, a, qr, alpha, tz, pivot, nfec, n, iflag)
+         call tangnf(callbacks, rholen, n, w, wp, ypold, a, nfec, iflag, &
+                     qr, alpha, tz, pivot)
       case (-2:0, 4, 6, 7)
          exit end_game
       end select

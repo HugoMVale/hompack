@@ -721,8 +721,8 @@ contains
 
             ! Calculate Newton step at current estimate 'w'
             call tangnf(callbacks, sa, &
-                        ws%w, ws%wp, state%ypold, state%a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
-                        state%nfe, state%n, state%iflag)
+                        state%n, ws%w, ws%wp, state%ypold, state%a, state%nfe, state%iflag, &
+                        ws%qr, ws%alpha, ws%tz, ws%pivot)
             if (state%iflag > 0) return
 
             ! Next point = current point + Newton step
@@ -857,9 +857,9 @@ contains
             ! Use linear predictor along tangent direction to start Newton iteration
             state%ypold(1) = one
             state%ypold(2:np1) = zero
-            call tangnf(callbacks, state%s, y, state%yp, state%ypold, state%a, &
-                        ws%qr, ws%alpha, ws%tz, ws%pivot, &
-                        state%nfe, state%n, state%iflag)
+            call tangnf(callbacks, state%s, state%n, y, state%yp, state%ypold, state%a, &
+                        state%nfe, state%iflag, &
+                        ws%qr, ws%alpha, ws%tz, ws%pivot)
 
             if (state%iflag > 0) return
 
@@ -871,9 +871,9 @@ contains
 
                   ! Calculate the Newton step 'tz' at the current point 'w'
                   call tangnf(callbacks, rholen, &
-                              ws%w, ws%wp, state%ypold, state%a, &
-                              ws%qr, ws%alpha, ws%tz, ws%pivot, &
-                              state%nfe, state%n, state%iflag)
+                              state%n, ws%w, ws%wp, state%ypold, state%a, &
+                              state%nfe, state%iflag, &
+                              ws%qr, ws%alpha, ws%tz, ws%pivot)
                   if (state%iflag > 0) return
 
                   ! Take Newton step and check convergence
@@ -924,9 +924,9 @@ contains
 
                ! Calculate the Newton step 'tz' at the current point 'w'
                rholen = -one
-               call tangnf(callbacks, &
-                           rholen, ws%w, ws%wp, state%yp, state%a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
-                           state%nfe, state%n, state%iflag)
+               call tangnf(callbacks, rholen, &
+                           state%n, ws%w, ws%wp, state%yp, state%a, state%nfe, &
+                           state%iflag, ws%qr, ws%alpha, ws%tz, ws%pivot)
                if (state%iflag > 0) return
 
                ! Take Newton step and check convergence
@@ -1025,8 +1025,7 @@ contains
    end subroutine stepnf
 
    subroutine tangnf( &
-      callbacks, &
-      rholen, y, yp, ypold, a, qr, alpha, tz, pivot, nfe, n, iflag)
+      callbacks, rholen, n, y, yp, ypold, a, nfe, iflag, qr, alpha, tz, pivot)
    !! This subroutine builds the Jacobian matrix of the homotopy map, computes a QR
    !! decomposition of that matrix, and then calculates the (unit) tangent vector and the
    !! Newton step.
@@ -1046,6 +1045,8 @@ contains
          !!
          !! On output, if `rholen < 0` on entry:
          !! `rholen = ||rho(a, lambda, x)||`. Otherwise the value is unchanged.
+      integer, intent(in) :: n
+         !! Problem dimension.
       real(dp), intent(in) :: y(:)
          !! Current point on the homotopy zero curve. `Shape: (n+1)`.
          !! Contains `(lambda, x)`.
@@ -1058,6 +1059,20 @@ contains
          !! vector.
       real(dp), intent(in) :: a(:)
          !! Parameter vector used in the homotopy map.
+      integer, intent(inout) :: nfe
+         !! Number of homotopy/Jacobian evaluations performed.
+         !! Incremented by one on every successful call.
+      integer, intent(inout) :: iflag
+         !! Problem type and return status flag.
+         !!
+         !! On input:
+         !! * `0`  : fixed-point problem, `F(x) = x`.
+         !! * `-1` : zero-finding problem, `F(x) = 0`.
+         !! * `-2` : general homotopy curve-tracking problem.
+         !!
+         !! On output:
+         !! * unchanged (`0`, `-1`, or `-2`) on normal return.
+         !! * `4` : Jacobian matrix lost full rank (`rank < n`); iteration not completed.
       real(dp), intent(inout) :: qr(:, :)
          !! Workspace containing the Jacobian matrix and its QR factorization.
          !! `Shape: (n, n+2)`.
@@ -1070,22 +1085,6 @@ contains
          !! homotopy residual.
       integer, intent(inout) :: pivot(:)
          !! Pivot indices produced by the QR factorization. `Shape: (n+1)`.
-      integer, intent(inout) :: nfe
-         !! Number of homotopy/Jacobian evaluations performed.
-         !! Incremented by one on every successful call.
-      integer, intent(in) :: n
-         !! Problem dimension.
-      integer, intent(inout) :: iflag
-         !! Problem type and return status flag.
-         !!
-         !! On input:
-         !! * `0`  : fixed-point problem, `F(x) = x`.
-         !! * `-1` : zero-finding problem, `F(x) = 0`.
-         !! * `-2` : general homotopy curve-tracking problem.
-         !!
-         !! On output:
-         !! * unchanged (`0`, `-1`, or `-2`) on normal return.
-         !! * `4` : Jacobian matrix lost full rank (`rank < n`); iteration not completed.
 
       real(dp) :: lambda, sigma, ypnorm
       integer :: i, j, k, kp1, np1, np2, info
