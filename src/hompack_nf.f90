@@ -99,13 +99,14 @@ module hompack_nf
          !! This counter is incremented once for each call to `tangnf`, where the
          !! homotopy map and its Jacobian are assembled and used to compute a tangent
          !! vector and Newton correction.
-      integer :: trace
+      integer :: lunit
          !! Logical I/O unit for intermediate output.
       logical :: start
          !! Flag to indicate the first call to [[stepnf]].
       logical :: crash
          !! Flag to indicate that the return state of [[stepnf]] is a crash.
       logical :: ispoly
+         !! Flag to indicate polynomial mode.
       character(:), allocatable :: message
          !! Error message.
       real(dp) :: sspar(8)
@@ -129,8 +130,8 @@ module hompack_nf
 contains
 
    impure subroutine fixpnf( &
-      callbacks, n, y, iflag, &
-      arcre, arcae, ansre, ansae, a, sspar, trace, istate, ispoly)
+      state, callbacks, n, y, iflag, &
+      arcre, arcae, ansre, ansae, a, sspar, lunit, ispoly)
    !! This subroutine finds a fixed point or zero of the N-dimensional vector function
    !! \( F(x) \), or tracks a zero curve of a general homotopy map \( \rho(a,\lambda,x) \).
    !!
@@ -309,6 +310,8 @@ contains
       use hompack_kinds, only: zero, one, eps64
       implicit none
 
+      type(fixnpf_state), intent(inout) :: state
+         !! State variables for [[fixpnf]].
       type(hompack_callbacks), intent(in) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
       integer, intent(in) :: n
@@ -371,13 +374,11 @@ contains
       ! real(dp), intent(out), optional :: lambda
       !    !! The value of `lambda` at the final point on the zero curve. Normally this
       !    !! is 1, but in abnormal situations it may be less than 1.
-      integer, intent(in), optional :: trace
+      integer, intent(in), optional :: lunit
          !! Logical I/O unit for intermediate output.
          !! * `0` : No output is printed (default).
          !! * `6` : Standard output (mapped internally to `output_unit`)
          !! * otherwise : Output to the specified I/O unit.
-      type(fixnpf_state), intent(inout), optional :: istate
-         !! State variables for 'fixpnf'.
       logical, intent(in), optional :: ispoly
          !! Optional flag used only by the polynomial-system driver [[POLSYS1H]].
 
@@ -388,86 +389,107 @@ contains
       ! Upper bound on the number of steps
       integer, parameter :: limitd = 1000
 
-      type(fixnpf_state) :: state ! temporary
-      integer :: info, iter, np1
+      integer :: ierr, iter, np1, dima
 
       np1 = n + 1
 
-      ! Check for illegal input parameters
-      if (n <= 0 .or. ansre <= zero .or. ansae < zero .or. size(y) /= (n + 1) .or. &
-          ((iflag == -1 .or. iflag == 0) .and. n /= size(a))) then
+      if (n <= 0) then
+         state%message = "Illegal input: `n` must be greater or equal than one."
          iflag = 7
          return
       end if
 
-      ! Problem type
-      if (iflag >= -2 .and. iflag <= 0) then
-         ! First run
+      if (ansre <= zero) then
+         state%message = "Illegal input: `ansre` must be greater than zero."
+         iflag = 7
+         return
+      end if
+
+      if (ansae < zero) then
+         state%message = "Illegal input: `ansae` must be greater or equal than zero."
+         iflag = 7
+         return
+      end if
+
+      if (size(y) /= (n + 1) .or. ((iflag == -1 .or. iflag == 0) .and. n /= size(a))) then
+         iflag = 7
+         return
+      end if
+
+      if (iflag == 0 .or. iflag == -1) then
+         ! First run for fixed-point or zero-finding problem
+         if (.not. associated(callbacks%f)) then
+            state%message = "Illegal input: callback `f` must be provided for fixed-point and zero-finding problems."
+            iflag = 7
+            return
+         end if
+         if (.not. associated(callbacks%fjac)) then
+            state%message = "Illegal input: callback `fjac` must be provided for fixed-point and zero-finding problems."
+            iflag = 7
+            return
+         end if
+         dima = n
+         go to 20
+      else if (iflag == -2) then
+         ! First run for curve-tracking problem
+         if (.not. associated(callbacks%rho)) then
+            state%message = "Illegal input: callback `rho` must be provided for curve-tracking problems."
+            iflag = 7
+            return
+         end if
+         if (.not. associated(callbacks%rhojac)) then
+            state%message = "Illegal input: callback `rhojac` must be provided for curve-tracking problems."
+            iflag = 7
+            return
+         end if
+         if (.not. present(a)) then
+            state%message = "Illegal input: parameter vector `a` must be provided for curve-tracking problems."
+            iflag = 7
+            return
+         end if
+         dima = size(a)
+         if (dima <= 0) then
+            state%message = "Illegal input: length of parameter vector `a` must be greater than zero."
+            iflag = 7
+            return
+         end if
          go to 20
       else if (iflag == 2) then
          ! Restart after error tolerances were increased
-         state = istate
+         if (n /= state%n .or. state%nfe < 1) then
+            state%message = "Restart error: possible corrupted state or invalid `iflag` value."
+            iflag = 7
+            return
+         end if
          go to 120
       else if (iflag == 3) then
-         state = istate
          ! Restart after iteration limit was reached
+         if (n /= state%n .or. state%nfe < 1) then
+            state%message = "Restart error: possible corrupted state or invalid `iflag` value."
+            iflag = 7
+            return
+         end if
          go to 90
       else
-         ! Illegal input for 'iflag'. Valid values are: -2, -1, 0, 2, 3.
+         state%message = "Illegal input: `iflag` must be -2, -1, 0, 2, or 3."
          iflag = 7
          return
       end if
 
       ! INITIALIZATION (FIRST CALL ONLY)
 
-      ! Ensure the right callbacks are present
-20    if (iflag == 0 .or. iflag == -1) then
-         if (.not. associated(callbacks%f) .or. .not. associated(callbacks%fjac)) then
-            iflag = 7
-            return
-         end if
-      else if (iflag == -2) then
-         if (.not. associated(callbacks%rho) .or. .not. associated(callbacks%rhojac)) then
-            iflag = 7
-            return
-         end if
-      else
-         error stop "This should never happen."
-      end if
+      ! Initialize state
+20    call state%init(n, dima, ierr)
 
-      ! Allocate internal state arrays (no initialization)
-      call state%init(n, info)
-
-      if (info /= 0) then
+      if (ierr /= 0) then
          iflag = 8
          return
       end if
 
-      ! Initialize state variables
-      state%nfe = 0
-      state%iflag = iflag
-      state%start = .true.
-      state%crash = .false.
-      state%trace = 0
-      state%h = 0.1_dp
-      state%hold = one
-      state%s = zero
-
-      state%yp(1) = one
-      state%yp(2:np1) = zero
-      state%ypold(1) = one
-      state%ypold(2:np1) = zero
-
       y(1) = zero
-
-      ! Optionally set the trace output unit
-      if (present(trace)) then
-         if (trace == 6) then
-            state%trace = output_unit
-         else
-            state%trace = trace
-         end if
-      end if
+      state%yp(1) = one
+      state%ypold(1) = one
+      state%iflag = iflag
 
       ! Default arc tolerances
       if (arcre <= zero) arcre = sqrt(ansre)/2
@@ -477,7 +499,6 @@ contains
       ! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
       ! Let 'z[k]' denote the Newton iterates along the flow normal to the Davidenko flow
       ! and 'y' their limit
-      state%sspar = -one
       if (present(sspar)) state%sspar = sspar
       ! Ideal contraction factor: ||z[2] - z[1]|| / ||z[1] - z[0]||
       if (state%sspar(1) <= zero) state%sspar(1) = 0.5_dp
@@ -496,9 +517,21 @@ contains
       ! Assumed operating order 'p'
       if (state%sspar(8) <= zero) state%sspar(8) = 2.0_dp
 
-      ! Load 'a' for the fixed point and zero finding problems
+      ! Load 'a'
       if (state%iflag == 0 .or. state%iflag == -1) then
+         state%a = y(2:np1)
          a = y(2:np1)
+      else
+         state%a = a
+      end if
+
+      ! Optionally set the trace output unit
+      if (present(lunit)) then
+         if (lunit == 6) then
+            state%lunit = output_unit
+         else
+            state%lunit = lunit
+         end if
       end if
 
       ! Special mode for 'polsys1h'
@@ -533,11 +566,11 @@ contains
          end if
 
          ! Take a step along the curve
-         call stepnf(state, callbacks, y, a)
+         call stepnf(state, callbacks, y)
 
          ! Print latest point on curve if requested
-         if (trace /= 0) then
-            write (trace, 217) iter, state%nfe, state%s, y(1), y(2:np1)
+         if (lunit /= 0) then
+            write (lunit, 217) iter, state%nfe, state%s, y(1), y(2:np1)
 217         format(/' STEP', i5, 3x, 'NFE =', i5, 3x, 'ARC LENGTH =', f9.4, 3x, &
                     'LAMBDA =', f7.4, 5x, 'X VECTOR:'/(1x, 6es12.4))
          end if
@@ -545,7 +578,6 @@ contains
          ! Check if the step was successful
          if (state%iflag > 0) then
             iflag = state%iflag
-            istate = state ! TEMPORARY
             return
          end if
 
@@ -570,7 +602,7 @@ contains
 
                ! Save 'yold' for arc length calculation later
                ws%z0 = state%yold
-               call rootnf(state, callbacks, ansre, ansae, y, a)
+               call rootnf(state, callbacks, ansre, ansae, y)
                iflag = 1
 
                ! Set error flag if 'rootnf' could not get the point on the zero
@@ -580,14 +612,13 @@ contains
                ! Calculate final arc length
                ws%w = y - ws%z0
                state%s = state%s - state%hold + norm2(ws%w)
-               istate = state ! TEMPORARY
                return
 
             end associate
 
          end if
 
-         ! For polynomial systems and the 'polsys1h' homotopy map, d lambda/ds>= 0
+         ! For polynomial systems and the 'polsys1h' homotopy map, dlambda/ds>= 0
          ! necessarily; this condition is enforced here
          if (state%ispoly) then
             if (state%yp(1) < zero) then
@@ -606,7 +637,7 @@ contains
 
    end subroutine fixpnf
 
-   subroutine rootnf(state, callbacks, relerr, abserr, y, a)
+   subroutine rootnf(state, callbacks, relerr, abserr, y)
    !! This subroutine finds the point `ybar = (1, xbar)` on the zero curve of the homotopy
    !! map. It starts with two points `yold = (lambdaold, xold)` and `y = (lambda, x)` such
    !! that `lambdaold < 1 <= lambda` , and alternates between secant estimates of `ybar`
@@ -632,8 +663,6 @@ contains
          !! Contains `(lambda, x)` on input.
          !! On successful return, contains the point on the zero curve of the homotopy map
          !! at `lambda = 1`.
-      real(dp), intent(in) :: a(:)
-         !! Parameter vector used in the homotopy map.
 
       real(dp) :: dels, qsout, aerr, rerr, sa, sb, sout
       integer :: judy, jw, lcode, limit, np1
@@ -691,7 +720,7 @@ contains
 
             ! Calculate Newton step at current estimate 'w'
             call tangnf(callbacks, sa, &
-                        ws%w, ws%wp, state%ypold, a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
+                        ws%w, ws%wp, state%ypold, state%a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
                         state%nfe, state%n, state%iflag)
             if (state%iflag > 0) return
 
@@ -758,7 +787,7 @@ contains
 
    end subroutine rootnf
 
-   subroutine stepnf(state, callbacks, y, a)
+   subroutine stepnf(state, callbacks, y)
    !! This subroutine takes one step along the zero curve of the homotopy map using a
    !! predictor-corrector algorithm. The predictor uses a Hermite cubic interpolant, and
    !! the corrector returns to the zero curve along the flow normal to the Davidenko flow.
@@ -778,8 +807,6 @@ contains
          !! Current point on the zero curve. `Shape: (n+1)`.
          !! Contains `(lambda, x)` on input.
          !! On output, updated to the latest point found by the continuation algorithm.
-      real(dp), intent(in) :: a(:)
-         !! Parameter vector used in the homotopy map.
 
       real(dp), parameter :: twou = 2*eps64, fouru = 4*eps64
       real(dp) :: dcalc, hfail, ht, lcalc, rcalc, rholen, temp
@@ -829,7 +856,7 @@ contains
             ! Use linear predictor along tangent direction to start Newton iteration
             state%ypold(1) = one
             state%ypold(2:np1) = zero
-            call tangnf(callbacks, state%s, y, state%yp, state%ypold, a, &
+            call tangnf(callbacks, state%s, y, state%yp, state%ypold, state%a, &
                         ws%qr, ws%alpha, ws%tz, ws%pivot, &
                         state%nfe, state%n, state%iflag)
 
@@ -843,7 +870,7 @@ contains
 
                   ! Calculate the Newton step 'tz' at the current point 'w'
                   call tangnf(callbacks, rholen, &
-                              ws%w, ws%wp, state%ypold, a, &
+                              ws%w, ws%wp, state%ypold, state%a, &
                               ws%qr, ws%alpha, ws%tz, ws%pivot, &
                               state%nfe, state%n, state%iflag)
                   if (state%iflag > 0) return
@@ -897,7 +924,7 @@ contains
                ! Calculate the Newton step 'tz' at the current point 'w'
                rholen = -one
                call tangnf(callbacks, &
-                           rholen, ws%w, ws%wp, state%yp, a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
+                           rholen, ws%w, ws%wp, state%yp, state%a, ws%qr, ws%alpha, ws%tz, ws%pivot, &
                            state%nfe, state%n, state%iflag)
                if (state%iflag > 0) return
 
@@ -1060,7 +1087,7 @@ contains
          !! * `4` : Jacobian matrix lost full rank (`rank < n`); iteration not completed.
 
       real(dp) :: lambda, sigma, ypnorm
-      integer :: i, j, k, kp1, np1, np2
+      integer :: i, j, k, kp1, np1, np2, info
 
       lambda = y(1)
       np1 = n + 1
@@ -1114,14 +1141,14 @@ contains
 
       ! Reduce the Jacobian matrix to upper triangular form
       pivot = 0
-      call dgeqpf(n, np1, qr, n, pivot, yp, alpha, k)
+      call dgeqpf(n, np1, qr, n, pivot, yp, alpha, info)
 
       if (abs(qr(n, n)) <= abs(qr(1, 1))*eps64) then
          iflag = 4
          return
       end if
 
-      call dormqr('L', 'T', n, 1, n, qr, n, yp, qr(:, np2), n, alpha, 3*n + 3, k)
+      call dormqr('L', 'T', n, 1, n, qr, n, yp, qr(:, np2), n, alpha, 3*n + 3, info)
 
       do i = 1, n
          alpha(i) = qr(i, i)
@@ -1207,7 +1234,7 @@ contains
    pure subroutine init_state(self, n, dima, stat)
    !! Initializes [[fixnpf_state]].
 
-      use hompack_kinds, only: zero
+      use hompack_kinds, only: zero, one
 
       class(fixnpf_state), intent(inout) :: self
          !! State.
@@ -1225,18 +1252,18 @@ contains
       ! Initialize scalar state variables
       self%abserr = zero
       self%curtol = zero
-      self%h = zero
+      self%h = 0.1_dp
       self%hold = zero
       self%s = zero
       self%iflag = 0
       self%limit = 0
       self%n = n
       self%nfe = 0
-      self%trace = 0
+      self%lunit = 0
       self%ispoly = .false.
       self%start = .true.
       self%crash = .false.
-      self%sspar = zero
+      self%sspar = -one
       self%message = ""
 
       ! Deallocate any previously allocated arrays

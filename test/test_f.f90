@@ -87,7 +87,7 @@ program test_f
    integer :: iflag, ii, j, nfe, np1, timenew(8), timeold(8), trace
    character(len=6) :: name
    type(hompack_callbacks) :: callbacks
-   type(fixnpf_state) :: istate
+   type(fixnpf_state) :: state
 
    interface
       subroutine mainx
@@ -120,10 +120,10 @@ program test_f
          name = 'FIXPNF'
          callbacks%f => f2
          callbacks%fjac => fjac2
-         call fixpnf(callbacks, n, y, iflag, &
-                     arcre, arcae, ansre, ansae, a, sspar, trace, istate)
-         nfe = istate%nfe
-         arclen = istate%s
+         call fixpnf(state, callbacks, n, y, iflag, arcre, arcae, ansre, ansae, &
+                     a=a, sspar=sspar, lunit=trace)
+         nfe = state%nfe
+         arclen = state%s
       else
          name = 'FIXPDF'
          call fixpdf(n, y, iflag, arcre, ansre, trace, a, ndima, nfe, arclen)
