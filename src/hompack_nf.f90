@@ -186,127 +186,6 @@ contains
    !! \( [\partial \rho/\partial \lambda, \partial \rho/\partial x] \) evaluated
    !! at \( (a,\lambda,x) \).
 
-      ! ON INPUT:
-      !
-      ! N  is the dimension of X, F(X), and RHO(A,LAMBDA,X).
-      !
-      ! Y(:)  is an array of length  N + 1.  (Y(2),...,Y(N+1)) = A  is the
-      !    starting point for the zero curve for the fixed point and
-      !    zero finding problems.  (Y(2),...,Y(N+1)) = X0  for the curve
-      !    tracking problem.
-      !
-      ! IFLAG  can be -2, -1, 0, 2, or 3.  IFLAG  should be 0 on the
-      !    first call to  FIXPNF  for the problem  X=F(X), -1 for the
-      !    problem  F(X)=0, and -2 for the problem  RHO(A,LAMBDA,X)=0.
-      !    In certain situations  IFLAG  is set to 2 or 3 by  FIXPNF,
-      !    and  FIXPNF  can be called again without changing  IFLAG.
-      !
-      ! ARCRE , ARCAE  are the relative and absolute errors, respectively,
-      !    allowed the normal flow iteration along the zero curve.  If
-      !    ARC?E <= 0.0  on input it is reset to  .5*SQRT(ANS?E) .
-      !    Normally  ARC?E should be considerably larger than  ANS?E .
-      !
-      ! ANSRE , ANSAE  are the relative and absolute error values used for
-      !    the answer at LAMBDA = 1.  The accepted answer  Y = (LAMBDA, X)
-      !    satisfies
-      !
-      !       |Y(1) - 1|  <=  ANSRE + ANSAE           .AND.
-      !
-      !       ||Z||  <=  ANSRE*||X|| + ANSAE          where
-      !
-      !    (.,Z) is the Newton step to Y.
-      !
-      ! TRACE  is an integer specifying the logical I/O unit for
-      !    intermediate output.  If  TRACE > 0  the points computed on
-      !    the zero curve are written to I/O unit  TRACE .
-      !
-      ! A(:)  contains the parameter vector  A .  For the fixed point
-      !    and zero finding problems, A  need not be initialized by the
-      !    user, and is assumed to have length  N.  For the curve
-      !    tracking problem, A  must be initialized by the user.
-      !
-      ! SSPAR(1:8) = (LIDEAL, RIDEAL, DIDEAL, HMIN, HMAX, BMIN, BMAX, P)  is
-      !    a vector of parameters used for the optimal step size estimation.
-      !    If  SSPAR(J) <= 0.0  on input, it is reset to a default value
-      !    by  FIXPNF .  Otherwise the input value of  SSPAR(J)  is used.
-      !    See the comments below and in  STEPNF  for more information about
-      !    these constants.
-      !
-      ! POLY_SWITCH  is an optional logical variable used only by the driver
-      !    POLSYS1H  for polynomial systems.
-      !
-      !
-      ! ON OUTPUT:
-      !
-      ! N , TRACE , A  are unchanged.
-      !
-      ! Y(1) = LAMBDA, (Y(2),...,Y(N+1)) = X, and Y is an approximate
-      !    zero of the homotopy map.  Normally LAMBDA = 1 and X is a
-      !    fixed point(zero) of F(X).  In abnormal situations LAMBDA
-      !    may only be near 1 and X is near a fixed point(zero).
-      !
-      ! IFLAG =
-      !  -2   causes  FIXPNF  to initialize everything for the problem
-      !       RHO(A,LAMBDA,X) = 0 (use on first call).
-      !
-      !  -1   causes  FIXPNF  to initialize everything for the problem
-      !       F(X) = 0 (use on first call).
-      !
-      !   0   causes  FIXPNF  to initialize everything for the problem
-      !       X = F(X) (use on first call).
-      !
-      !   1   Normal return.
-      !
-      !   2   Specified error tolerance cannot be met.  Some or all of
-      !       ARCRE , ARCAE , ANSRE , ANSAE  have been increased to
-      !       suitable values.  To continue, just call  FIXPNF  again
-      !       without changing any parameters.
-      !
-      !   3   STEPNF  has been called 1000 times.  To continue, call
-      !       FIXPNF  again without changing any parameters.
-      !
-      !   4   Jacobian matrix does not have full rank.  The algorithm
-      !       has failed (the zero curve of the homotopy map cannot be
-      !       followed any further).
-      !
-      !   5   The tracking algorithm has lost the zero curve of the
-      !       homotopy map and is not making progress.  The error tolerances
-      !       ARC?E  and  ANS?E  were too lenient.  The problem should be
-      !       restarted by calling  FIXPNF  with smaller error tolerances
-      !       and  IFLAG = 0 (-1, -2).
-      !
-      !   6   The normal flow Newton iteration in  STEPNF  or  ROOTNF
-      !       failed to converge.  The error tolerances  ANS?E  may be too
-      !       stringent.
-      !
-      !   7   Illegal input parameters, a fatal error.
-      !
-      !   8   Memory allocation error, fatal.
-      !
-      ! ARCRE , ARCAE , ANSRE , ANSAE  are unchanged after a normal return
-      !    (IFLAG = 1).  They are increased to appropriate values on the
-      !    return  IFLAG = 2 .
-      !
-      ! NFE  is the number of function evaluations (= number of
-      !    Jacobian matrix evaluations).
-      !
-      ! ARCLEN  is the length of the path followed.
-      !
-      ! Allocatable and automatic work arrays:
-      !
-      ! YP(1:N+1)  is a work array containing the tangent vector to
-      !    the zero curve at the current point  Y .
-      !
-      ! YOLD(1:N+1)  is a work array containing the previous point found
-      !    on the zero curve.
-      !
-      ! YPOLD(1:N+1)  is a work array containing the tangent vector to
-      !    the zero curve at  YOLD .
-      !
-      ! QR(1:N,1:N+2), ALPHA(1:3*N+3), TZ(1:N+1), PIVOT(1:N+1), W(1:N+1),
-      !    WP(1:N+1), Z0(1:N+1), Z1(1:N+1)  are all work arrays used by
-      !    STEPNF  to calculate the tangent vectors and Newton steps.
-
       use hompack_kinds, only: zero, one, eps64
       implicit none
 
@@ -335,18 +214,21 @@ contains
          !!         increased and the routine may be called again.
          !! * `3` : iteration limit reached; call again to continue.
          !! * `4` : Jacobian matrix lost full rank.
-         !! * `5` : tracking algorithm lost the zero curve.
-         !! * `6` : Newton iteration failed to converge.
+         !! * `5` : tracking algorithm lost the zero curve and is not making progress; the
+         !!         tolerances `arc?e` and `ans?e` were too lenient. Retry with smaller
+         !!         tolerances.
+         !! * `6` : normal flow Newton iteration failed to converge; tolerances `ans?e` may be
+         !!         too stringent.
          !! * `7` : illegal input parameters.
          !! * `8` : memory allocation failure.
       real(dp), intent(inout) :: arcre
-         !! Relative error tolerance for the normal-flow iteration used while
-         !! tracking the zero curve. If nonpositive on input, a default value is
-         !! chosen. May be increased when `iflag=2`.
+         !! Relative error tolerance for the normal-flow iteration used while tracking the
+         !! zero curve. If nonpositive on input, the default value `arcre=0.5*sqrt(ansre)` is
+         !! used. May be increased when `iflag=2`.
       real(dp), intent(inout) :: arcae
-         !! Absolute error tolerance for the normal-flow iteration used while
-         !! tracking the zero curve. If nonpositive on input, a default value is
-         !! chosen. May be increased when `iflag=2`.
+         !! Absolute error tolerance for the normal-flow iteration used while tracking the
+         !! zero curve. If nonpositive on input, the default value `arcae=0.5*sqrt(ansae)` is
+         !! used. May be increased when `iflag=2`.
       real(dp), intent(inout) :: ansre
          !! Relative error tolerance required of the final solution at `lambda=1`.
          !! May be increased when `iflag=2`.
@@ -356,14 +238,9 @@ contains
       real(dp), intent(inout), optional :: sspar(8)
          !! Step-size control parameters:
          !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
-         !! Parameters used by the optimal step-size estimation algorithm.
          !! Elements that are nonpositive on input are replaced by default values.
       real(dp), intent(in), optional :: a(:)
-         !! Parameter vector `a`.
-         !! For fixed-point and zero-finding problems, the array is assumed to have
-         !! length `n` and need not be initialized by the user.
-         !! For curve-tracking problems, it must be initialized on input.
-         !! Unchanged on output.
+         !! Parameter vector `a` for curve-tracking problems.
       integer, intent(in), optional :: lunit
          !! Logical I/O unit for intermediate output.
          !! * `0` : No output is printed (default).
@@ -797,9 +674,8 @@ contains
       integer :: itnum, j, judy, np1
       logical :: fail
 
-      ! The limit on the number of Newton iterations allowed before reducing the step
-      ! size 'h' may be changed by changing the following parameter
-      integer, parameter:: litfh = 4
+      ! Newton iterations allowed before reducing the step size 'h'
+      integer, parameter:: max_newton = 4
 
       np1 = state%n + 1
       state%crash = .true.
@@ -851,7 +727,7 @@ contains
                ws%w = state%y + state%h*state%yp
                ws%z0 = ws%w
 
-               do judy = 1, litfh
+               do judy = 1, max_newton
 
                   ! Calculate the Newton step 'tz' at the current point 'w'
                   rholen = -one
@@ -882,7 +758,7 @@ contains
 
                end do
 
-               ! No convergence in litfh iterations. Reduce h and try again.
+               ! No convergence in 'max_newton' iterations. Reduce h and try again.
                if (state%h <= fouru*(one + state%s)) then
                   state%iflag = 6
                   return
@@ -909,7 +785,7 @@ contains
             ws%z0 = ws%w
 
             ! CORRECTOR SECTION
-            do judy = 1, litfh
+            do judy = 1, max_newton
 
                ! Calculate the Newton step 'tz' at the current point 'w'
                rholen = -one
@@ -939,7 +815,7 @@ contains
 
             end do
 
-            ! No convergence in 'litfh' iterations. Record failure at calculated 'h'
+            ! No convergence in 'max_newton' iterations. Record failure at calculated 'h'
             ! Save this step size, reduce 'h' and try again.
 
             fail = .true.
@@ -1005,13 +881,13 @@ contains
          if (itnum == 1) then
             ! If convergence had occurred after 1 iteration, don't decrease 'h'.
             state%h = max(state%h, state%hold)
-         else if (itnum == litfh) then
-            ! If convergence required the maximum 'litfh' iterations, don't increase 'h'.
+         else if (itnum == max_newton) then
+            ! If convergence required the maximum 'max_newton' iterations, don't increase 'h'.
             state%h = min(state%h, state%hold)
          end if
 
-         ! If convergence did not occur in 'litfh' iterations for a particular 'h = hfail',
-         ! don't choose the new step size larger than 'hfail'.
+         ! If convergence did not occur in 'max_newton' iterations for a particular
+         ! 'h = hfail', don't choose the new step size larger than 'hfail'.
          if (fail) state%h = min(state%h, hfail)
 
       end associate
