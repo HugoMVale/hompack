@@ -129,8 +129,8 @@ module hompack_nf
 
 contains
 
-   impure subroutine fixpnf( &
-      state, callbacks, n, y, iflag, &
+   subroutine fixpnf( &
+      state, callbacks, n, x, iflag, &
       arcre, arcae, ansre, ansae, sspar, a, lunit, ispoly)
    !! This subroutine finds a fixed point or zero of the N-dimensional vector function
    !! \( F(x) \), or tracks a zero curve of a general homotopy map \( \rho(a,\lambda,x) \).
@@ -311,23 +311,16 @@ contains
       implicit none
 
       type(fixnpf_state), intent(inout) :: state
-         !! State variables for [[fixpnf]].
+         !! State variables for [[fixpnf]]. Initialized on the first call, and updated on
+         !! subsequent calls when `iflag=2` or `iflag=3`.
       type(hompack_callbacks), intent(in) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
       integer, intent(in) :: n
          !! Problem dimension.
-      ! real(dp), intent(inout) :: x(:)
-      !    !! On input, `x` is the initial point `a` for the fixed-point and zero-finding
-      !    !! problems, and the initial solution `x0` for the curve-tracking problem.
-      !    !! On output, `x` is the approximate of the problem at `lambda = 1`.
-      real(dp), intent(inout) :: y(:)
-         !! Homotopy solution vector. `Shape: (n+1)`.
-         !! On input, `y(2:n+1)` contains the starting point:
-         !! for fixed-point and zero-finding problems this is the initial point `a`,
-         !! and for curve tracking it is the initial solution `x0`.
-         !! On output, `y(1)=lambda` and `y(2:n+1)=x`, an approximate zero of the
-         !! homotopy map. Normally `lambda=1` and `x` is a fixed point or zero of
-         !! the target function.
+      real(dp), intent(inout) :: x(:)
+         !! On input, `x` is the initial point `a` for the fixed-point and zero-finding
+         !! problems, and the initial solution `x0` for the curve-tracking problem.
+         !! On output, `x` is the approximate solution of the problem at `lambda = 1`.
       integer, intent(inout) :: iflag
          !! Problem type and status flag.
          !!
@@ -389,9 +382,16 @@ contains
       integer :: ierr, iter, np1, dima
 
       np1 = n + 1
+      state%message = ""
 
       if (n <= 0) then
          state%message = "Illegal input: `n` must be greater or equal than one."
+         iflag = 7
+         return
+      end if
+
+      if (size(x) /= n) then
+         state%message = "Illegal input: length of `x` must be equal to `n`."
          iflag = 7
          return
       end if
@@ -404,11 +404,6 @@ contains
 
       if (ansae < zero) then
          state%message = "Illegal input: `ansae` must be greater or equal than zero."
-         iflag = 7
-         return
-      end if
-
-      if (size(y) /= (n + 1) .or. ((iflag == -1 .or. iflag == 0) .and. n /= size(a))) then
          iflag = 7
          return
       end if
@@ -453,7 +448,7 @@ contains
          go to 20
       else if (iflag == 2) then
          ! Restart after error tolerances were increased
-         if (n /= state%n .or. state%nfe < 1) then
+         if (state%n /= n .or. state%nfe < 1) then
             state%message = "Restart error: possible corrupted state or invalid `iflag` value."
             iflag = 7
             return
@@ -461,7 +456,7 @@ contains
          go to 120
       else if (iflag == 3) then
          ! Restart after iteration limit was reached
-         if (n /= state%n .or. state%nfe < 1) then
+         if (state%n /= n .or. state%nfe < 1) then
             state%message = "Restart error: possible corrupted state or invalid `iflag` value."
             iflag = 7
             return
@@ -483,10 +478,19 @@ contains
          return
       end if
 
-      y(1) = zero
+      state%iflag = iflag
+
+      state%y(1) = zero
+      state%y(2:np1) = x
       state%yp(1) = one
       state%ypold(1) = one
-      state%iflag = iflag
+
+      ! Load 'a'
+      if (state%iflag == 0 .or. state%iflag == -1) then
+         state%a = x
+      else
+         state%a = a
+      end if
 
       ! Default arc tolerances
       if (arcre <= zero) arcre = sqrt(ansre)/2
@@ -514,14 +518,7 @@ contains
       ! Assumed operating order 'p'
       if (state%sspar(8) <= zero) state%sspar(8) = 2.0_dp
 
-      ! Load 'a'
-      if (state%iflag == 0 .or. state%iflag == -1) then
-         state%a = y(2:np1)
-      else
-         state%a = a
-      end if
-
-      ! Optionally set the trace output unit
+      ! Set the trace output unit
       if (present(lunit)) then
          if (lunit == 6) then
             state%lunit = output_unit
@@ -530,7 +527,7 @@ contains
          end if
       end if
 
-      ! Special mode for 'polsys1h'
+      ! Set special mode for 'polsys1h'
       if (present(ispoly)) then
          state%ispoly = ispoly
       else
@@ -546,7 +543,7 @@ contains
 120   do iter = 1, state%limit
 
          ! Tracking algorithm lost the zero curve
-         if (y(1) < zero) then
+         if (state%y(1) < zero) then
             iflag = 5
             return
          end if
@@ -562,11 +559,11 @@ contains
          end if
 
          ! Take a step along the curve
-         call stepnf(state, callbacks, y)
+         call stepnf(state, callbacks)
 
          ! Print latest point on curve if requested
-         if (lunit /= 0) then
-            write (lunit, 217) iter, state%nfe, state%s, y(1), y(2:np1)
+         if (state%lunit /= 0) then
+            write (lunit, 217) iter, state%nfe, state%s, state%y(1), state%y(2:np1)
 217         format(/' STEP', i5, 3x, 'NFE =', i5, 3x, 'ARC LENGTH =', f9.4, 3x, &
                     'LAMBDA =', f7.4, 5x, 'X VECTOR:'/(1x, 6es12.4))
          end if
@@ -590,23 +587,22 @@ contains
             return
          end if
 
-         ! Use Hermite cubic interpolation and Newton iteration to get the
-         ! answer at lambda = 1.0
-         if (y(1) >= one) then
+         ! Use Hermite cubic interpolation and Newton iteration to get the answer at lambda=1
+         if (state%y(1) >= one) then
 
             associate (ws => state%workspace)
 
                ! Save 'yold' for arc length calculation later
                ws%z0 = state%yold
-               call rootnf(state, callbacks, ansre, ansae, y)
+               call rootnf(state, callbacks, ansre, ansae)
                iflag = 1
 
-               ! Set error flag if 'rootnf' could not get the point on the zero
-               ! curve at lambda = 1.0
+               ! Set error flag if 'rootnf' could not get the point on the zero curve at
+               ! lambda=1
                if (state%iflag > 0) iflag = state%iflag
 
                ! Calculate final arc length
-               ws%w = y - ws%z0
+               ws%w = state%y - ws%z0
                state%s = state%s - state%hold + norm2(ws%w)
                return
 
@@ -633,7 +629,7 @@ contains
 
    end subroutine fixpnf
 
-   subroutine rootnf(state, callbacks, relerr, abserr, y)
+   subroutine rootnf(state, callbacks, relerr, abserr)
    !! This subroutine finds the point `ybar = (1, xbar)` on the zero curve of the homotopy
    !! map. It starts with two points `yold = (lambdaold, xold)` and `y = (lambda, x)` such
    !! that `lambdaold < 1 <= lambda` , and alternates between secant estimates of `ybar`
@@ -654,11 +650,6 @@ contains
       real(dp), intent(in) :: abserr
          !! Absolute convergence tolerance.
          !! Used together with `relerr` in the convergence criteria.
-      real(dp), intent(inout) :: y(:)
-         !! Current point on the zero curve. `Shape: (n+1)`.
-         !! Contains `(lambda, x)` on input.
-         !! On successful return, contains the point on the zero curve of the homotopy map
-         !! at `lambda = 1`.
 
       real(dp) :: dels, qsout, aerr, rerr, sa, sb, sout
       integer :: judy, jw, lcode, limit, np1
@@ -675,7 +666,7 @@ contains
 
       associate (ws => state%workspace)
 
-         ws%tz = y - state%yold
+         ws%tz = state%y - state%yold
          dels = norm2(ws%tz)
 
          ! Using two points and tangents on the homotopy zero curve, construct the Hermite
@@ -688,7 +679,7 @@ contains
          do
             call root(sout, qsout, sa, sb, rerr, aerr, lcode, state_root)
             if (lcode > 0) exit
-            qsout = qofs(state%yold(1), state%ypold(1), y(1), state%yp(1), dels, sout) - one
+            qsout = qofs(state%yold(1), state%ypold(1), state%y(1), state%yp(1), dels, sout) - one
          end do
 
          ! If lambda=1 were bracketed, root cannot fail
@@ -699,7 +690,7 @@ contains
 
          ! Calculate 'q(sa)' as the initial point for a Newton iteration
          do jw = 1, np1
-            ws%w(jw) = qofs(state%yold(jw), state%ypold(jw), y(jw), state%yp(jw), dels, sa)
+            ws%w(jw) = qofs(state%yold(jw), state%ypold(jw), state%y(jw), state%yp(jw), dels, sa)
          end do
 
          ! Tangent information 'yp' is no longer needed. Hereafter, 'yp' represents the most
@@ -727,7 +718,7 @@ contains
             ! Check for convergence
             if ((abs(ws%w(1) - one) <= rerr + aerr) .and. &
                 (norm2(ws%tz) <= rerr*norm2(ws%w(2:np1)) + aerr)) then
-               y = ws%w
+               state%y = ws%w
                return
             end if
 
@@ -738,13 +729,13 @@ contains
             end if
 
             ! Update 'y' and 'yold'
-            state%yold = y
-            y = ws%w
+            state%yold = state%y
+            state%y = ws%w
 
             ! Update 'yp' such that 'yp' is the most recent point opposite of 'lambda=1'
             ! from 'y'. Set bracket=.true. iff 'y' and 'yold' bracket 'lambda=1' so that
             ! yp = yold .
-            if ((y(1) - one)*(state%yold(1) - one) > 0) then
+            if ((state%y(1) - one)*(state%yold(1) - one) > 0) then
                bracket = .false.
             else
                bracket = .true.
@@ -752,12 +743,12 @@ contains
             end if
 
             ! Compute dels=||y-yp||
-            ws%tz = y - state%yp
+            ws%tz = state%y - state%yp
             dels = norm2(ws%tz)
 
             ! Compute tz for the linear predictor w = y + tz, where tz = sa*(yold-y).
-            sa = (one - y(1))/(state%yold(1) - y(1))
-            ws%tz = sa*(state%yold - y)
+            sa = (one - state%y(1))/(state%yold(1) - state%y(1))
+            ws%tz = sa*(state%yold - state%y)
 
             ! To insure stability, the linear prediction must be no farther from y than
             ! yp is. This is guaranteed if bracket=true. If linear prediction is too far
@@ -765,8 +756,8 @@ contains
             if (.not. bracket) then
                if (norm2(ws%tz) > dels) then
                   ! Compute tz = sa*(yp-y)
-                  sa = (one - y(1))/(state%yp(1) - y(1))
-                  ws%tz = sa*(state%yp - y)
+                  sa = (one - state%y(1))/(state%yp(1) - state%y(1))
+                  ws%tz = sa*(state%yp - state%y)
                end if
             end if
 
@@ -784,7 +775,7 @@ contains
 
    end subroutine rootnf
 
-   subroutine stepnf(state, callbacks, y)
+   subroutine stepnf(state, callbacks)
    !! This subroutine takes one step along the zero curve of the homotopy map using a
    !! predictor-corrector algorithm. The predictor uses a Hermite cubic interpolant, and
    !! the corrector returns to the zero curve along the flow normal to the Davidenko flow.
@@ -800,10 +791,6 @@ contains
          !! State variables for [[fixpnf]].
       type(hompack_callbacks), intent(in) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
-      real(dp), intent(inout) :: y(:)
-         !! Current point on the zero curve. `Shape: (n+1)`.
-         !! Contains `(lambda, x)` on input.
-         !! On output, updated to the latest point found by the continuation algorithm.
 
       real(dp), parameter :: twou = 2*eps64, fouru = 4*eps64
       real(dp) :: dcalc, hfail, ht, lcalc, rcalc, rholen, temp
@@ -829,7 +816,7 @@ contains
          end if
 
          ! If error tolerances are too small, increase them to acceptable values
-         temp = norm2(y) + one
+         temp = norm2(state%y) + one
          if (0.5_dp*(state%relerr*temp + state%abserr) < twou*temp) then
             if (state%relerr /= zero) then
                state%relerr = fouru*(one + fouru)
@@ -853,19 +840,21 @@ contains
             ! Use linear predictor along tangent direction to start Newton iteration
             state%ypold(1) = one
             state%ypold(2:np1) = zero
-            call tangnf(callbacks, state%s, state%n, y, state%yp, state%ypold, state%a, &
+            call tangnf(callbacks, state%s, state%n, state%y, state%yp, state%ypold, state%a, &
                         state%nfe, state%iflag, &
                         ws%qr, ws%alpha, ws%tz, ws%pivot)
 
             if (state%iflag > 0) return
 
             do
-               ws%w = y + state%h*state%yp
+
+               ws%w = state%y + state%h*state%yp
                ws%z0 = ws%w
+
                do judy = 1, litfh
-                  rholen = -one
 
                   ! Calculate the Newton step 'tz' at the current point 'w'
+                  rholen = -one
                   call tangnf(callbacks, rholen, &
                               state%n, ws%w, ws%wp, state%ypold, state%a, &
                               state%nfe, state%iflag, &
@@ -887,7 +876,9 @@ contains
                   end if
 
                   ! Go to mop-up section after convergence
-                  if (norm2(ws%tz) <= state%relerr*norm2(ws%w) + state%abserr) go to 600
+                  if (norm2(ws%tz) <= state%relerr*norm2(ws%w) + state%abserr) then
+                     go to 600
+                  end if
 
                end do
 
@@ -905,14 +896,16 @@ contains
          ! PREDICTOR SECTION
 
          fail = .false.
+
          do
 
             ! Compute point predicted by Hermite interpolant. Use step size 'h' computed on
             ! last call to 'stepnf'.
             do j = 1, np1
-               ws%w(j) = qofs(state%yold(j), state%ypold(j), y(j), state%yp(j), &
+               ws%w(j) = qofs(state%yold(j), state%ypold(j), state%y(j), state%yp(j), &
                               state%hold, state%hold + state%h)
             end do
+
             ws%z0 = ws%w
 
             ! CORRECTOR SECTION
@@ -939,19 +932,24 @@ contains
                   rcalc = rholen/rcalc
                end if
 
-               ! Go to mop-up section after convergence.
-               if (norm2(ws%tz) <= state%relerr*norm2(ws%w) + state%abserr) go to 600
+               ! Go to mop-up section after convergence
+               if (norm2(ws%tz) <= state%relerr*norm2(ws%w) + state%abserr) then
+                  go to 600
+               end if
 
             end do
 
             ! No convergence in 'litfh' iterations. Record failure at calculated 'h'
             ! Save this step size, reduce 'h' and try again.
+
             fail = .true.
             hfail = state%h
+
             if (state%h <= fouru*(one + state%s)) then
                state%iflag = 6
                return
             end if
+
             state%h = state%h/2
 
          end do
@@ -962,10 +960,10 @@ contains
          ! the homotopy map. 'ypold' and 'yp' contain the tangent vectors to the zero curve
          ! at  'yold'  and  'y' , respectively.
 600      state%ypold = state%yp
-         state%yold = y
-         y = ws%w
+         state%yold = state%y
+         state%y = ws%w
          state%yp = ws%wp
-         ws%w = y - state%yold
+         ws%w = state%y - state%yold
 
          ! Update arc length
          state%hold = norm2(ws%w)
@@ -974,8 +972,8 @@ contains
          ! OPTIMAL STEP SIZE ESTIMATION SECTION
 
          ! Calculate the distance factor 'dcalc'
-         ws%tz = ws%z0 - y
-         ws%w = ws%z1 - y
+         ws%tz = ws%z0 - state%y
+         ws%w = ws%z1 - state%y
          dcalc = norm2(ws%tz)
          if (dcalc /= zero) dcalc = norm2(ws%w)/dcalc
 

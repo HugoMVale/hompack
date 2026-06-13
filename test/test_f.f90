@@ -82,8 +82,7 @@ program test_f
    implicit none
 
    integer, parameter :: n = 5, ndima = 5
-   real(dp) :: a(n), ansae, ansre, arcae, arcre, &
-               arclen, dtime, sspar(8), y(n + 1)
+   real(dp) :: a(n), ansae, ansre, arcae, arcre, arclen, dtime, sspar(8), y(n + 1), x(n)
    integer :: iflag, ii, j, nfe, np1, timenew(8), timeold(8), trace
    character(len=6) :: name
    type(hompack_callbacks) :: callbacks
@@ -107,6 +106,7 @@ program test_f
       sspar = 0d0
       iflag = -1
       y(2:np1) = 0d0
+      x = y(2:np1)
 
       ! GET CURRENT DATE AND TIME
       call date_and_time(values=timeold)
@@ -120,10 +120,11 @@ program test_f
          name = 'FIXPNF'
          callbacks%f => f2
          callbacks%fjac => fjac2
-         call fixpnf(state, callbacks, n, y, iflag, arcre, arcae, ansre, ansae, &
+         call fixpnf(state, callbacks, n, x, iflag, arcre, arcae, ansre, ansae, &
                      sspar=sspar, a=a, lunit=trace)
          nfe = state%nfe
          arclen = state%s
+         y = state%y
       else
          name = 'FIXPDF'
          call fixpdf(n, y, iflag, arcre, ansre, trace, a, ndima, nfe, arclen)
