@@ -3,8 +3,8 @@ project: hompack
 license: mit
 summary: hompack is a package for solving nonlinear systems of equations by homotopy methods.
 src_dir: src
-         test
-exclude: src/lapack.f
+exclude: src/*.f
+         hompack_global_legacy.f90
 output_dir: _site
 page_dir: doc
 extra_mods: iso_fortran_env:https://gcc.gnu.org/onlinedocs/gfortran/ISO_005fFORTRAN_005fENV.html

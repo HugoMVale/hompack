@@ -1,10 +1,89 @@
 module hompack_core
 !! Core routines used by two or more of the `hompack` solvers.
 
+   use iso_c_binding, only: c_ptr, c_null_ptr
    use hompack_kinds, only: dp
    implicit none
+   private
 
-   type root_state
+   public :: hompack_status, hompack_f_callbacks
+   public :: root_state, root, qofs
+
+   ! Problem "enum"
+   integer, parameter, public :: problem_fix_point = 1
+   integer, parameter, public :: problem_zero_find = 2
+   integer, parameter, public :: problem_curve_track = 3
+
+   ! Status "enum"
+   integer, parameter, public :: hompack_success = 1
+
+   abstract interface
+      subroutine f_t(x, v, data)
+      !! User routine to evaluate the function \(f(x)\).
+         import :: dp, c_ptr
+         real(dp), intent(in) :: x(:)
+         real(dp), intent(out) :: v(:)
+         type(c_ptr), value :: data
+      end subroutine f_t
+
+      subroutine fjac_t(x, v, k, data)
+      !! User routine to evaluate the Jacobian of \(f(x)\).
+         import :: dp, c_ptr
+         real(dp), intent(in) :: x(:)
+         real(dp), intent(out) :: v(:)
+         integer, intent(in) :: k
+         type(c_ptr), value :: data
+      end subroutine fjac_t
+
+      subroutine rho_t(a, lambda, x, v, data)
+      !! User routine to evaluate the homotopy function \(\rho(a, \lambda, x)\).
+         import :: dp, c_ptr
+         real(dp), intent(in) :: a(:)
+         real(dp), intent(in) :: lambda
+         real(dp), intent(in) :: x(:)
+         real(dp), intent(out) :: v(:)
+         type(c_ptr), value :: data
+      end subroutine rho_t
+
+      subroutine rhojac_t(a, lambda, x, v, k, data)
+      !! User routine to evaluate the Jacobian of \(\rho(a, \lambda, x)\).
+         import :: dp, c_ptr
+         real(dp), intent(in) :: a(:)
+         real(dp), intent(in) :: lambda
+         real(dp), intent(in) :: x(:)
+         real(dp), intent(out) :: v(:)
+         integer, intent(in) :: k
+         type(c_ptr), value :: data
+      end subroutine rhojac_t
+   end interface
+
+   type :: hompack_f_callbacks
+   !! Container to hold user routines for f-suffix (dense Jacobian) methods.
+      procedure(f_t), nopass, pointer :: f => null()
+      procedure(fjac_t), nopass, pointer :: fjac => null()
+      procedure(rho_t), nopass, pointer :: rho => null()
+      procedure(rhojac_t), nopass, pointer :: rhojac => null()
+      type(c_ptr) :: data = c_null_ptr
+   end type
+
+   type :: hompack_s_callbacks
+   !! Container to hold user routines for s-suffix (sparse Jacobian) methods.
+   !! To be implemented in the future.
+      procedure(f_t), nopass, pointer :: f => null()
+      ! procedure(fjacs_t), nopass, pointer :: fjacs => null()
+      procedure(rho_t), nopass, pointer :: rho => null()
+      ! procedure(rhojacs_t), nopass, pointer :: rhojacs => null()
+      type(c_ptr) :: data = c_null_ptr
+   end type
+
+   type :: hompack_status
+      integer :: code = hompack_success
+      character(len=256) :: message = ""
+   contains
+      procedure :: ok => hompack_status_ok
+   end type
+
+   type :: root_state
    !! State variables for [[root]].
       real(dp) :: a
          !! Previous iterate point used for secant step calculation.
@@ -36,9 +115,19 @@ module hompack_core
          !! Counter of sequential secant steps used to force bisection if convergence stalls.
       integer  :: fcount
          !! Total number of function evaluations completed so far.
-   end type root_state
+   end type
 
 contains
+
+   logical pure function hompack_status_ok(self) result(res)
+   !! This function checks if the status code indicates success.
+
+      class(hompack_status), intent(in) :: self
+         !! Status object.
+
+      res = (self%code == hompack_success)
+
+   end function
 
    subroutine root(t, ft, b, c, relerr, abserr, iflag, state)
    !! This subroutine computes a root of the nonlinear equation `f(x) = 0` where `f(x)`
@@ -235,7 +324,7 @@ contains
    end subroutine root
 
    elemental pure function qofs(f0, fp0, f1, fp1, dels, s) result(res)
-   !! Computes the Hermite cubic interpolant at a point `s`.
+   !! This function computes the Hermite cubic interpolant at a point `s`.
 
       real(dp), intent(in) :: f0
          !! Function value at the start of the interval.

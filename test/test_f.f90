@@ -76,7 +76,8 @@ program test_f
    use hompack_kinds, only: dp
    use hompack_df, only: fixpdf
    use hompack_qf, only: fixpqf
-   use hompack_nf, only: fixpnf, hompack_callbacks, fixnpf_state
+   use hompack_nf, only: fixpnf, nf_result, nf_config, nf_solver
+   use hompack_core, only: hompack_f_callbacks, hompack_status, problem_zero_find
    use hompack_core_legacy, only: f, fjac
    use test_f_mod, only: f2, fjac2
    implicit none
@@ -85,8 +86,11 @@ program test_f
    real(dp) :: a(n), ansae, ansre, arcae, arcre, arclen, dtime, sspar(8), y(n + 1), x(n)
    integer :: iflag, ii, j, nfe, np1, timenew(8), timeold(8), trace
    character(len=6) :: name
-   type(hompack_callbacks) :: callbacks
-   type(fixnpf_state) :: state
+   type(hompack_f_callbacks) :: callbacks
+   type(nf_config) :: config
+   type(nf_result) :: result
+   type(nf_solver) :: solver
+   type(hompack_status) :: status
 
    interface
       subroutine mainx
@@ -108,26 +112,51 @@ program test_f
       y(2:np1) = 0d0
       x = y(2:np1)
 
+      config%arcre = arcre
+      config%arcae = arcae
+      config%ansre = ansre
+      config%ansae = ansae
+      config%lunit = trace
+      config%sspar = sspar
+
       ! GET CURRENT DATE AND TIME
       call date_and_time(values=timeold)
 
       ! CALL TO HOMPACK ROUTINE
       if (ii .eq. 1) then
+
          name = 'FIXPQF'
          call fixpqf(n, y, iflag, arcre, arcae, ansre, ansae, trace, a, &
                      sspar, nfe, arclen)
+
       else if (ii .eq. 2) then
+
          name = 'FIXPNF'
          callbacks%f => f2
          callbacks%fjac => fjac2
-         call fixpnf(state, callbacks, n, x, iflag, arcre, arcae, ansre, ansae, &
-                     sspar=sspar, a=a, lunit=trace)
-         nfe = state%nfe
-         arclen = state%s
-         y = state%y
+
+         status = solver%initialize(problem_zero_find, callbacks, n, config=config)
+         if (.not. status%ok()) then
+            error stop status%message
+         end if
+
+         result = solver%solve(x)
+         iflag = result%status%code
+         nfe = result%nfe
+         arclen = result%arc_length
+         y = [result%lambda, result%x]
+
+         !call state%alloc(n, size(a))
+         !call fixpnf(state, callbacks, n, x, iflag, config)
+         !nfe = state%nfe
+         !arclen = state%s
+         !y = state%y
+
       else
+
          name = 'FIXPDF'
          call fixpdf(n, y, iflag, arcre, ansre, trace, a, ndima, nfe, arclen)
+
       end if
 
       ! CALCULATE EXECUTION TIME
@@ -275,7 +304,7 @@ subroutine mainx
    use hompack_kinds, only: dp, zero, one
    use hompack_core_legacy, only: rootnx, stepnx
    use hompack_core_legacy, only: f, fjac
-   use hompack_nf, only: hompack_callbacks, tangnf
+   use hompack_nf, only: hompack_f_callbacks, tangnf
    use test_f_mod, only: f2, fjac2
    implicit none
 
@@ -287,7 +316,7 @@ subroutine mainx
    integer :: iflag, iter = 0, j, nfe, nfec = 0, np1, pivot(n + 1), &
               timenew(8), timeold(8), trace
    logical :: crash, start
-   type(hompack_callbacks) :: callbacks
+   type(hompack_f_callbacks) :: callbacks
 
    ! DEFINE ARGUMENTS FOR CALL TO HOMPACK PROCEDURE
    np1 = n + 1

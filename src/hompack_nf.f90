@@ -3,56 +3,20 @@ module hompack_nf
 
    use iso_c_binding, only: c_ptr, c_null_ptr
    use iso_fortran_env, only: output_unit
-   use hompack_kinds, only: dp
+   use hompack_kinds, only: dp, zero, one, eps64
+   use hompack_core
    implicit none
 
-   abstract interface
-      subroutine f_t(x, v, data)
-         import :: dp, c_ptr
-         real(dp), intent(in) :: x(:)
-         real(dp), intent(out) :: v(:)
-         type(c_ptr), value :: data
-      end subroutine f_t
+   integer, parameter :: fixpnf_success = hompack_success
+   integer, parameter :: fixpnf_tol_increased = 2
+   integer, parameter :: fixpnf_iter_limit = 3
+   integer, parameter :: fixpnf_rank_loss = 4
+   integer, parameter :: fixpnf_lost_curve = 5
+   integer, parameter :: fixpnf_newton_failed = 6
+   integer, parameter :: fixpnf_input_error = 7
+   integer, parameter :: fixpnf_memory_error = 8
 
-      subroutine fjac_t(x, v, k, data)
-         import :: dp, c_ptr
-         real(dp), intent(in) :: x(:)
-         real(dp), intent(out) :: v(:)
-         integer, intent(in) :: k
-         type(c_ptr), value :: data
-      end subroutine fjac_t
-
-      subroutine rho_t(a, lambda, x, v, data)
-         import :: dp, c_ptr
-         real(dp), intent(in) :: a(:)
-         real(dp), intent(in) :: lambda
-         real(dp), intent(in) :: x(:)
-         real(dp), intent(out) :: v(:)
-         type(c_ptr), value :: data
-      end subroutine rho_t
-
-      subroutine rhojac_t(a, lambda, x, v, k, data)
-         import :: dp, c_ptr
-         real(dp), intent(in) :: a(:)
-         real(dp), intent(in) :: lambda
-         real(dp), intent(in) :: x(:)
-         real(dp), intent(out) :: v(:)
-         integer, intent(in) :: k
-         type(c_ptr), value :: data
-      end subroutine rhojac_t
-   end interface
-
-   type hompack_callbacks
-   !! Type to hold user-supplied function and Jacobian evaluation subroutines for
-   !! f-suffix (dense Jacobian) methods.
-      procedure(f_t), nopass, pointer :: f => null()
-      procedure(fjac_t), nopass, pointer :: fjac => null()
-      procedure(rho_t), nopass, pointer :: rho => null()
-      procedure(rhojac_t), nopass, pointer :: rhojac => null()
-      type(c_ptr) :: data = c_null_ptr
-   end type hompack_callbacks
-
-   type fixnpf_workspace
+   type :: nf_workspace
    !! Linear-algebra workspace for [[fixpnf]].
       real(dp), allocatable :: alpha(:)
          !! Array used during interpolation and Newton-step calculations.
@@ -71,48 +35,41 @@ module hompack_nf
       integer, allocatable :: pivot(:)
          !! Pivot indices used by the QR factorization.
    contains
-      procedure :: init => init_workspace
-   end type fixnpf_workspace
+      procedure :: alloc => alloc_workspace
+   end type
 
-   type fixnpf_state
+   type :: nf_state
    !! State variables for [[fixpnf]].
-      real(dp) :: abserr
+      real(dp) :: abserr = zero
          !! Absolute error tolerance.
-      real(dp) :: relerr
+      real(dp) :: relerr = zero
          !! Relative error tolerance.
-      real(dp) :: curtol
+      real(dp) :: curtol = zero
          !! Curvature-based error tolerance.
-      real(dp) :: h
+      real(dp) :: h = zero
          !! Optimal step size for the next step to be attempted by [[stepnf]].
-      real(dp) :: hold
+      real(dp) :: hold = zero
          !! ||yp - ypold|| at the previous step.
-      real(dp) :: s
+      real(dp) :: s = zero
          !! Total arc length of the solution path followed by the algorithm.
-      integer :: iflag
+      integer :: iflag = -100
          !! Problem type and status flag.
-      integer :: limit
+      integer :: limit = -100
          !! Limit on the number of steps allowed in the main loop of [[fixpnf]].
-      integer :: n
+      integer :: n = 0
          !! Problem dimension.
-      integer :: nfe
+      integer :: nfe = 0
          !! Number of homotopy/Jacobian evaluations performed.
          !! This counter is incremented once for each call to `tangnf`, where the
          !! homotopy map and its Jacobian are assembled and used to compute a tangent
          !! vector and Newton correction.
-      integer :: lunit
-         !! Logical I/O unit for intermediate output.
-      logical :: start
+      logical :: start = .true.
          !! Flag to indicate the first call to [[stepnf]].
-      logical :: crash
+      logical :: crash = .false.
          !! Flag to indicate that the return state of [[stepnf]] is a crash.
-      logical :: ispoly
-         !! Flag to indicate polynomial mode.
-      character(:), allocatable :: message
-         !! Error message.
-      real(dp) :: sspar(8)
-         !! Step-size control parameters.
-         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`
       real(dp), allocatable :: a(:)
+         !! Parameter vector \(a\) for curve-tracking problems, or initial point for the
+         !! fixed-point and zero-finding problems.
       real(dp), allocatable :: y(:)
          !! Current point on the zero curve.
       real(dp), allocatable :: yold(:)
@@ -121,17 +78,332 @@ module hompack_nf
          !! Unit tangent vector to the zero curve at `y`.
       real(dp), allocatable :: ypold(:)
          !! Unit tangent vector to the zero curve at `yold`.
-      type(fixnpf_workspace) :: workspace
+      type(nf_workspace) :: workspace
          !! Linear-algebra workspace.
    contains
-      procedure :: init => init_state
-   end type fixnpf_state
+      procedure :: alloc => alloc_state
+   end type
+
+   type :: nf_config
+   !! Container to hold the configuration for a call to [[fixpnf]].
+      real(dp) :: arcre = zero
+         !! Relative error tolerance for the normal-flow iteration used while tracking the
+         !! zero curve. If nonpositive, the default value `arcre=0.5*sqrt(ansre)` is used.
+      real(dp) :: arcae = zero
+         !! Absolute error tolerance for the normal-flow iteration used while tracking the
+         !! zero curve. If nonpositive, the default value `arcae=0.5*sqrt(ansae)` is used.
+      real(dp) :: ansre = 1e-10_dp
+         !! Relative error tolerance required of the final solution at `lambda=1`.
+      real(dp) :: ansae = 1e-10_dp
+         !! Absolute error tolerance required of the final solution at `lambda=1`.
+      real(dp) :: cursw = 10.0_dp
+         !! Curvature switch. If the curvature of any component of `y` exceeds this value, the
+         !! tolerances for the normal-flow iteration are switched from `arcre` and `arcae` to
+         !! the finer tolerances `ansre` and `ansae`, respectively.
+      real(dp), dimension(8) :: sspar = zero
+         !! Step-size control parameters:
+         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
+         !! Elements that are nonpositive on input are replaced by default values.
+      integer :: max_steps = 1000
+         !! Maximum number of steps allowed in the main loop.
+      integer :: lunit = 0
+         !! Logical I/O unit for intermediate output.
+         !! * `0` : No output is printed (default).
+         !! * `6` : Standard output (mapped internally to `output_unit`)
+         !! * otherwise : Output to the specified I/O unit.
+      logical :: polsys = .false.
+         !! Optional flag used only by the polynomial-system driver [[POLSYS1H]].
+   end type
+
+   type :: nf_solver
+   !! Container to hold the state variables and user-supplied callbacks for [[fixpnf]].
+      integer :: problem_type = -100
+      logical :: initialized = .false.
+      type(nf_state) :: state
+      type(nf_config) :: config
+      type(hompack_f_callbacks) :: callbacks
+   contains
+      procedure :: initialize => nf_solver_initialize
+      procedure :: solve => nf_solver_solve
+      procedure :: restart => nf_solver_restart
+   end type
+
+   type :: nf_result
+   !! Container to hold the results of a call to [[fixpnf]].
+      real(dp) :: arc_length = zero
+         !! Arc length of the zero curve until the solution was found.
+      real(dp) :: lambda = zero
+         !! Final value of the homotopy parameter \(\lambda\) at the solution.
+      real(dp), allocatable :: x(:)
+         !! Final value of the independent variable \(x\) at the solution.
+      integer :: nfe = 0
+         !! Number of homotopy/Jacobian evaluations.
+      type(hompack_status) :: status
+         !! Status.
+   end type
 
 contains
 
-   subroutine fixpnf( &
-      state, callbacks, n, x, iflag, &
-      arcre, arcae, ansre, ansae, sspar, a, lunit, ispoly)
+   type(hompack_status) function nf_solver_initialize( &
+      self, problem_type, callbacks, n, dima, config) result(status)
+   !! This function initializes a [[nf_solver]] object for a specified problem type,
+   !! user-supplied callbacks, and configuration parameters.
+   !! It validates the inputs, allocates necessary state variables (deallocation included),
+   !! and binds the callbacks to the solver object.
+
+      class(nf_solver), intent(inout) :: self
+         !! Solver object.
+      integer, intent(in) :: problem_type
+         !! Problem type. Must be one of the following:
+         !! * `fix_point` : solve \( F(x) = x \).
+         !! * `zero_find` : solve \( F(x) = 0 \).
+         !! * `curve_track` : track a zero curve of \( \rho(a,\lambda,x) = 0 \).
+      type(hompack_f_callbacks), intent(in) :: callbacks
+         !! User-supplied function and Jacobian evaluation subroutines. Required callbacks
+         !! depend on `problem_type` as follows:
+         !! * For `problem_type = fix_point` or `zero_find`, callbacks `f` and `fjac` must be
+         !!   provided.
+         !! * For `problem_type = curve_track`, callbacks `rho` and `rhojac` must be provided.
+      integer, intent(in) :: n
+         !! Problem dimension, i.e., the dimension of the independent variable \(x\).
+      integer, intent(in), optional :: dima
+         !! Dimension of the parameter vector \(a\) for curve-tracking problems. Required if
+         !! `problem_type` is `curve_track`.
+      type(nf_config), intent(in), optional :: config
+         !! Configuration parameters. If not provided, default values are used.
+
+      integer :: dima_, ierr
+
+      ! Validate 'problem_type'
+      if (problem_type /= problem_fix_point .and. problem_type /= problem_zero_find .and. &
+          problem_type /= problem_curve_track) then
+         status%message = "Illegal input: `prob_type` must be `fix_point`, `zero_find`, or `curve_track`."
+         status%code = fixpnf_input_error
+         return
+      end if
+
+      ! Validate 'n'
+      if (n <= 0) then
+         status%message = "Illegal input: `n` must be greater or equal than one."
+         status%code = fixpnf_input_error
+         return
+      end if
+
+      ! Validate callbacks and parameter vector 'a'
+      if (problem_type == problem_fix_point .or. problem_type == problem_zero_find) then
+         if (.not. associated(callbacks%f)) then
+            status%message = "Illegal input: callback `f` must be provided for fixed-point and zero-finding problems."
+            status%code = fixpnf_input_error
+            return
+         end if
+         if (.not. associated(callbacks%fjac)) then
+            status%message = "Illegal input: callback `fjac` must be provided for fixed-point and zero-finding problems."
+            status%code = fixpnf_input_error
+            return
+         end if
+         dima_ = n
+      else if (problem_type == problem_curve_track) then
+         if (.not. associated(callbacks%rho)) then
+            status%message = "Illegal input: callback `rho` must be provided for curve-tracking problems."
+            status%code = fixpnf_input_error
+            return
+         end if
+         if (.not. associated(callbacks%rhojac)) then
+            status%message = "Illegal input: callback `rhojac` must be provided for curve-tracking problems."
+            status%code = fixpnf_input_error
+            return
+         end if
+         if (.not. present(dima)) then
+            status%message = "Illegal input: parameter vector dimension `dima` must be provided for curve-tracking problems."
+            status%code = fixpnf_input_error
+            return
+         end if
+         if (dima <= 0) then
+            status%message = "Illegal input: parameter vector dimension `dima` must be greater than zero."
+            status%code = fixpnf_input_error
+            return
+         end if
+         dima_ = dima
+      end if
+
+      ! Validate configuration parameters
+      if (present(config)) then
+         if (config%max_steps < 1) then
+            status%message = "Illegal input: `config.max_steps` must be greater than zero."
+            status%code = fixpnf_input_error
+            return
+         end if
+         if (config%ansre <= zero) then
+            status%message = "Illegal input: `config.ansre` must be greater than zero."
+            status%code = fixpnf_input_error
+            return
+         end if
+         if (config%ansae < zero) then
+            status%message = "Illegal input: `config.ansae` must be greater or equal than zero."
+            status%code = fixpnf_input_error
+            return
+         end if
+      end if
+
+      ! Allocate state variables
+      call self%state%alloc(n, dima_, stat=ierr)
+      if (ierr /= 0) then
+         status%message = "Memory allocation failure during initialization."
+         status%code = fixpnf_memory_error
+         return
+      end if
+
+      ! Update object fields now that initialization is successful
+      self%problem_type = problem_type
+      self%callbacks = callbacks ! copy is intentional
+      if (present(config)) self%config = config
+      self%initialized = .true.
+
+      ! Finalize
+      status%message = "Initialization successful."
+      status%code = fixpnf_success
+
+   end function nf_solver_initialize
+
+   type(nf_result) function nf_solver_solve(self, x0, a) result(result)
+
+      class(nf_solver), intent(inout) :: self
+         !! Solver object.
+      real(dp), intent(in) :: x0(:)
+         !! Initial point for the solver. For fixed-point and zero-finding problems, this is
+         !! the initial guess \(a\). For curve-tracking problems, this is the initial solution
+         !! \(x_0\) at \(\lambda=0\).
+      real(dp), intent(in), optional :: a(:)
+         !! Parameter vector \(a\) for curve-tracking problems. Required if the solver was
+         !! initialized with `problem_type = curve_track`.
+
+      integer :: iflag, n
+      real(dp), allocatable :: a_(:)
+
+      n = self%state%n
+
+      associate (message => result%status%message, code => result%status%code)
+
+         ! Validate that the solver has been initialized
+         if (.not. self%initialized) then
+            message = "Solver has not been initialized. Call `initialize` before `solve`."
+            code = fixpnf_input_error
+            return
+         end if
+
+         ! Validate the initial point 'x0'
+         if (size(x0) /= n) then
+            message = "Illegal input: length of `x0` must be equal to `n` specified during initialization."
+            code = fixpnf_input_error
+            return
+         end if
+
+         ! Validate the parameter vector 'a' for curve-tracking problems
+         if (self%problem_type == problem_curve_track) then
+            if (.not. present(a)) then
+               message = "Illegal input: parameter vector `a` must be provided for curve-tracking problems."
+               code = fixpnf_input_error
+               return
+            end if
+            if (size(a) /= size(self%state%a)) then
+               message = "Illegal input: length of parameter vector `a` must match the dimension specified during initialization."
+               code = fixpnf_input_error
+               return
+            end if
+            a_ = a
+         else
+            a_ = [zero]
+         end if
+
+      end associate
+
+      ! Determine 'iflag'
+      if (self%problem_type == problem_fix_point) then
+         iflag = 0
+      else if (self%problem_type == problem_zero_find) then
+         iflag = -1
+      else if (self%problem_type == problem_curve_track) then
+         iflag = -2
+      end if
+
+      ! Call the solver
+      call fixpnf(self%state, self%callbacks, self%state%n, x0, iflag, self%config, a_)
+
+      ! Populate the result object
+      result%arc_length = self%state%s
+      result%lambda = self%state%y(1)
+      result%x = self%state%y(2:n + 1)
+      result%nfe = self%state%nfe
+      result%status%code = iflag
+
+   end function nf_solver_solve
+
+   type(nf_result) function nf_solver_restart(self) result(result)
+
+      class(nf_solver), intent(inout) :: self
+         !! Solver object.
+
+      integer :: iflag, n
+
+      ! n = self%state%n
+
+      ! associate (message => result%status%message, code => result%status%code)
+
+      !    ! Validate that the solver has been initialized
+      !    if (.not. self%initialized) then
+      !       message = "Solver has not been initialized. Call `initialize` before `solve`."
+      !       code = fixpnf_input_error
+      !       return
+      !    end if
+
+      !    ! Validate the initial point 'x0'
+      !    if (size(x0) /= n) then
+      !       message = "Illegal input: length of `x0` must be equal to `n` specified during initialization."
+      !       code = fixpnf_input_error
+      !       return
+      !    end if
+
+      !    ! Validate the parameter vector 'a' for curve-tracking problems
+      !    if (self%problem_type == curve_track) then
+      !       if (.not. present(a)) then
+      !          message = "Illegal input: parameter vector `a` must be provided for curve-tracking problems."
+      !          code = fixpnf_input_error
+      !          return
+      !       end if
+      !       if (size(a) /= size(self%state%a)) then
+      !          message = "Illegal input: length of parameter vector `a` must match the dimension specified during initialization."
+      !          code = fixpnf_input_error
+      !          return
+      !       end if
+      !       a_ = a
+      !    else
+      !       a_ = zero
+      !    end if
+
+      ! end associate
+
+      ! ! Determine 'iflag'
+      ! if (self%problem_type == fix_point) then
+      !    iflag = 0
+      ! else if (self%problem_type == zero_find) then
+      !    iflag = -1
+      ! else if (self%problem_type == curve_track) then
+      !    iflag = -2
+      ! end if
+
+      ! ! Call the solver
+      ! call fixpnf(self%state, self%callbacks, self%state%n, x0, iflag, self%config, a_)
+
+      ! ! Populate the result object
+      ! result%arc_length = self%state%s
+      ! result%lambda = self%state%y(1)
+      ! result%x = self%state%y(2:n + 1)
+      ! result%nfe = self%state%nfe
+      ! result%status%code = iflag
+
+   end function nf_solver_restart
+
+   subroutine fixpnf(state, callbacks, n, x0, iflag, config, a)
    !! This subroutine finds a fixed point or zero of the N-dimensional vector function
    !! \( F(x) \), or tracks a zero curve of a general homotopy map \( \rho(a,\lambda,x) \).
    !!
@@ -186,20 +458,19 @@ contains
    !! \( [\partial \rho/\partial \lambda, \partial \rho/\partial x] \) evaluated
    !! at \( (a,\lambda,x) \).
 
-      use hompack_kinds, only: zero, one, eps64
       implicit none
 
-      type(fixnpf_state), intent(inout) :: state
-         !! State variables for [[fixpnf]]. Initialized on the first call, and updated on
-         !! subsequent calls when `iflag=2` or `iflag=3`.
-      type(hompack_callbacks), intent(in) :: callbacks
+      type(nf_state), intent(inout) :: state
+         !! Preallocated state for [[fixpnf]]. Set to start conditions on the first call, and
+         !! updated on subsequent calls when `iflag=2` or `iflag=3`.
+      type(hompack_f_callbacks), intent(in) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
       integer, intent(in) :: n
          !! Problem dimension.
-      real(dp), intent(inout) :: x(:)
-         !! On input, `x` is the initial point `a` for the fixed-point and zero-finding
-         !! problems, and the initial solution `x0` for the curve-tracking problem.
-         !! On output, `x` is the approximate solution of the problem at `lambda = 1`.
+      real(dp), intent(in) :: x0(:)
+         !! Initial point for the solver. For fixed-point and zero-finding problems, this is
+         !! identical to the initial guess \(a\). For curve-tracking problems, this is the
+         !! initial solution at \(\lambda=0\).
       integer, intent(inout) :: iflag
          !! Problem type and status flag.
          !!
@@ -221,200 +492,107 @@ contains
          !!         too stringent.
          !! * `7` : illegal input parameters.
          !! * `8` : memory allocation failure.
-      real(dp), intent(inout) :: arcre
-         !! Relative error tolerance for the normal-flow iteration used while tracking the
-         !! zero curve. If nonpositive on input, the default value `arcre=0.5*sqrt(ansre)` is
-         !! used. May be increased when `iflag=2`.
-      real(dp), intent(inout) :: arcae
-         !! Absolute error tolerance for the normal-flow iteration used while tracking the
-         !! zero curve. If nonpositive on input, the default value `arcae=0.5*sqrt(ansae)` is
-         !! used. May be increased when `iflag=2`.
-      real(dp), intent(inout) :: ansre
-         !! Relative error tolerance required of the final solution at `lambda=1`.
-         !! May be increased when `iflag=2`.
-      real(dp), intent(inout) :: ansae
-         !! Absolute error tolerance required of the final solution at `lambda = 1`.
-         !! May be increased when `iflag=2`.
-      real(dp), intent(inout), optional :: sspar(8)
-         !! Step-size control parameters:
-         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
-         !! Elements that are nonpositive on input are replaced by default values.
+      type(nf_config), intent(inout) :: config
+         !! Configuration parameters for the solver. Optional settings will be set to default
+         !! values. Tolerances may be updated (increased) on output if `iflag=2`.
       real(dp), intent(in), optional :: a(:)
-         !! Parameter vector `a` for curve-tracking problems.
-      integer, intent(in), optional :: lunit
-         !! Logical I/O unit for intermediate output.
-         !! * `0` : No output is printed (default).
-         !! * `6` : Standard output (mapped internally to `output_unit`)
-         !! * otherwise : Output to the specified I/O unit.
-      logical, intent(in), optional :: ispoly
-         !! Optional flag used only by the polynomial-system driver [[POLSYS1H]].
+         !! Parameter vector `a` for curve-tracking problems. Ignored for fixed-point and
+         !! zero-finding problems.
 
-      ! Switch from the tolerance arc?e to the (finer) tolerance ans?e if the curvature
-      ! of any component of y exceeds cursw
-      real(dp), parameter :: cursw = 10.0_dp
-
-      ! Upper bound on the number of steps
-      integer, parameter :: limitd = 1000
-
-      integer :: ierr, iter, np1, dima
+      integer :: iter, np1, dima
 
       np1 = n + 1
-      state%message = ""
 
-      if (n <= 0) then
-         state%message = "Illegal input: `n` must be greater or equal than one."
-         iflag = 7
+      ! INPUT CHECKS (intentionally light; extensive in the callers)
+
+      ! Validate problem dimension
+      if (n < 1 .or. size(x0) /= n .or. state%n /= n) then
+         iflag = fixpnf_input_error
          return
       end if
 
-      if (size(x) /= n) then
-         state%message = "Illegal input: length of `x` must be equal to `n`."
-         iflag = 7
-         return
-      end if
-
-      if (ansre <= zero) then
-         state%message = "Illegal input: `ansre` must be greater than zero."
-         iflag = 7
-         return
-      end if
-
-      if (ansae < zero) then
-         state%message = "Illegal input: `ansae` must be greater or equal than zero."
-         iflag = 7
-         return
-      end if
-
+      ! Validate 'iflag' and launch job
       if (iflag == 0 .or. iflag == -1) then
-         ! First run for fixed-point or zero-finding problem
-         if (.not. associated(callbacks%f)) then
-            state%message = "Illegal input: callback `f` must be provided for fixed-point and zero-finding problems."
-            iflag = 7
-            return
-         end if
-         if (.not. associated(callbacks%fjac)) then
-            state%message = "Illegal input: callback `fjac` must be provided for fixed-point and zero-finding problems."
-            iflag = 7
-            return
-         end if
          dima = n
-         go to 20
+         goto 20
       else if (iflag == -2) then
-         ! First run for curve-tracking problem
-         if (.not. associated(callbacks%rho)) then
-            state%message = "Illegal input: callback `rho` must be provided for curve-tracking problems."
-            iflag = 7
-            return
-         end if
-         if (.not. associated(callbacks%rhojac)) then
-            state%message = "Illegal input: callback `rhojac` must be provided for curve-tracking problems."
-            iflag = 7
-            return
-         end if
          if (.not. present(a)) then
-            state%message = "Illegal input: parameter vector `a` must be provided for curve-tracking problems."
-            iflag = 7
+            iflag = fixpnf_input_error
             return
          end if
          dima = size(a)
-         if (dima <= 0) then
-            state%message = "Illegal input: length of parameter vector `a` must be greater than zero."
-            iflag = 7
-            return
-         end if
-         go to 20
+         goto 20
       else if (iflag == 2) then
-         ! Restart after error tolerances were increased
-         if (state%n /= n .or. state%nfe < 1) then
-            state%message = "Restart error: possible corrupted state or invalid `iflag` value."
-            iflag = 7
-            return
-         end if
-         go to 120
+         goto 120
       else if (iflag == 3) then
-         ! Restart after iteration limit was reached
-         if (state%n /= n .or. state%nfe < 1) then
-            state%message = "Restart error: possible corrupted state or invalid `iflag` value."
-            iflag = 7
-            return
-         end if
-         go to 90
+         goto 90
       else
-         state%message = "Illegal input: `iflag` must be -2, -1, 0, 2, or 3."
-         iflag = 7
+         iflag = fixpnf_input_error
          return
       end if
 
-      ! INITIALIZATION (FIRST CALL ONLY)
+      ! FIRST CALL
 
-      ! Initialize state
-20    call state%init(n, dima, ierr)
-
-      if (ierr /= 0) then
-         iflag = 8
-         return
-      end if
+      ! Set state variables to starting values
+20    state%abserr = zero
+      state%relerr = zero
+      state%curtol = zero
+      state%h = 0.1_dp
+      state%hold = zero
+      state%s = zero
+      state%nfe = 0
+      state%start = .true.
+      state%crash = .false.
 
       state%iflag = iflag
 
-      state%y(1) = zero
-      state%y(2:np1) = x
+      state%y = zero
+      state%yold = zero
+      state%yp = zero
+      state%ypold = zero
+
+      state%y(2:np1) = x0
       state%yp(1) = one
       state%ypold(1) = one
 
       ! Load 'a'
       if (state%iflag == 0 .or. state%iflag == -1) then
-         state%a = x
+         state%a = x0
       else
          state%a = a
       end if
 
       ! Default arc tolerances
-      if (arcre <= zero) arcre = sqrt(ansre)/2
-      if (arcae <= zero) arcae = sqrt(ansae)/2
+      if (config%arcre <= zero) config%arcre = sqrt(config%ansre)/2
+      if (config%arcae <= zero) config%arcae = sqrt(config%ansae)/2
 
-      ! Set optimal step size estimation parameters:
-      ! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
-      ! Let 'z[k]' denote the Newton iterates along the flow normal to the Davidenko flow
+      ! Set optimal step size estimation parameters
+      ! 'z[k]' denote the Newton iterates along the flow normal to the Davidenko flow
       ! and 'y' their limit
-      if (present(sspar)) state%sspar = sspar
-      ! Ideal contraction factor: ||z[2] - z[1]|| / ||z[1] - z[0]||
-      if (state%sspar(1) <= zero) state%sspar(1) = 0.5_dp
-      ! Ideal residual factor: ||rho(A, z[1])|| / ||rho(a, z[0])||
-      if (state%sspar(2) <= zero) state%sspar(2) = 0.01_dp
-      ! Ideal distance factor: ||z[1] - y|| / ||z[0] - y||
-      if (state%sspar(3) <= zero) state%sspar(3) = 0.5_dp
-      ! Minimum step size 'hmin'
-      if (state%sspar(4) <= zero) state%sspar(4) = (sqrt(real(n + 1, dp)) + 4.0_dp)*eps64
-      ! Maximum step size 'hmax'
-      if (state%sspar(5) <= zero) state%sspar(5) = one
-      ! Minimum step size reduction factor 'bmin'
-      if (state%sspar(6) <= zero) state%sspar(6) = 0.1_dp
-      ! Maximum step size expansion factor 'bmax'
-      if (state%sspar(7) <= zero) state%sspar(7) = 3.0_dp
-      ! Assumed operating order 'p'
-      if (state%sspar(8) <= zero) state%sspar(8) = 2.0_dp
 
-      ! Set the trace output unit
-      if (present(lunit)) then
-         if (lunit == 6) then
-            state%lunit = output_unit
-         else
-            state%lunit = lunit
-         end if
-      end if
-
-      ! Set special mode for 'polsys1h'
-      if (present(ispoly)) then
-         state%ispoly = ispoly
-      else
-         state%ispoly = .false.
-      end if
+      associate (sspar => config%sspar)
+         ! Ideal contraction factor: ||z[2] - z[1]|| / ||z[1] - z[0]||
+         if (sspar(1) <= zero) sspar(1) = 0.5_dp
+         ! Ideal residual factor: ||rho(A, z[1])|| / ||rho(a, z[0])||
+         if (sspar(2) <= zero) sspar(2) = 0.01_dp
+         ! Ideal distance factor: ||z[1] - y|| / ||z[0] - y||
+         if (sspar(3) <= zero) sspar(3) = 0.5_dp
+         ! Minimum step size 'hmin'
+         if (sspar(4) <= zero) sspar(4) = (sqrt(real(n + 1, dp)) + 4.0_dp)*eps64
+         ! Maximum step size 'hmax'
+         if (sspar(5) <= zero) sspar(5) = one
+         ! Minimum step size reduction factor 'bmin'
+         if (sspar(6) <= zero) sspar(6) = 0.1_dp
+         ! Maximum step size expansion factor 'bmax'
+         if (sspar(7) <= zero) sspar(7) = 3.0_dp
+         ! Assumed operating order 'p'
+         if (sspar(8) <= zero) sspar(8) = 2.0_dp
+      end associate
 
       ! COMMON PART FOR FIRST CALL AND RESTARTS
 
       ! Set default iteration limit
-90    state%limit = limitd
+90    state%limit = config%max_steps
 
       ! Main loop
 120   do iter = 1, state%limit
@@ -427,20 +605,20 @@ contains
 
          ! Set different error tolerance if the trajectory y(s) has any high curvature
          ! components
-         state%curtol = cursw*state%hold
-         state%relerr = arcre
-         state%abserr = arcae
+         state%curtol = config%cursw*state%hold
+         state%relerr = config%arcre
+         state%abserr = config%arcae
          if (any(abs(state%yp - state%ypold) > state%curtol)) then
-            state%relerr = ansre
-            state%abserr = ansae
+            state%relerr = config%ansre
+            state%abserr = config%ansae
          end if
 
          ! Take a step along the curve
-         call stepnf(state, callbacks)
+         call stepnf(state, callbacks, config%sspar)
 
          ! Print latest point on curve if requested
-         if (state%lunit /= 0) then
-            write (lunit, 217) iter, state%nfe, state%s, state%y(1), state%y(2:np1)
+         if (config%lunit /= 0) then
+            write (config%lunit, 217) iter, state%nfe, state%s, state%y(1), state%y(2:np1)
 217         format(/' STEP', i5, 3x, 'NFE =', i5, 3x, 'ARC LENGTH =', f9.4, 3x, &
                     'LAMBDA =', f7.4, 5x, 'X VECTOR:'/(1x, 6es12.4))
          end if
@@ -455,10 +633,10 @@ contains
             ! Return code for error tolerance too small
             iflag = 2
             ! Change error tolerances
-            if (arcre < state%relerr) arcre = state%relerr
-            if (ansre < state%relerr) ansre = state%relerr
-            if (arcae < state%abserr) arcae = state%abserr
-            if (ansae < state%abserr) ansae = state%abserr
+            if (config%arcre < state%relerr) config%arcre = state%relerr
+            if (config%ansre < state%relerr) config%ansre = state%relerr
+            if (config%arcae < state%abserr) config%arcae = state%abserr
+            if (config%ansae < state%abserr) config%ansae = state%abserr
             ! Change limit on number of iterations
             state%limit = state%limit - iter
             return
@@ -471,7 +649,7 @@ contains
 
                ! Save 'yold' for arc length calculation later
                ws%z0 = state%yold
-               call rootnf(state, callbacks, ansre, ansae)
+               call rootnf(state, callbacks, config%ansre, config%ansae)
                iflag = 1
 
                ! Set error flag if 'rootnf' could not get the point on the zero curve at
@@ -489,7 +667,7 @@ contains
 
          ! For polynomial systems and the 'polsys1h' homotopy map, dlambda/ds>= 0
          ! necessarily; this condition is enforced here
-         if (state%ispoly) then
+         if (config%polsys) then
             if (state%yp(1) < zero) then
                ! Reverse tangent direction so D LAMBDA/DS = YP(1) > 0
                state%yp = -state%yp
@@ -512,17 +690,16 @@ contains
    !! that `lambdaold < 1 <= lambda` , and alternates between secant estimates of `ybar`
    !! and Newton iteration until convergence.
 
-      use hompack_kinds, only: zero, one, eps64
       use hompack_core, only: root, root_state, qofs
       implicit none
 
-      type(fixnpf_state), intent(inout) :: state
+      type(nf_state), intent(inout) :: state
          !! State variables for [[fixpnf]].
-      type(hompack_callbacks) :: callbacks
+      type(hompack_f_callbacks) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
       real(dp), intent(in) :: relerr
          !! Relative convergence tolerance.
-         !! Iteration is considered converged when `|y(1)-1| <= relerr + abserr` and the
+         !! Iteration is considered converged when `|y(1) - 1| <= relerr + abserr` and the
          !! Newton correction satisfies `||z|| <= relerr*||x|| + abserr`.
       real(dp), intent(in) :: abserr
          !! Absolute convergence tolerance.
@@ -652,7 +829,7 @@ contains
 
    end subroutine rootnf
 
-   subroutine stepnf(state, callbacks)
+   subroutine stepnf(state, callbacks, sspar)
    !! This subroutine takes one step along the zero curve of the homotopy map using a
    !! predictor-corrector algorithm. The predictor uses a Hermite cubic interpolant, and
    !! the corrector returns to the zero curve along the flow normal to the Davidenko flow.
@@ -660,14 +837,16 @@ contains
    !! Normally, [[stepnf]] is used indirectly through [[fixpnf]], and should be called
    !! directly only if it is necessary to modify the stepping algorithm's parameters.
 
-      use hompack_kinds, only: one, zero, eps64
       use hompack_core, only: qofs
       implicit none
 
-      type(fixnpf_state), intent(inout) :: state
+      type(nf_state), intent(inout) :: state
          !! State variables for [[fixpnf]].
-      type(hompack_callbacks), intent(in) :: callbacks
+      type(hompack_f_callbacks), intent(in) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
+      real(dp), intent(in) :: sspar(:)
+         !! Step-size control parameters:
+         !! `(lideal, rideal, dideal, hmin, hmax, bmin, bmax, p)`.
 
       real(dp), parameter :: twou = 2*eps64, fouru = 4*eps64
       real(dp) :: dcalc, hfail, ht, lcalc, rcalc, rholen, temp
@@ -680,7 +859,7 @@ contains
       np1 = state%n + 1
       state%crash = .true.
 
-      associate (ws => state%workspace, sspar => state%sspar)
+      associate (ws => state%workspace)
 
          ! The arclength 's' must be nonnegative
          if (state%s < zero) return
@@ -900,11 +1079,10 @@ contains
    !! decomposition of that matrix, and then calculates the (unit) tangent vector and the
    !! Newton step.
 
-      use hompack_kinds, only: zero, one, eps64
       use lapack_interfaces, only: dgeqpf, dormqr
       implicit none
 
-      type(hompack_callbacks) :: callbacks
+      type(hompack_f_callbacks) :: callbacks
          !! User-supplied function and Jacobian evaluation subroutines.
       real(dp), intent(inout) :: rholen
          !! Controls computation of the homotopy residual norm.
@@ -1055,19 +1233,22 @@ contains
 
    end subroutine tangnf
 
-   pure subroutine init_workspace(self, n, stat)
-   !! Initializes [[fixnpf_workspace]].
+   pure subroutine alloc_workspace(self, n, stat)
+   !! Initializes [[nf_workspace]], i.e., (re)allocates all allocatable arrays and sets them
+   !! to zero.
 
-      use hompack_kinds, only: zero
-
-      class(fixnpf_workspace), intent(inout) :: self
-         !! Workspace.
+      class(nf_workspace), intent(inout) :: self
+         !! Workspace object.
       integer, intent(in) :: n
          !! Problem dimension.
       integer, intent(out), optional :: stat
          !! Error status of the allocation.
 
       integer :: ierr(8)
+
+      if (n <= 0) then
+         error stop "Error: 'n' must be positive in hompack_nf_state%alloc()."
+      end if
 
       if (present(stat)) stat = 0
 
@@ -1095,19 +1276,18 @@ contains
          if (present(stat)) then
             stat = ierr(findloc(ierr /= 0, .true., dim=1))
          else
-            error stop "Error: Allocation failed in fixnpf_workspace%init()."
+            error stop "Error: Allocation failed in hompack_nf_workspace%alloc()."
          end if
       end if
 
-   end subroutine init_workspace
+   end subroutine alloc_workspace
 
-   pure subroutine init_state(self, n, dima, stat)
-   !! Initializes [[fixnpf_state]].
+   pure subroutine alloc_state(self, n, dima, stat)
+   !! Initializes [[nf_state]], i.e., (re)allocates all allocatable arrays and sets them to
+   !! zero.
 
-      use hompack_kinds, only: zero, one
-
-      class(fixnpf_state), intent(inout) :: self
-         !! State.
+      class(nf_state), intent(inout) :: self
+         !! State object.
       integer, intent(in)  :: n
          !! Problem dimension.
       integer, intent(in)  :: dima
@@ -1117,26 +1297,18 @@ contains
 
       integer :: ierr(6)
 
+      if (n <= 0) then
+         error stop "Error: 'n' must be positive in hompack_nf_state%alloc()."
+      end if
+
+      if (dima <= 0) then
+         error stop "Error: 'dima' must be positive in hompack_nf_state%alloc()."
+      end if
+
       if (present(stat)) stat = 0
 
-      ! Initialize scalar state variables
-      self%abserr = zero
-      self%curtol = zero
-      self%h = 0.1_dp
-      self%hold = zero
-      self%s = zero
-      self%iflag = 0
-      self%limit = 0
-      self%n = n
-      self%nfe = 0
-      self%lunit = 0
-      self%ispoly = .false.
-      self%start = .true.
-      self%crash = .false.
-      self%sspar = -one
-      self%message = ""
-
       ! Deallocate any previously allocated arrays
+      self%n = 0
       if (allocated(self%y)) deallocate (self%y)
       if (allocated(self%yold)) deallocate (self%yold)
       if (allocated(self%yp)) deallocate (self%yp)
@@ -1151,16 +1323,19 @@ contains
       allocate (self%a(dima), source=zero, stat=ierr(5))
 
       ! Initialize workspace
-      call self%workspace%init(n, stat=ierr(6))
+      call self%workspace%alloc(n, stat=ierr(6))
 
       if (any(ierr /= 0)) then
          if (present(stat)) then
             stat = ierr(findloc(ierr /= 0, .true., dim=1))
          else
-            error stop "Error: Allocation failed in fixnpf_state%init()."
+            error stop "Error: Allocation failed in nf_state%alloc()."
          end if
       end if
 
-   end subroutine init_state
+      ! Set problem dimension now that allocation is successful
+      self%n = n
+
+   end subroutine alloc_state
 
 end module hompack_nf
