@@ -13,6 +13,7 @@ jobs:
         uses: gha3mi/setup-fortran-conda@latest
         with:
           compiler: flang
+          compiler-version: 22
           platform: ubuntu-latest
           extra-packages: "openblas pkg-config"
       
