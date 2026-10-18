@@ -121,14 +121,14 @@ hompack_source = files(
   'src/lapack_interfaces.f90',
   'src/hompack_kinds.f90',
   'src/hompack_global_legacy.f90',
-  'src/hompack_core.f90',
   'src/hompack_core_legacy.f',
-  'src/hompack_nf.f90',
-  'src/hompack_ns.f',
+  'src/hompack_core.f90',
   'src/hompack_df.f',
-  'src/hompack_ds.f',
+  'src/hompack_nf.f90',
   'src/hompack_qf.f',
-  'src/hompack_qs.f',
+#  'src/hompack_ns.f',
+#  'src/hompack_ds.f',
+#  'src/hompack_qs.f',
 )
 
 all_sources = hompack_source + blas_source
